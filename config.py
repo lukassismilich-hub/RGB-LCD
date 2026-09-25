@@ -3,6 +3,8 @@
 import json
 import os
 
+import prvky
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 PATH = os.path.join(BASE, "config.json")
 
@@ -57,24 +59,13 @@ DEFAULTS = {
         "pumpa": [[20, 60], [30, 70], [35, 80], [40, 90], [45, 100]],
         "ventilatory": [[25, 25], [30, 35], [35, 50], [40, 70], [45, 90], [50, 100]],
     },
-    # monochromaticky Alphacool USB display 240x128 (mono.py, alphacool.py)
+    # monochromaticky Alphacool USB display 240x128 (prvky.py, alphacool.py);
+    # rozvrzeni = volne umistene prvky, kresli se v poradi seznamu
     "alphacool": {
         "zapnuto": True,
         "podsviceni": True,
         "inverze": False,
-        "radky": [
-            {"popisek": "CPU", "senzor": "CPU (Tctl/Tdie)", "min": 0, "max": 100, "jednotka": "°C",
-             "delitel": 1, "desetinna_mista": 0,
-             "senzor2": "Takt jader", "jednotka2": "GHz", "delitel2": 1000, "desetinna_mista2": 2},
-            {"popisek": "GPU", "senzor": "Teplota GPU", "min": 0, "max": 100, "jednotka": "°C",
-             "delitel": 1, "desetinna_mista": 0,
-             "senzor2": "Takt GPU", "jednotka2": "GHz", "delitel2": 1000, "desetinna_mista2": 2},
-            {"popisek": "RAM", "senzor": "Použitá fyzická paměť", "min": 0, "max": 32, "jednotka": "G",
-             "delitel": 1024, "desetinna_mista": 1,
-             "senzor2": "", "jednotka2": "auto", "delitel2": 1, "desetinna_mista2": 0},
-        ],
-        "graf": {"popisek": "CPU", "senzor": "CPU (Tctl/Tdie)", "min": 30, "max": 95, "jednotka": "°",
-                 "delitel": 1, "desetinna_mista": 0, "delka_s": 120},
+        "prvky": prvky.default_layout(),
     },
 }
 
@@ -111,8 +102,11 @@ def load():
         cfg.setdefault(k, json.loads(json.dumps(v)))
     for k, v in DEFAULTS["chlazeni"].items():          # doplneni novych klicu chlazeni
         cfg["chlazeni"].setdefault(k, json.loads(json.dumps(v)))
+    a = cfg["alphacool"]
+    if "prvky" not in a and "radky" in a:              # pevny prehled -> volne prvky
+        a["prvky"] = prvky.default_layout(a.pop("radky"), a.pop("graf", {}))
     for k, v in DEFAULTS["alphacool"].items():         # doplneni novych klicu Alphacoolu
-        cfg["alphacool"].setdefault(k, json.loads(json.dumps(v)))
+        a.setdefault(k, json.loads(json.dumps(v)))
     for scr in cfg["obrazovky"]:                        # stare jednobarevne bary -> prechod od/do
         for n in ("1", "2"):
             if "barva" + n in scr:

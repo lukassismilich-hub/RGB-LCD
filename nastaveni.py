@@ -199,111 +199,14 @@ class App(tk.Tk):
         self._build_cooling()
 
     # ------------------------------------------------------- alphacool
-    _A_ROW = [("popisek", "Popisek", "text", 6), ("senzor", "Senzor", "sensor", 22),
-              ("min", "Min", "num", 5), ("max", "Max", "num", 5), ("jednotka", "Jedn.", "unit", 5),
-              ("delitel", "Dělitel", "num", 5), ("desetinna_mista", "Des.", "int", 3),
-              ("senzor2", "Vpravo – senzor", "sensor", 18), ("jednotka2", "Jedn.", "unit", 5),
-              ("delitel2", "Dělitel", "num", 5), ("desetinna_mista2", "Des.", "int", 3)]
-    _A_GRAPH = [("popisek", "Popisek", "text", 6), ("senzor", "Senzor", "sensor", 22),
-                ("min", "Min", "num", 5), ("max", "Max", "num", 5), ("jednotka", "Jedn.", "unit", 5),
-                ("delitel", "Dělitel", "num", 5), ("desetinna_mista", "Des.", "int", 3),
-                ("delka_s", "Délka (s)", "int", 5)]
-
     def _build_alphacool(self):
-        """Hlavni zalozka Alphacool LCD: vlevo nastaveni, vpravo nahled."""
-        page = self.alpha_page
-        page.columnconfigure(0, weight=1)
-        acfg = self.cfg["alphacool"]
-        f = ttk.Frame(page)
-        f.grid(row=0, column=0, sticky="nw", padx=8, pady=8)
-
-        disp = ttk.LabelFrame(f, text="Displej")
-        disp.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        for col, (key, text) in enumerate((("zapnuto", "Zobrazovat na displeji"),
-                                           ("podsviceni", "Podsvícení"),
-                                           ("inverze", "Inverze (negativ)"))):
-            v = tk.BooleanVar(value=acfg.get(key, key != "inverze"))
-
-            def on(k=key, v=v):
-                acfg[k] = v.get()
-                self._update_alpha()
-            ttk.Checkbutton(disp, text=text, variable=v, command=on).grid(
-                row=0, column=col, sticky="w", padx=(6, 16), pady=(4, 2))
-        self.alpha_status = ttk.Label(disp, font=("Segoe UI", 10, "bold"))
-        self.alpha_status.grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 6))
-
-        tbl = ttk.LabelFrame(f, text="Řádky s barem (popisek | hodnota | bar | hodnota vpravo)")
-        tbl.grid(row=1, column=0, sticky="ew", pady=6)
-        for c, (_k, head, _kind, _w) in enumerate(self._A_ROW):
-            ttk.Label(tbl, text=head, foreground="#666").grid(row=0, column=c, sticky="w", padx=2)
-        for r, row in enumerate(acfg["radky"][:3]):
-            for c, (key, _h, kind, w) in enumerate(self._A_ROW):
-                self._alpha_field(tbl, row, key, kind, w).grid(row=r + 1, column=c, padx=2, pady=2)
-
-        g = ttk.LabelFrame(f, text="Graf (průběh v čase)")
-        g.grid(row=2, column=0, sticky="w", pady=6)
-        for c, (key, head, kind, w) in enumerate(self._A_GRAPH):
-            ttk.Label(g, text=head, foreground="#666").grid(row=0, column=c, sticky="w", padx=2)
-            self._alpha_field(g, acfg["graf"], key, kind, w).grid(row=1, column=c, padx=2, pady=2)
-
-        ttk.Label(f, foreground="#666", justify="left", text=(
-            "Dělitel 1000 = MHz→GHz, 1024 = MB→GB. Jednotka „auto“ = jednotka z HWiNFO.\n"
-            "Min/Max jsou v zobrazených jednotkách (po vydělení). Prázdný pravý senzor = delší bar.\n"
-            "Obnova hodnot se nastavuje na záložce Kraken (Obecné) a platí pro oba displeje.")).grid(
-            row=3, column=0, sticky="w", pady=(6, 0))
-
-        right = ttk.Frame(page)
-        right.grid(row=0, column=1, sticky="ne", padx=8, pady=8)
-        pv = ttk.LabelFrame(right, text="Náhled 240×128 (zvětšeno 2×)")
-        pv.pack(fill="x")
-        self.alpha_preview = tk.Label(pv, bg="black")
-        self.alpha_preview.pack(padx=6, pady=6)
-        self._alpha_img = None
-        self._update_alpha()
-
-    def _alpha_field(self, parent, target, key, kind, width):
-        var = tk.StringVar(value=str(target.get(key, "")))
-        if kind == "sensor":
-            w = ttk.Combobox(parent, textvariable=var, width=width, values=[""] + self._sensor_names())
-        elif kind == "unit":
-            w = ttk.Combobox(parent, textvariable=var, width=width, values=UNITS + ["°C", "G"])
-        else:
-            w = ttk.Entry(parent, textvariable=var, width=width)
-
-        def on(*_):
-            v = var.get()
-            if kind in ("num", "int"):
-                try:
-                    v = int(v) if kind == "int" else float(v.replace(",", "."))
-                except ValueError:
-                    return
-                if kind == "num" and float(v).is_integer():
-                    v = int(v)
-            target[key] = v
-            self._update_alpha()
-        var.trace_add("write", on)
-        return w
+        """Hlavni zalozka Alphacool LCD: editor rozvrzeni (editor_alphacool.py)."""
+        from editor_alphacool import AlphaEditor
+        self.alpha = AlphaEditor(self.alpha_page, self)
 
     def _update_alpha(self):
-        if not hasattr(self, "alpha_preview"):
-            return
-        import mono
-        try:
-            img = mono.render(self.cfg["alphacool"], self.data, self.hist)
-        except Exception as e:
-            self.alpha_status.config(text=f"Chyba náhledu: {e}", foreground="#c33")
-            return
-        self._alpha_img = ImageTk.PhotoImage(mono.preview(img, 2))
-        self.alpha_preview.config(image=self._alpha_img)
-        st = (self.astate or {}).get("stav")
-        texts = {"pripojen": ("Displej připojen – zobrazuje se.", "#2a7"),
-                 "nenalezen": ("Displej nenalezen (připojený? ovladač WinUSB přes Zadig?)", "#c33"),
-                 "chyba": ("Displej nejde otevřít – podrobnosti v rgb_lcd.log", "#c33"),
-                 "vypnuto": ("Zobrazování vypnuto.", "#666")}
-        text, color = texts.get(st, ("Stav displeje uvidíš, až poběží aplikace.", "#666"))
-        if not self.running:
-            text, color = "Aplikace neběží – náhled z dat HWiNFO.", "#666"
-        self.alpha_status.config(text=text, foreground=color)
+        if hasattr(self, "alpha"):
+            self.alpha.refresh()
 
     def _sensor_names(self):
         own = sorted(k for k in self.data if k.startswith("@") and k != config.LIQUID)

@@ -36,7 +36,9 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - `autostart.ps1` + `autostart_zapnout.bat` / `autostart_vypnout.bat` – naplánovaná úloha „RGB-LCD“ (při přihlášení, zpoždění 10 s, nejvyšší práva, `pythonw` bez okna) a vypnutí/zapnutí autostartu NZXT CAM (klíč StartupApproved, jako Správce úloh). Soubor .ps1 musí zůstat bez diakritiky (PS 5.1 čte bez BOM jako ANSI).
 - `ukoncit.bat` – bezpečné ukončení aplikace běžící na pozadí; `spustit_na_pozadi.bat` – spustí naplánovanou úlohu
 - `alphacool.py` – monochromatický Alphacool USB display 240×128 (VID 060C, PID 04EB, T6963): ovladač přes pyusb + libusb-1.0 (`libusb_package`), vlastní vlákno `AlphacoolWorker` (chyba displeje nesmí zdržet chlazení). Protokol podle serdisplib (`serdisp_specific_acoolsdcm.c`). Vyžaduje ovladač WinUSB (Zadig) – původní libusb0 od Alphacoolu má jen 32bitovou DLL.
-- `mono.py` – vykreslení pevného přehledu pro Alphacool (hodiny/datum, 3 řádky s barem, graf), režim „1“ bez vyhlazování
+- `prvky.py` – grafické prvky pro Alphacool (1 bit, bez vyhlazování, „šedá“ = rastr): text, velké číslo, hodiny, bar (plný/segmenty/rysky s maximem/rastr, 2. senzor = rozdělený), sloupce, graf (plocha/sloupce/mřížka), budík, prstenec ze segmentů, tlustý oblouk, ikony 11×11, čára, obdélník. Rozvržení = `config["alphacool"]["prvky"]` (volné x/y/w/h, pořadí = pořadí kreslení). Písma: rodina/velikost/tučně ze složky `fonts/` a z písem Windows (`font_index()`); na 1 bitu vypadají nejlépe Tahoma/Verdana/Segoe UI/Arial. Starý pevný přehled (`radky`/`graf`) se při načtení převede (`default_layout`).
+- `mono.py` – vstup pro vykreslení Alphacoolu (volá `prvky.render`), náhled v barvách modrého displeje, seznam senzorů grafů pro historii
+- `editor_alphacool.py` – editor rozvržení v okně nastavení: náhled 3×, výběr/posun/velikost myší, šipky, seznam prvků, vlastnosti vč. písma
 - `config.py` – výchozí nastavení, načítání/ukládání, migrace starého formátu
 - `config.json` – uživatelské nastavení (změny se načtou za běhu podle mtime, bez restartu)
 - `nastaveni.py` – okno nastavení (tkinter): obrazovky, editor, obecné, živý náhled 240×240, záložka Chlazení

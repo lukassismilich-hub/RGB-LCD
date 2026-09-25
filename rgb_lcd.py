@@ -17,6 +17,7 @@ import camservice
 import config
 from cooling import Cooling
 import hwinfo
+import mono
 import screens
 from kraken import Kraken
 import ukonceni
@@ -68,11 +69,11 @@ def update_history(history, cfg, data):
     """Historie hodnot pro obrazovky typu graf: {senzor: deque[(cas, hodnota)]}"""
     now = time.monotonic()
     keep = {}
-    graphs = [s for s in cfg["obrazovky"] if s.get("typ") == "graf"]
-    graphs.append(cfg.get("alphacool", {}).get("graf", {}))      # graf na Alphacool displeji
-    for s in graphs:
-        if s.get("senzor"):
+    for s in cfg["obrazovky"]:
+        if s.get("typ") == "graf" and s.get("senzor"):
             keep[s["senzor"]] = max(keep.get(s["senzor"], 0), float(s.get("delka_s", 120)))
+    for name, span in mono.graph_sensors(cfg.get("alphacool", {})).items():   # grafy na Alphacoolu
+        keep[name] = max(keep.get(name, 0), span)
     for name in list(history):
         if name not in keep:
             del history[name]

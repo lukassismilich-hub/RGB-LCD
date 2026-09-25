@@ -1,7 +1,7 @@
 {
   "jas": 100,
   "velikost_obsahu": 1.0,
-  "gama_grafiky": 0.9,
+  "gama_grafiky": 1.0,
   "rotace_s": 10.0,
   "obnova_s": 0.25,
   "auto_obrazovky": true,
@@ -214,56 +214,309 @@
     "zapnuto": true,
     "podsviceni": true,
     "inverze": false,
-    "radky": [
+    "prvky": [
       {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 15,
+        "vypln": "plna",
+        "dvojity": false,
+        "barva": 1,
+        "typ": "obdelnik"
+      },
+      {
+        "x": 3,
+        "y": 0,
+        "w": 110,
+        "h": 15,
+        "format": "HH:MM:SS",
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 0,
+        "typ": "hodiny"
+      },
+      {
+        "x": 117,
+        "y": 0,
+        "w": 120,
+        "h": 15,
+        "format": "den datum",
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 0,
+        "typ": "hodiny"
+      },
+      {
+        "x": 2,
+        "y": 19,
+        "w": 36,
+        "h": 14,
         "popisek": "CPU",
+        "senzor": "",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 36,
+        "y": 19,
+        "w": 50,
+        "h": 14,
+        "popisek": "",
+        "senzor": "CPU (Tctl/Tdie)",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 90,
+        "y": 21,
+        "w": 88,
+        "h": 11,
+        "styl": "plny",
+        "senzor2": "",
         "senzor": "CPU (Tctl/Tdie)",
         "min": 0,
         "max": 100,
+        "delitel": 1,
+        "typ": "bar"
+      },
+      {
+        "x": 180,
+        "y": 19,
+        "w": 58,
+        "h": 14,
+        "popisek": "",
+        "senzor": "Takt jader",
+        "jednotka": "GHz",
+        "delitel": 1000,
+        "desetinna_mista": 2,
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 2,
+        "y": 38,
+        "w": 36,
+        "h": 14,
+        "popisek": "GPU",
+        "senzor": "",
         "jednotka": "°C",
         "delitel": 1,
         "desetinna_mista": 0,
-        "senzor2": "Takt jader",
-        "jednotka2": "GHz",
-        "delitel2": 1000,
-        "desetinna_mista2": 2
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
       },
       {
-        "popisek": "GPU",
+        "x": 36,
+        "y": 38,
+        "w": 50,
+        "h": 14,
+        "popisek": "",
+        "senzor": "Teplota GPU",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 90,
+        "y": 40,
+        "w": 88,
+        "h": 11,
+        "styl": "plny",
+        "senzor2": "",
         "senzor": "Teplota GPU",
         "min": 0,
         "max": 100,
+        "delitel": 1,
+        "typ": "bar"
+      },
+      {
+        "x": 180,
+        "y": 38,
+        "w": 58,
+        "h": 14,
+        "popisek": "",
+        "senzor": "Takt GPU",
+        "jednotka": "GHz",
+        "delitel": 1000,
+        "desetinna_mista": 2,
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 2,
+        "y": 57,
+        "w": 36,
+        "h": 14,
+        "popisek": "RAM",
+        "senzor": "",
         "jednotka": "°C",
         "delitel": 1,
         "desetinna_mista": 0,
-        "senzor2": "Takt GPU",
-        "jednotka2": "GHz",
-        "delitel2": 1000,
-        "desetinna_mista2": 2
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
       },
       {
-        "popisek": "RAM",
+        "x": 36,
+        "y": 57,
+        "w": 50,
+        "h": 14,
+        "popisek": "",
         "senzor": "Použitá fyzická paměť",
-        "min": 0,
-        "max": 32,
         "jednotka": "G",
         "delitel": 1024,
         "desetinna_mista": 1,
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 90,
+        "y": 59,
+        "w": 148,
+        "h": 11,
+        "styl": "plny",
         "senzor2": "",
-        "jednotka2": "auto",
-        "delitel2": 1,
-        "desetinna_mista2": 0
+        "senzor": "Použitá fyzická paměť",
+        "min": 0,
+        "max": 32,
+        "delitel": 1024,
+        "typ": "bar"
+      },
+      {
+        "x": 2,
+        "y": 83,
+        "w": 42,
+        "h": 14,
+        "popisek": "CPU",
+        "senzor": "",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 2,
+        "y": 98,
+        "w": 42,
+        "h": 14,
+        "popisek": "",
+        "senzor": "CPU (Tctl/Tdie)",
+        "jednotka": "°",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 2,
+        "y": 113,
+        "w": 42,
+        "h": 14,
+        "popisek": "2 min",
+        "senzor": "",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Tahoma",
+          "velikost": 10,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 46,
+        "y": 81,
+        "w": 194,
+        "h": 47,
+        "styl": "plocha",
+        "senzor": "CPU (Tctl/Tdie)",
+        "min": 30,
+        "max": 95,
+        "delitel": 1,
+        "delka_s": 120,
+        "ramecek": true,
+        "typ": "graf"
       }
-    ],
-    "graf": {
-      "popisek": "CPU",
-      "senzor": "CPU (Tctl/Tdie)",
-      "min": 30,
-      "max": 95,
-      "jednotka": "°",
-      "delitel": 1,
-      "desetinna_mista": 0,
-      "delka_s": 120
-    }
+    ]
   }
 }

@@ -96,12 +96,12 @@
       "delitel": 1,
       "desetinna_mista": 0,
       "typ": "graf",
-      "delka_s": 60,
+      "delka_s": 120,
       "zapnuto": true,
       "velikost_obsahu": 1.0,
       "velikost_textu": 1.4,
-      "graf_do": "#ff0f0f",
-      "graf_od": "#80ff00"
+      "graf_do": "#ff0080",
+      "graf_od": "#00ff00"
     }
   ],
   "dvojite_odesilani": false,

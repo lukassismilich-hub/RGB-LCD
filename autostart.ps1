@@ -30,7 +30,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     $mode = if ($Zapnout) { '-Zapnout' } else { '-Vypnout' }
     Write-Host 'Otviram okno s pravy spravce (potvrd dotaz Windows) ...'
     try {
-        $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @(
+        $p = Start-Process (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -Wait -PassThru -ArgumentList @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", $mode,
             '-Uzivatel', "`"$Uzivatel`"")
         Write-Host "Okno spravce skoncilo (kod $($p.ExitCode))."

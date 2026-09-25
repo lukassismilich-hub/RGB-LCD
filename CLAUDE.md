@@ -35,6 +35,8 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - `camservice.py` – zastavení služby CAMService přes Windows API (při startu a když ji něco znovu spustí)
 - `autostart.ps1` + `autostart_zapnout.bat` / `autostart_vypnout.bat` – naplánovaná úloha „RGB-LCD“ (při přihlášení, zpoždění 10 s, nejvyšší práva, `pythonw` bez okna) a vypnutí/zapnutí autostartu NZXT CAM (klíč StartupApproved, jako Správce úloh). Soubor .ps1 musí zůstat bez diakritiky (PS 5.1 čte bez BOM jako ANSI).
 - `ukoncit.bat` – bezpečné ukončení aplikace běžící na pozadí; `spustit_na_pozadi.bat` – spustí naplánovanou úlohu
+- `alphacool.py` – monochromatický Alphacool USB display 240×128 (VID 060C, PID 04EB, T6963): ovladač přes pyusb + libusb-1.0 (`libusb_package`), vlastní vlákno `AlphacoolWorker` (chyba displeje nesmí zdržet chlazení). Protokol podle serdisplib (`serdisp_specific_acoolsdcm.c`). Vyžaduje ovladač WinUSB (Zadig) – původní libusb0 od Alphacoolu má jen 32bitovou DLL.
+- `mono.py` – vykreslení pevného přehledu pro Alphacool (hodiny/datum, 3 řádky s barem, graf), režim „1“ bez vyhlazování
 - `config.py` – výchozí nastavení, načítání/ukládání, migrace starého formátu
 - `config.json` – uživatelské nastavení (změny se načtou za běhu podle mtime, bez restartu)
 - `nastaveni.py` – okno nastavení (tkinter): obrazovky, editor, obecné, živý náhled 240×240, záložka Chlazení

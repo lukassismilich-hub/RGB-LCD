@@ -12,6 +12,7 @@ import sys
 import time
 from collections import deque
 
+from alphacool import AlphacoolWorker
 import camservice
 import config
 from cooling import Cooling
@@ -67,8 +68,10 @@ def update_history(history, cfg, data):
     """Historie hodnot pro obrazovky typu graf: {senzor: deque[(cas, hodnota)]}"""
     now = time.monotonic()
     keep = {}
-    for s in cfg["obrazovky"]:
-        if s.get("typ") == "graf" and s.get("senzor"):
+    graphs = [s for s in cfg["obrazovky"] if s.get("typ") == "graf"]
+    graphs.append(cfg.get("alphacool", {}).get("graf", {}))      # graf na Alphacool displeji
+    for s in graphs:
+        if s.get("senzor"):
             keep[s["senzor"]] = max(keep.get(s["senzor"], 0), float(s.get("delka_s", 120)))
     for name in list(history):
         if name not in keep:
@@ -83,12 +86,12 @@ def update_history(history, cfg, data):
     return {k: [v for _, v in dq] for k, dq in history.items()}
 
 
-def write_state(data, cooling_state, hist):
+def write_state(data, cooling_state, hist, alpha_state):
     try:
         tmp = STATE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"cas": time.time(), "data": data, "chlazeni": cooling_state,
-                       "historie": hist}, f, ensure_ascii=False)
+                       "historie": hist, "alphacool": alpha_state}, f, ensure_ascii=False)
         os.replace(tmp, STATE)
     except OSError:
         pass
@@ -114,6 +117,8 @@ def main():
     last_bytes = None
     current_key = None
     warned_hwinfo = False
+    alpha = AlphacoolWorker()            # vlastni vlakno - chlazeni nezdrzuje
+    alpha.start()
 
     try:
         while not STOP.is_set():
@@ -142,7 +147,8 @@ def main():
                 data = collect(kraken)
                 cooling.update(kraken, cfg["chlazeni"], data)
                 hist = update_history(history, cfg, data)
-                write_state(data, cooling.state, hist)
+                alpha.update(cfg["alphacool"], data, hist, cfg["obnova_s"])
+                write_state(data, cooling.state, hist, alpha.state)
                 if not any(not k.startswith("@") for k in data) and not warned_hwinfo:
                     log.warning("Z HWiNFO nejsou data - bezi HWiNFO se zapnutym Gadget reportingem?")
                     warned_hwinfo = True
@@ -186,6 +192,7 @@ def main():
         try:
             hand_over(kraken, cooling, cfg["chlazeni"], "aplikace konci - ZALOHA")
             kraken.close()
+            alpha.stop(1.5)                  # az po predani chlazeni - to ma prednost
         finally:
             ukonceni.DONE.set()
 

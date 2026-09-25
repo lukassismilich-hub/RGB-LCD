@@ -3,7 +3,7 @@
   "velikost_obsahu": 1.0,
   "gama_grafiky": 0.9,
   "rotace_s": 10.0,
-  "obnova_s": 0.5,
+  "obnova_s": 0.25,
   "auto_obrazovky": true,
   "skryte_senzory": [],
   "obrazovky": [

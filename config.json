@@ -1,0 +1,177 @@
+{
+  "jas": 100,
+  "velikost_obsahu": 1.0,
+  "gama_grafiky": 1.0,
+  "rotace_s": 10.0,
+  "obnova_s": 0.5,
+  "auto_obrazovky": true,
+  "skryte_senzory": [],
+  "obrazovky": [
+    {
+      "typ": "dva_bary",
+      "zapnuto": true,
+      "nadpis1": "CPU",
+      "senzor1": "CPU (Tctl/Tdie)",
+      "barva1": "#3cff3c",
+      "min1": 0,
+      "max1": 100,
+      "nadpis2": "GPU",
+      "senzor2": "Teplota GPU",
+      "barva2": "#3264ff",
+      "min2": 0,
+      "max2": 100,
+      "jednotka": "°",
+      "delitel": 1,
+      "desetinna_mista": 0
+    },
+    {
+      "typ": "oblouk",
+      "zapnuto": true,
+      "nadpis": "Liquid",
+      "senzor": "@kapalina",
+      "min": 25,
+      "max": 50,
+      "jednotka": "°",
+      "delitel": 1,
+      "desetinna_mista": 0
+    },
+    {
+      "typ": "dva_bary",
+      "zapnuto": true,
+      "nadpis1": "CPU",
+      "senzor1": "Takt jader",
+      "barva1": "#b4f014",
+      "min1": 0,
+      "max1": 5.5,
+      "nadpis2": "GPU",
+      "senzor2": "Takt GPU",
+      "barva2": "#ff9614",
+      "min2": 0,
+      "max2": 3.2,
+      "jednotka": "GHz",
+      "delitel": 1000,
+      "desetinna_mista": 1
+    },
+    {
+      "typ": "hodiny",
+      "zapnuto": true
+    },
+    {
+      "typ": "oblouk",
+      "zapnuto": true,
+      "nadpis": "",
+      "senzor": "Použitá fyzická paměť",
+      "min": 0,
+      "max": 32,
+      "jednotka": "Gb",
+      "delitel": 1024,
+      "desetinna_mista": 1
+    }
+  ],
+  "dvojite_odesilani": false,
+  "chlazeni": {
+    "zapnuto": true,
+    "zdroj": "cpu",
+    "senzor_cpu": "CPU (Tctl/Tdie)",
+    "vyhlazeni_s": 5,
+    "cpu": {
+      "pumpa": [
+        [
+          20,
+          20
+        ],
+        [
+          75,
+          20
+        ],
+        [
+          80,
+          45
+        ],
+        [
+          85,
+          75
+        ],
+        [
+          90,
+          100
+        ]
+      ],
+      "ventilatory": [
+        [
+          20,
+          10
+        ],
+        [
+          75,
+          10
+        ],
+        [
+          80,
+          30
+        ],
+        [
+          85,
+          30
+        ],
+        [
+          90,
+          65
+        ],
+        [
+          95,
+          100
+        ]
+      ]
+    },
+    "pumpa": [
+      [
+        20,
+        60
+      ],
+      [
+        30,
+        70
+      ],
+      [
+        35,
+        80
+      ],
+      [
+        40,
+        90
+      ],
+      [
+        45,
+        100
+      ]
+    ],
+    "ventilatory": [
+      [
+        25,
+        25
+      ],
+      [
+        30,
+        35
+      ],
+      [
+        35,
+        50
+      ],
+      [
+        40,
+        70
+      ],
+      [
+        45,
+        90
+      ],
+      [
+        50,
+        100
+      ]
+    ]
+  },
+  "velikost_textu": 1.4
+}

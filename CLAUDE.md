@@ -59,7 +59,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - Kraken sám umí řídit jen podle teploty kapaliny. V režimu CPU proto aplikace každou sekundu vezme teplotu CPU z HWiNFO, zprůměruje ji za 5 s a pošle výkon, pokud se změní alespoň o 2 %.
 - Uživatelovy křivky (teplota CPU → výkon):
   - pumpa: 20 % do 75 °C, 45 % při 80 °C, 75 % při 85 °C, 100 % od 90 °C
-  - ventilátory: 10 % do 75 °C, 30 % při 80–85 °C, 65 % při 90 °C, 100 % od 95 °C
+  - ventilátory: 10 % do 75 °C, 30 % při 80–85 °C, 75 % při 90 °C, 100 % od 95 °C
 - Pojistky: záložní křivky podle kapaliny se nahrají do Krakenu (ten se pak řídí sám), když:
   - teplota CPU z HWiNFO chybí déle než 5 s,
   - aplikace končí – Ctrl+C, zavření okna, Ctrl+Break (handler konzole), odhlášení a vypnutí PC (skryté okno, `WM_ENDSESSION`; handler konzole tyto události nedostane, protože Python má načtenou user32.dll),

@@ -68,9 +68,11 @@ def load_data():
 
 
 class App(tk.Tk):
+    last_page = 0            # vybrana hlavni zalozka (zachova se pri "Vratit ulozene")
+
     def __init__(self):
         super().__init__()
-        self.title("RGB-LCD – nastavení displeje")
+        self.title("RGB-LCD – nastavení")
         try:
             self.iconbitmap(default=os.path.join(config.BASE, "ikona.ico"))
         except tk.TclError:
@@ -83,12 +85,25 @@ class App(tk.Tk):
         self._preview_img = None
         self._building = False
 
-        self.columnconfigure(1, weight=1)
+        # hlavni zalozky: kazde zarizeni ma vlastni ovladani, tlacitka Ulozit/Zavrit jsou spolecna
+        self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
+        self.pages = ttk.Notebook(self)
+        self.pages.grid(row=0, column=0, sticky="nsew", padx=6, pady=(6, 4))
+        self.kraken_page = ttk.Frame(self.pages)
+        self.alpha_page = ttk.Frame(self.pages)
+        self.pages.add(self.kraken_page, text="  Kraken (LCD a chlazení)  ")
+        self.pages.add(self.alpha_page, text="  Alphacool LCD  ")
+        self.kraken_page.columnconfigure(1, weight=1)
+        self.kraken_page.rowconfigure(0, weight=1)
         self._build_list()
         self._build_editor()
         self._build_right()
+        self._build_alphacool()
         self._build_bottom()
+        self.pages.select(App.last_page)
+        self.pages.bind("<<NotebookTabChanged>>",
+                        lambda e: setattr(App, "last_page", self.pages.index("current")))
         self._refresh_list()
         self._select(0)
         self.bind("<Control-s>", lambda e: self.save())
@@ -97,7 +112,7 @@ class App(tk.Tk):
 
     # ---------------------------------------------------------- seznam
     def _build_list(self):
-        f = ttk.LabelFrame(self, text="Obrazovky (pořadí rotace)")
+        f = ttk.LabelFrame(self.kraken_page, text="Obrazovky (pořadí rotace)")
         f.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         f.rowconfigure(0, weight=1)
         self.lst = tk.Listbox(f, width=30, height=18, exportselection=False, font=("Segoe UI", 10))
@@ -174,7 +189,7 @@ class App(tk.Tk):
 
     # ---------------------------------------------------------- editor
     def _build_editor(self):
-        self.nb = ttk.Notebook(self)
+        self.nb = ttk.Notebook(self.kraken_page)
         self.nb.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
         self.ed = ttk.Frame(self.nb)
         self.ed.columnconfigure(1, weight=1)
@@ -182,9 +197,6 @@ class App(tk.Tk):
         self.cool = ttk.Frame(self.nb)
         self.nb.add(self.cool, text="Chlazení (pumpa a ventilátory)")
         self._build_cooling()
-        self.alpha_tab = ttk.Frame(self.nb)
-        self.nb.add(self.alpha_tab, text="Alphacool LCD")
-        self._build_alphacool()
 
     # ------------------------------------------------------- alphacool
     _A_ROW = [("popisek", "Popisek", "text", 6), ("senzor", "Senzor", "sensor", 22),
@@ -198,10 +210,15 @@ class App(tk.Tk):
                 ("delka_s", "Délka (s)", "int", 5)]
 
     def _build_alphacool(self):
-        f = self.alpha_tab
+        """Hlavni zalozka Alphacool LCD: vlevo nastaveni, vpravo nahled."""
+        page = self.alpha_page
+        page.columnconfigure(0, weight=1)
         acfg = self.cfg["alphacool"]
-        top = ttk.Frame(f)
-        top.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 2))
+        f = ttk.Frame(page)
+        f.grid(row=0, column=0, sticky="nw", padx=8, pady=8)
+
+        disp = ttk.LabelFrame(f, text="Displej")
+        disp.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         for col, (key, text) in enumerate((("zapnuto", "Zobrazovat na displeji"),
                                            ("podsviceni", "Podsvícení"),
                                            ("inverze", "Inverze (negativ)"))):
@@ -210,13 +227,13 @@ class App(tk.Tk):
             def on(k=key, v=v):
                 acfg[k] = v.get()
                 self._update_alpha()
-            ttk.Checkbutton(top, text=text, variable=v, command=on).grid(
-                row=0, column=col, sticky="w", padx=(0, 16))
-        self.alpha_status = ttk.Label(f, font=("Segoe UI", 10, "bold"))
-        self.alpha_status.grid(row=1, column=0, sticky="w", padx=8, pady=(4, 6))
+            ttk.Checkbutton(disp, text=text, variable=v, command=on).grid(
+                row=0, column=col, sticky="w", padx=(6, 16), pady=(4, 2))
+        self.alpha_status = ttk.Label(disp, font=("Segoe UI", 10, "bold"))
+        self.alpha_status.grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 6))
 
-        tbl = ttk.LabelFrame(f, text="Řádky s barem (hodnota | bar | hodnota vpravo)")
-        tbl.grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        tbl = ttk.LabelFrame(f, text="Řádky s barem (popisek | hodnota | bar | hodnota vpravo)")
+        tbl.grid(row=1, column=0, sticky="ew", pady=6)
         for c, (_k, head, _kind, _w) in enumerate(self._A_ROW):
             ttk.Label(tbl, text=head, foreground="#666").grid(row=0, column=c, sticky="w", padx=2)
         for r, row in enumerate(acfg["radky"][:3]):
@@ -224,20 +241,24 @@ class App(tk.Tk):
                 self._alpha_field(tbl, row, key, kind, w).grid(row=r + 1, column=c, padx=2, pady=2)
 
         g = ttk.LabelFrame(f, text="Graf (průběh v čase)")
-        g.grid(row=3, column=0, sticky="w", padx=8, pady=4)
+        g.grid(row=2, column=0, sticky="w", pady=6)
         for c, (key, head, kind, w) in enumerate(self._A_GRAPH):
             ttk.Label(g, text=head, foreground="#666").grid(row=0, column=c, sticky="w", padx=2)
             self._alpha_field(g, acfg["graf"], key, kind, w).grid(row=1, column=c, padx=2, pady=2)
 
-        pv = ttk.LabelFrame(f, text="Náhled 240×128 (zvětšeno 2×)")
-        pv.grid(row=4, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(f, foreground="#666", justify="left", text=(
+            "Dělitel 1000 = MHz→GHz, 1024 = MB→GB. Jednotka „auto“ = jednotka z HWiNFO.\n"
+            "Min/Max jsou v zobrazených jednotkách (po vydělení). Prázdný pravý senzor = delší bar.\n"
+            "Obnova hodnot se nastavuje na záložce Kraken (Obecné) a platí pro oba displeje.")).grid(
+            row=3, column=0, sticky="w", pady=(6, 0))
+
+        right = ttk.Frame(page)
+        right.grid(row=0, column=1, sticky="ne", padx=8, pady=8)
+        pv = ttk.LabelFrame(right, text="Náhled 240×128 (zvětšeno 2×)")
+        pv.pack(fill="x")
         self.alpha_preview = tk.Label(pv, bg="black")
         self.alpha_preview.pack(padx=6, pady=6)
         self._alpha_img = None
-        ttk.Label(f, foreground="#666", justify="left", text=(
-            "Dělitel 1000 = MHz→GHz, 1024 = MB→GB. Jednotka „auto“ = jednotka z HWiNFO.\n"
-            "Min/Max jsou v zobrazených jednotkách (po vydělení). Prázdný pravý senzor = delší bar.")).grid(
-            row=5, column=0, sticky="w", padx=8)
         self._update_alpha()
 
     def _alpha_field(self, parent, target, key, kind, width):
@@ -598,7 +619,7 @@ class App(tk.Tk):
 
     # ------------------------------------------------ obecne + nahled
     def _build_right(self):
-        f = ttk.Frame(self)
+        f = ttk.Frame(self.kraken_page)
         f.grid(row=0, column=2, sticky="nsew", padx=8, pady=8)
         pv = ttk.LabelFrame(f, text="Náhled")
         pv.pack(fill="x")
@@ -644,6 +665,7 @@ class App(tk.Tk):
         ttk.Label(g, text="(nižší = světlejší)", foreground="#666").grid(row=4, column=1, sticky="w")
         spin("rotace_s", "Rotace obrazovek (s)", 1, 60, 1, 5)
         spin("obnova_s", "Obnova hodnot (s)", MIN_REFRESH_S, 10, 0.25, 6)
+        ttk.Label(g, text="(platí i pro Alphacool)", foreground="#666").grid(row=6, column=2, sticky="w")
         av = tk.BooleanVar(value=self.cfg.get("auto_obrazovky", True))
 
         def on_auto():
@@ -709,7 +731,7 @@ class App(tk.Tk):
     # ---------------------------------------------------------- ulozeni
     def _build_bottom(self):
         b = ttk.Frame(self)
-        b.grid(row=1, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 8))
+        b.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
         self.status = ttk.Label(b, foreground="#2a7")
         self.status.pack(side="left")
         ttk.Button(b, text="Zavřít", command=self.on_close).pack(side="right", padx=4)

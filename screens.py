@@ -248,24 +248,33 @@ def _bar(img, x, y, w, h, frac, cols):
 
 
 def _arc(img, c, r, thick, start, span, frac, cols, track=DARK, dim_rest=None):
-    """Oblouk: podklad + barevna cast s prechodem podel oblouku, zakulacene konce."""
+    """Oblouk: podklad + barevna cast s prechodem podel oblouku. Podklad i barevna cast
+    maji zakulacene konce."""
     d = ImageDraw.Draw(img)
     box = (c - r, c - r, c + r, c + r)
+    rr = r - thick / 2
+
+    def cap(ang, col):
+        a = math.radians(ang)
+        cx, cy = c + rr * math.cos(a), c + rr * math.sin(a)
+        d.ellipse((cx - thick / 2, cy - thick / 2, cx + thick / 2, cy + thick / 2), fill=col)
+
     if dim_rest is None:
         d.arc(box, start, start + span, fill=track, width=thick)
+        cap(start, track)
+        cap(start + span, track)
     else:                                   # cela stupnice ztlumene v barvach prechodu
         for i in range(int(span)):
             d.arc(box, start + i, start + i + 2, fill=_dim(mix(*cols, i / span), dim_rest), width=thick)
+        cap(start, _dim(cols[0], dim_rest))
+        cap(start + span, _dim(cols[1], dim_rest))
     steps = int(span * frac)
     if steps <= 0:
         return
     for i in range(steps):
         d.arc(box, start + i, start + i + 2, fill=mix(*cols, i / span), width=thick)
-    rr = r - thick / 2
-    for ang, col in ((start, cols[0]), (start + steps, mix(*cols, steps / span))):
-        a = math.radians(ang)
-        cx, cy = c + rr * math.cos(a), c + rr * math.sin(a)
-        d.ellipse((cx - thick / 2, cy - thick / 2, cx + thick / 2, cy + thick / 2), fill=col)
+    cap(start, cols[0])
+    cap(start + steps, mix(*cols, steps / span))
 
 
 def _unit_after(img, x_left, y_top, txt, font, unit, tcols, deg_px=26, unit_px=18, deg_dy=2):

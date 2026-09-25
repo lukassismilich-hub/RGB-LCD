@@ -6,6 +6,10 @@
 #   - odhlaseni, vypnuti PC       -> skryte okno (WM_ENDSESSION); proces s nactenou
 #                                    user32.dll (Python ji ma vzdy) udalosti odhlaseni
 #                                    a vypnuti v handleru konzole nedostane
+#   - ukoncit.bat                 -> skryte okno (WM_CLOSE) - bez konzole (autostart)
+#                                    jinak aplikaci nejde bezpecne ukoncit
+#
+# Spusteni "py ukonceni.py --ukoncit" ukonci bezici aplikaci a pocka na zalohu.
 #
 # Handler i okno bezi ve vlastnim vlakne: nastavi STOP a pockaji na DONE (az hlavni
 # smycka nahraje zalohu). Windows proces ukonci zhruba 5 s po udalosti.
@@ -22,11 +26,30 @@ DONE = threading.Event()     # zaloha chlazeni je hotova, proces muze skoncit
 WAIT_S = 4.5
 
 _CTRL_EVENTS = {1: "Ctrl+Break", 2: "zavreni okna", 5: "odhlaseni", 6: "vypnuti systemu"}
+WM_CLOSE = 0x0010
 WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
+MSGFLT_ALLOW = 1
+ERROR_ALREADY_EXISTS = 183
 WINDOW_CLASS = "RGB_LCD_ukonceni"
+MUTEX_NAME = "Local\\RGB_LCD_dashboard"
 
-_keep = []                   # ctypes callbacky musi zustat v pameti
+_keep = []                   # ctypes callbacky a handle musi zustat v pameti
+
+
+def single_instance():
+    """True, kdyz je tohle jedina bezici instance (drzi pojmenovany mutex do konce procesu)."""
+    if not hasattr(ctypes, "WinDLL"):
+        return True
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+    k.CreateMutexW.restype = wintypes.HANDLE
+    h = k.CreateMutexW(None, False, MUTEX_NAME)
+    err = ctypes.get_last_error()
+    if not h:
+        return err != 5          # pristup odepren = mutex drzi instance s pravy spravce
+    _keep.append(h)
+    return err != ERROR_ALREADY_EXISTS
 
 
 def request_stop(reason):
@@ -84,6 +107,9 @@ def _window_thread(ready):
     kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 
     def proc(hwnd, msg, wparam, lparam):
+        if msg == WM_CLOSE:
+            request_stop("pozadavek na ukonceni")
+            return 0
         if msg == WM_QUERYENDSESSION:
             return 1                                  # vypnuti neblokujeme
         if msg == WM_ENDSESSION:
@@ -103,6 +129,12 @@ def _window_thread(ready):
         # skryte okno nejvyssi urovne (ne message-only - to broadcast o vypnuti nedostane)
         hwnd = user32.CreateWindowExW(0, WINDOW_CLASS, "RGB-LCD", 0, 0, 0, 0, 0,
                                       None, None, wc.hInstance, None)
+    if hwnd:
+        # aplikace bezi s pravy spravce -> WM_CLOSE z beznych procesu (ukoncit.bat) by
+        # Windows jinak zahodil (UIPI)
+        user32.ChangeWindowMessageFilterEx.argtypes = [wintypes.HWND, wintypes.UINT,
+                                                       wintypes.DWORD, wintypes.LPVOID]
+        user32.ChangeWindowMessageFilterEx(hwnd, WM_CLOSE, MSGFLT_ALLOW, None)
     ready.set()
     if not hwnd:
         log.warning("Nepodarilo se vytvorit okno pro zachyceni vypnuti PC (chyba %d).",
@@ -124,6 +156,47 @@ def install():
     ready.wait(2)
 
 
+def close_running(timeout=15):
+    """Pozadat bezici aplikaci o ukonceni (WM_CLOSE) a pockat, az jeji proces skonci.
+    Vrati None = nebezi, True = ukoncena, False = neodpovida."""
+    import time
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.FindWindowW.restype = wintypes.HWND
+    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
+                                    wintypes.LPARAM]
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    hwnd = user32.FindWindowW(WINDOW_CLASS, None)
+    if not hwnd:
+        return None
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    proc = kernel32.OpenProcess(0x00100000, False, pid.value)    # SYNCHRONIZE
+    try:
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            hwnd = user32.FindWindowW(WINDOW_CLASS, None)
+            if not hwnd and not proc:
+                return True
+            if hwnd:
+                user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)   # opakovane - kdyby se prvni ztratila
+            if proc:
+                if kernel32.WaitForSingleObject(proc, 2000) == 0:       # proces skoncil
+                    return True
+            else:
+                time.sleep(2)
+        return False
+    finally:
+        if proc:
+            kernel32.CloseHandle(proc)
+
+
 def pause(seconds):
     """Cekani, ktere hned skonci pri STOP. Po kratkych usecich, aby Ctrl+C reagovalo
     okamzite (Event.wait jde v Pythonu 3.12 na Windows prerusit az po uplynuti)."""
@@ -134,3 +207,13 @@ def pause(seconds):
         if left <= 0:
             return
         time.sleep(min(0.1, left))
+
+
+if __name__ == "__main__":
+    import sys
+    if "--ukoncit" in sys.argv:
+        r = close_running()
+        print({None: "Aplikace nebezi.",
+               True: "Aplikace ukoncena. Predani chlazeni Krakenu potvrzuje radek ZALOHA v rgb_lcd.log.",
+               False: "Aplikace neodpovida - podivej se do rgb_lcd.log."}[r])
+        sys.exit(0 if r is not False else 1)

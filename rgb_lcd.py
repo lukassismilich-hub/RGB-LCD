@@ -1,6 +1,7 @@
 # rgb_lcd.py - dashboard na displej NZXT Kraken 2023
 # Spusteni: py rgb_lcd.py   (ukonceni Ctrl+C nebo zavrenim okna - chlazeni prevezme
 #           Kraken podle krivek kapaliny, displej se vrati na teplotu kapaliny)
+#           Bez konzole: pythonw rgb_lcd.py (tak ji spousti autostart), ukonceni ukoncit.bat.
 # Nastaveni: nastaveni.bat - zmeny se projevi za behu, bez restartu.
 
 import json
@@ -11,6 +12,7 @@ import sys
 import time
 from collections import deque
 
+import camservice
 import config
 from cooling import Cooling
 import hwinfo
@@ -26,16 +28,18 @@ log = logging.getLogger("rgb_lcd")
 
 
 def setup_logging():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[logging.handlers.RotatingFileHandler(
-                      os.path.join(BASE, "rgb_lcd.log"), maxBytes=1_000_000, backupCount=3,
-                      encoding="utf-8"),
-                  logging.StreamHandler(sys.stdout)],
-    )
+    handlers = [logging.handlers.RotatingFileHandler(
+        os.path.join(BASE, "rgb_lcd.log"), maxBytes=1_000_000, backupCount=3, encoding="utf-8")]
+    if sys.stdout is not None:                   # pythonw (autostart) nema konzoli
+        handlers.append(logging.StreamHandler(sys.stdout))
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
+                        handlers=handlers)
     # liquidctl pise pri kazdem nastaveni vykonu 40 radku krivky - staci varovani a chyby
     logging.getLogger("liquidctl").setLevel(logging.WARNING)
+
+    def excepthook(exc_type, exc, tb):           # bez konzole by chyba zmizela
+        log.critical("Neosetrena chyba:", exc_info=(exc_type, exc, tb))
+    sys.excepthook = excepthook
 
 
 def hand_over(kraken, cooling, cool, reason):
@@ -92,7 +96,13 @@ def write_state(data, cooling_state, hist):
 
 def main():
     setup_logging()
+    if not ukonceni.single_instance():
+        log.warning("Aplikace uz bezi (nejspis z automatickeho spusteni) - druha instance konci. "
+                    "Ukoncit ji jde pres ukoncit.bat.")
+        return
     ukonceni.install()
+    log.info("Start aplikace.")
+    camservice.stop()
     cfg = config.load()
     cfg_time = config.mtime()
     kraken = Kraken(cfg["jas"], cfg.get("dvojite_odesilani", False))
@@ -159,6 +169,8 @@ def main():
                 raise
             except Exception as e:
                 log.error("Chyba: %s - zkusim znovu za 5 s", e)
+                if "CAMService" in str(e):       # sluzbu mohl znovu spustit NZXT CAM
+                    camservice.stop()
                 if kraken.dev is not None:       # nenechat Kraken na pevnem vykonu
                     cooling.shutdown(kraken, cfg["chlazeni"], "chyba komunikace - ZALOHA")
                 kraken.close(back_to_liquid=False)

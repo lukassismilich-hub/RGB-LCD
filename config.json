@@ -209,5 +209,61 @@
       ]
     ]
   },
-  "velikost_textu": 1.4
+  "velikost_textu": 1.4,
+  "alphacool": {
+    "zapnuto": true,
+    "podsviceni": true,
+    "inverze": false,
+    "radky": [
+      {
+        "popisek": "CPU",
+        "senzor": "CPU (Tctl/Tdie)",
+        "min": 0,
+        "max": 100,
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "senzor2": "Takt jader",
+        "jednotka2": "GHz",
+        "delitel2": 1000,
+        "desetinna_mista2": 2
+      },
+      {
+        "popisek": "GPU",
+        "senzor": "Teplota GPU",
+        "min": 0,
+        "max": 100,
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "senzor2": "Takt GPU",
+        "jednotka2": "GHz",
+        "delitel2": 1000,
+        "desetinna_mista2": 2
+      },
+      {
+        "popisek": "RAM",
+        "senzor": "Použitá fyzická paměť",
+        "min": 0,
+        "max": 32,
+        "jednotka": "G",
+        "delitel": 1024,
+        "desetinna_mista": 1,
+        "senzor2": "",
+        "jednotka2": "auto",
+        "delitel2": 1,
+        "desetinna_mista2": 0
+      }
+    ],
+    "graf": {
+      "popisek": "CPU",
+      "senzor": "CPU (Tctl/Tdie)",
+      "min": 30,
+      "max": 95,
+      "jednotka": "°",
+      "delitel": 1,
+      "desetinna_mista": 0,
+      "delka_s": 120
+    }
+  }
 }

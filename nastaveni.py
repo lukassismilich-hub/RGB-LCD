@@ -18,6 +18,7 @@ import screens
 STATE = os.path.join(config.BASE, "stav.json")
 
 TYPES = screens.TYPES
+MIN_REFRESH_S = config.MIN_REFRESH_S
 UNITS = ["auto", "°", "GHz", "MHz", "%", "RPM", "W", "V", ""]
 
 _ONE = {"nadpis": "", "senzor": "", "min": 0, "max": 100, "jednotka": "auto",
@@ -531,7 +532,7 @@ class App(tk.Tk):
 
             def on(*_):
                 try:
-                    self.cfg[key] = float(v.get().replace(",", "."))
+                    self.cfg[key] = max(lo, min(hi, float(v.get().replace(",", "."))))
                 except ValueError:
                     pass
             v.trace_add("write", on)
@@ -540,7 +541,7 @@ class App(tk.Tk):
         scale("gama_grafiky", "Světlost grafiky", 0.4, 1.0, 0.05, 3)
         ttk.Label(g, text="(nižší = světlejší)", foreground="#666").grid(row=4, column=1, sticky="w")
         spin("rotace_s", "Rotace obrazovek (s)", 1, 60, 1, 5)
-        spin("obnova_s", "Obnova hodnot (s)", 0.5, 10, 0.5, 6)
+        spin("obnova_s", "Obnova hodnot (s)", MIN_REFRESH_S, 10, 0.25, 6)
         av = tk.BooleanVar(value=self.cfg.get("auto_obrazovky", True))
 
         def on_auto():

@@ -178,7 +178,8 @@ def main():
                 continue
 
             elapsed = time.monotonic() - loop_start
-            pause(max(0.05, float(cfg["obnova_s"]) - elapsed))
+            period = max(config.MIN_REFRESH_S, float(cfg["obnova_s"]))
+            pause(max(0.05, period - elapsed))
     except KeyboardInterrupt:
         log.info("Ukoncuji (Ctrl+C).")
     finally:

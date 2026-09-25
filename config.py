@@ -7,6 +7,9 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 PATH = os.path.join(BASE, "config.json")
 
 LIQUID = "@kapalina"       # teplota kapaliny primo z Krakenu
+# nejkratsi obnova hodnot: nejpomalejsi cyklus (vykresleni ~55 ms + priprava 11 ms
+# + prenos na LCD 30-80 ms) je pod 150 ms, 250 ms ma rezervu
+MIN_REFRESH_S = 0.25
 
 DEFAULT_SCREENS = [
     {"typ": "dva_bary", "zapnuto": True,

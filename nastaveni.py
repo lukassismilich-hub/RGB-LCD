@@ -69,6 +69,10 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("RGB-LCD – nastavení displeje")
+        try:
+            self.iconbitmap(default=os.path.join(config.BASE, "ikona.ico"))
+        except tk.TclError:
+            pass
         self.minsize(1120, 720)
         self.cfg = config.load()
         self.saved = copy.deepcopy(self.cfg)
@@ -627,4 +631,9 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
+    try:    # vlastni skupina na hlavnim panelu -> ikona okna misto ikony Pythonu
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("RGB-LCD.Nastaveni")
+    except (AttributeError, OSError):
+        pass
     App().mainloop()

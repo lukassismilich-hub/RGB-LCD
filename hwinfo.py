@@ -2,6 +2,8 @@
 # Ve free verzi HWiNFO toto rozhrani nevyprsi (na rozdil od Shared Memory).
 # Hodnota se objevi, kdyz v HWiNFO u senzoru zaskrtnes "Report value in Gadget".
 
+import re
+
 try:
     import winreg
 except ImportError:          # mimo Windows (testy)
@@ -38,7 +40,7 @@ def read_full():
     finally:
         winreg.CloseKey(key)
 
-    out = {}
+    items = []
     j = 0
     while f"Label{j}" in raw:
         label = str(raw[f"Label{j}"]).strip()
@@ -48,11 +50,30 @@ def read_full():
         except ValueError:
             j += 1
             continue
-        name = label if label not in out else f"{label} ({sensor})"
-        out[name] = {"value": val, "unit": _unit_from_text(raw.get(f"Value{j}", "")),
-                     "sensor": sensor}
+        items.append((label, sensor, val, _unit_from_text(raw.get(f"Value{j}", ""))))
         j += 1
+
+    counts = {}
+    for label, *_ in items:
+        counts[label] = counts.get(label, 0) + 1
+    out = {}
+    for label, sensor, val, unit in items:
+        # stejny nazev u vic zarizeni (disky, sitove karty) -> kratke rozliseni v zavorce
+        name = label if counts[label] == 1 else f"{label} ({_short(sensor)})"
+        if name in out:
+            name = f"{label} ({sensor})"
+        out[name] = {"value": val, "unit": unit, "sensor": sensor}
     return out
+
+
+def _short(sensor):
+    """'S.M.A.R.T.: WD_BLACK SN770 2TB (...) [D:]' -> 'D:', 'Síť: ... - Wi-Fi 2' -> 'Wi-Fi 2'"""
+    m = re.search(r"\[([A-Z]:)\]", sensor)
+    if m:
+        return m.group(1)
+    if " - " in sensor:
+        return sensor.rsplit(" - ", 1)[1].strip()
+    return sensor
 
 
 def read():

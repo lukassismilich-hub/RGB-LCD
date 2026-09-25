@@ -64,7 +64,10 @@ def load_data():
                     st.get("alphacool", {}))
     except (OSError, ValueError, KeyError):
         pass
-    return hwinfo.read_full(), False, {}, {}, {}
+    import systemdata
+    data = hwinfo.read_full()
+    data.update(systemdata.read())
+    return data, False, {}, {}, {}
 
 
 class App(tk.Tk):

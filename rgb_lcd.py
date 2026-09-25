@@ -19,6 +19,7 @@ from cooling import Cooling
 import hwinfo
 import mono
 import screens
+import systemdata
 from kraken import Kraken
 import ukonceni
 from ukonceni import STOP, pause
@@ -60,6 +61,7 @@ def hand_over(kraken, cooling, cool, reason):
 
 def collect(kraken):
     data = hwinfo.read_full()
+    data.update(systemdata.read())          # disky, sit, Wi-Fi (HWiNFO je neposila)
     data.update(kraken.status())
     return data
 

@@ -18,7 +18,7 @@ import json
 import math
 import os
 from datetime import datetime
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 SIZE = 240
 S = 3                      # supersampling
@@ -475,15 +475,25 @@ def draw_graph(scr, data, template=False, history=None):
                     gy1 - pad - (gy1 - gy0 - 2 * pad) * fr)
         pts = [pt(i, v) for i, v in enumerate(vals)]
         grad = _vgrad(gx1 - gx0, gy1 - gy0, *gcols)
+        # plocha: syta, smerem dolu mirne slabne (krytí 200 -> 150 z 255)
         area = Image.new("L", img.size, 0)
-        ImageDraw.Draw(area).polygon(pts + [(pts[-1][0], gy1 - pad), (pts[0][0], gy1 - pad)], fill=90)
-        _paint(img, area, grad, (gx0, gy0))
+        ImageDraw.Draw(area).polygon(pts + [(pts[-1][0], gy1 - pad), (pts[0][0], gy1 - pad)], fill=255)
+        fade = Image.new("L", img.size, 0)
+        fd = ImageDraw.Draw(fade)
+        for y in range(gy0, gy1 + 1):
+            fd.line((gx0, y, gx1, y), fill=round(200 - 50 * (y - gy0) / (gy1 - gy0)))
+        _paint(img, ImageChops.multiply(area, fade), grad, (gx0, gy0))
+        # cara: silna, svetlejsi nez plocha, s tmavym lemem, aby se od plochy oddelila
+        light = [mix(c, WHITE, 0.35) for c in gcols]
+        lgrad = _vgrad(gx1 - gx0, gy1 - gy0, *light)
+        ImageDraw.Draw(img).line(pts, fill=BLACK, width=11 * S, joint="curve")
         line = Image.new("L", img.size, 0)
-        ImageDraw.Draw(line).line(pts, fill=255, width=4 * S, joint="curve")
-        _paint(img, line, grad, (gx0, gy0))
+        ImageDraw.Draw(line).line(pts, fill=255, width=8 * S, joint="curve")
+        _paint(img, line, lgrad, (gx0, gy0))
         ex, ey = pts[-1]
-        col = mix(*gcols, 1 - (ey - gy0) / (gy1 - gy0))
-        d.ellipse((ex - 6 * S, ey - 6 * S, ex + 6 * S, ey + 6 * S), fill=col)
+        col = mix(*light, 1 - (ey - gy0) / (gy1 - gy0))
+        d.ellipse((ex - 11 * S, ey - 11 * S, ex + 11 * S, ey + 11 * S), fill=BLACK)
+        d.ellipse((ex - 9 * S, ey - 9 * S, ex + 9 * S, ey + 9 * S), fill=col)
 
     title = scr.get("nadpis") or sensor or ""
     _text(img, (gx0 + 2 * S, 34 * S), title, _fit_font(d, title, "ExtraBold", 17, 110 * S), tcols, "ls")

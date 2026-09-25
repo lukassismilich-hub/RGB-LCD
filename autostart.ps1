@@ -28,20 +28,28 @@ if (-not $Uzivatel) { $Uzivatel = [Security.Principal.WindowsIdentity]::GetCurre
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $mode = if ($Zapnout) { '-Zapnout' } else { '-Vypnout' }
+    Write-Host 'Otviram okno s pravy spravce (potvrd dotaz Windows) ...'
     try {
-        Start-Process powershell.exe -Verb RunAs -ArgumentList @(
+        $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", $mode,
             '-Uzivatel', "`"$Uzivatel`"")
+        Write-Host "Okno spravce skoncilo (kod $($p.ExitCode))."
     } catch {
-        Write-Host 'Prava spravce nebyla povolena - nic se nezmenilo.' -ForegroundColor Yellow
-        Start-Sleep 3
+        Write-Host "Okno s pravy spravce se nespustilo: $_" -ForegroundColor Yellow
     }
+    # kontrola vysledku z pohledu bezneho uzivatele
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($Zapnout -and $task) { Write-Host "OK: naplanovana uloha '$TaskName' existuje." -ForegroundColor Green }
+    elseif ($Zapnout) { Write-Host "CHYBA: naplanovana uloha '$TaskName' nevznikla - podrobnosti v $App\autostart.log" -ForegroundColor Red }
+    elseif (-not $task) { Write-Host "OK: naplanovana uloha '$TaskName' neexistuje." -ForegroundColor Green }
+    else { Write-Host "CHYBA: naplanovana uloha '$TaskName' porad existuje - podrobnosti v $App\autostart.log" -ForegroundColor Red }
+    Read-Host 'Enter = zavrit'
     exit
 }
 
-# registr prave toho uzivatele, pro ktereho se autostart nastavuje (i kdyz UAC potvrdil jiny ucet)
-$sid = (New-Object Security.Principal.NTAccount($Uzivatel)).Translate([Security.Principal.SecurityIdentifier]).Value
-$UserHive = "Registry::HKEY_USERS\$sid"
+# zaznam celeho behu s pravy spravce (i chyb) do autostart.log
+try { Start-Transcript -Path (Join-Path $App 'autostart.log') -Append | Out-Null } catch {}
+Write-Host "Spusteno s pravy spravce: $([Security.Principal.WindowsIdentity]::GetCurrent().Name), autostart pro: $Uzivatel"
 
 function Find-Python {
     $exe = $null
@@ -68,6 +76,10 @@ function Set-CamAutostart([bool]$enabled) {
 }
 
 try {
+    # registr prave toho uzivatele, pro ktereho se autostart nastavuje (i kdyz UAC potvrdil jiny ucet)
+    $sid = (New-Object Security.Principal.NTAccount($Uzivatel)).Translate([Security.Principal.SecurityIdentifier]).Value
+    $UserHive = "Registry::HKEY_USERS\$sid"
+
     if ($Zapnout) {
         Write-Host "Zapinam automaticke spusteni RGB-LCD pro $Uzivatel ..."
         $python = Find-Python
@@ -124,8 +136,13 @@ try {
     }
     Write-Host ''
     Write-Host 'Hotovo.' -ForegroundColor Green
+    $code = 0
 } catch {
     Write-Host ''
     Write-Host "CHYBA: $_" -ForegroundColor Red
+    Write-Host $_.ScriptStackTrace
+    $code = 1
 }
+try { Stop-Transcript | Out-Null } catch {}
 Read-Host 'Enter = zavrit'
+exit $code

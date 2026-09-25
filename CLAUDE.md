@@ -43,7 +43,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - `config.json` – uživatelské nastavení (změny se načtou za běhu podle mtime, bez restartu)
 - `nastaveni.py` – okno nastavení (tkinter): obrazovky, editor, obecné, živý náhled 240×240, záložka Chlazení
 - `stav.json` – živá data pro okno nastavení
-- `fonts/` – Montserrat (Light, SemiBold, Bold, ExtraBold, Black)
+- `fonts/` – Montserrat (Light, SemiBold, Bold, ExtraBold, Black) pro Kraken; pixelová písma pro Alphacool z Google Fonts (licence OFL, `OFL-*.txt`): Silkscreen (8/16 px, jen velká písmena, CHYBÍ ě č ř ů ď ť ň), Press Start 2P (8/16/24), VT323 (16/32), Tiny5 (10) – pixelová písma jsou ostrá jen v násobcích nativní velikosti
 - `spustit.bat`, `nastaveni.bat`
 
 ## Vyřešené problémy – neřeš znovu

@@ -6,8 +6,10 @@
 # kresleni, dole v seznamu = navrchu) a vlastnosti vybraneho prvku.
 
 import copy
+import os
+import shutil
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 
 from PIL import ImageTk
 
@@ -55,6 +57,10 @@ FIELDS = {
               + [("popisek", "Popisek", "text", None), ("hodnota", "Zobrazit hodnotu", "bool", None)]
               + _FONT + [("pismo_male", "Písmo popisku", "font", None)],
     "ikona": [("nazev", "Ikona", "choice", list(prvky.ICONS)), ("meritko", "Měřítko (1–3)", "int", None)] + _COL,
+    "obrazek": [("soubor", "Soubor", "file", None),
+                ("velikost", "Velikost", "choice", ["puvodni", "prizpusobit"]),
+                ("prah", "Práh jasu (0–255)", "int", None), ("rastr", "Rastrovat (fotky)", "bool", None),
+                ("negativ", "Negativ", "bool", None), ("pozadi", "Neprůhledné pozadí", "bool", None)] + _COL,
     "cara": [("smer", "Směr", "choice", ["vodorovna", "svisla"]), ("tloustka", "Tloušťka", "int", None)] + _COL,
     "obdelnik": [("vypln", "Výplň", "choice", ["zadna", "plna", "rastr"]),
                  ("dvojity", "Dvojitý rámeček", "bool", None)] + _COL,
@@ -378,6 +384,8 @@ class AlphaEditor:
         names = [""] + self.app._sensor_names()
         if kind == "font":
             return self._font_field(p, key)
+        if kind == "file":
+            return self._file_field(p, key)
         if kind == "sensors":
             fr = ttk.Frame(f)
             lb = tk.Listbox(fr, selectmode="multiple", height=6, exportselection=False, width=30)
@@ -418,6 +426,50 @@ class AlphaEditor:
             w = ttk.Entry(f, textvariable=v, width=8 if kind in ("int", "num") else 20)
         v.trace_add("write", lambda *a: self._set(key, v.get(), kind))
         return w
+
+    def _file_field(self, p, key):
+        """Obrazek: nabidka ze slozky obrazky/, Vybrat... (zkopiruje do obrazky/), puvodni velikost."""
+        fr = ttk.Frame(self.props)
+        v = tk.StringVar(value=p.get(key, ""))
+
+        def files():
+            os.makedirs(prvky.IMAGES_DIR, exist_ok=True)
+            return sorted(f for f in os.listdir(prvky.IMAGES_DIR)
+                          if f.lower().endswith((".png", ".bmp", ".jpg", ".jpeg", ".gif")))
+        cb = ttk.Combobox(fr, textvariable=v, values=files(), width=20)
+        cb.pack(side="left")
+        cb.bind("<Button-1>", lambda e: cb.config(values=files()))
+
+        def native():
+            size = prvky.image_size(p.get(key, ""))
+            if size:
+                p["w"], p["h"] = size
+                p["velikost"] = "puvodni"
+                self._changed(rebuild=True)
+
+        def pick():
+            path = filedialog.askopenfilename(
+                parent=self.props, title="Vyber obrázek",
+                filetypes=[("Obrázky", "*.png *.bmp *.jpg *.jpeg *.gif"), ("Vše", "*.*")])
+            if not path:
+                return
+            name = os.path.basename(path)
+            dst = os.path.join(prvky.IMAGES_DIR, name)
+            if os.path.normcase(os.path.abspath(path)) != os.path.normcase(dst):
+                shutil.copy2(path, dst)                   # obrazek patri k aplikaci
+            p[key] = name
+            native()
+
+        def on(*_):
+            p[key] = v.get()
+            if prvky.image_size(v.get()) and p.get("velikost", "puvodni") == "puvodni":
+                p["w"], p["h"] = prvky.image_size(v.get())
+                self._sync_geometry()
+            self._changed(geometry_only=True)
+        v.trace_add("write", on)
+        ttk.Button(fr, text="Vybrat…", command=pick).pack(side="left", padx=4)
+        ttk.Button(fr, text="Původní velikost", command=native).pack(side="left")
+        return fr
 
     def _font_field(self, p, key):
         spec = p.setdefault(key, {"rodina": "Tahoma", "velikost": 11, "tucne": False})

@@ -15,6 +15,7 @@
 #   prstenec  kruh ze segmentu
 #   oblouk    tlusty oblouk, podklad rastr
 #   ikona     pixelova ikona 11x11 (meritko 1-3)
+#   obrazek   PNG/BMP/JPG ze slozky obrazky/ -> 1 bit (prah nebo rastr), pruhlednost z alfa kanalu
 #   cara      vodorovna / svisla
 #   obdelnik  ramecek, plny nebo rastr (napr. pruh pod hodiny)
 
@@ -492,7 +493,74 @@ def draw_rect(img, d, p, data, now):
             d.rectangle((x + 2, y + 2, x + w - 3, y + h - 3), outline=col)
 
 
-DRAW = {"text": draw_text, "cislo": draw_number, "hodiny": draw_clock, "bar": draw_bar,
+IMAGES_DIR = os.path.join(BASE, "obrazky")
+_img_cache = {}
+
+
+def image_path(name):
+    """Cesta k obrazku: relativni = ze slozky obrazky/."""
+    if not name:
+        return ""
+    return name if os.path.isabs(name) else os.path.join(IMAGES_DIR, name)
+
+
+def load_mask(p):
+    """Obrazek prvku jako maska "1" (1 = rozsvitit) ve velikosti, v jake se nakresli."""
+    path = image_path(p.get("soubor", ""))
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+    fit = p.get("velikost", "puvodni")
+    key = (path, mtime, fit, p["w"], p["h"], int(_num(p, "prah", 128)), bool(p.get("rastr")),
+           bool(p.get("negativ")))
+    if key in _img_cache:
+        return _img_cache[key]
+    src = Image.open(path)
+    alpha = src.getchannel("A") if "A" in src.getbands() else None
+    gray = src.convert("L")
+    if fit == "prizpusobit":                          # vejit do ramecku, zachovat pomer stran
+        k = min(p["w"] / src.width, p["h"] / src.height)
+        size = (max(1, round(src.width * k)), max(1, round(src.height * k)))
+        gray = gray.resize(size, Image.LANCZOS)
+        alpha = alpha.resize(size, Image.LANCZOS) if alpha is not None else None
+    if p.get("negativ"):
+        gray = gray.point(lambda v: 255 - v)
+    if p.get("rastr"):                                # fotografie: Floyd-Steinberg
+        mask = gray.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
+    else:
+        t = int(_num(p, "prah", 128))
+        mask = gray.point(lambda v: 255 if v >= t else 0).convert("1")
+    if alpha is not None:
+        mask = ImageChops.logical_and(mask, alpha.point(lambda v: 255 if v >= 128 else 0).convert("1"))
+    if len(_img_cache) > 64:
+        _img_cache.clear()
+    _img_cache[key] = mask
+    return mask
+
+
+def image_size(name):
+    try:
+        with Image.open(image_path(name)) as im:
+            return im.size
+    except OSError:
+        return None
+
+
+def draw_image(img, d, p, data, now):
+    x, y, w, h = p["x"], p["y"], p["w"], p["h"]
+    mask = load_mask(p)
+    if mask is None:                                  # chybi soubor: preskrtnuty ramecek
+        d.rectangle((x, y, x + w - 1, y + h - 1), outline=1)
+        d.line((x, y, x + w - 1, y + h - 1), fill=1)
+        return
+    crop = mask.crop((0, 0, min(w, mask.width), min(h, mask.height)))
+    if p.get("pozadi"):                               # neprusvitny: pod obrazkem zhasnout
+        d.rectangle((x, y, x + crop.width - 1, y + crop.height - 1), fill=0)
+    img.paste(int(p.get("barva", 1)), (x, y), crop)
+
+
+DRAW = {"obrazek": draw_image, "text": draw_text, "cislo": draw_number, "hodiny": draw_clock, "bar": draw_bar,
         "sloupce": draw_columns, "budik": draw_gauge, "prstenec": draw_ring, "oblouk": draw_arc,
         "ikona": draw_icon, "cara": draw_line, "obdelnik": draw_rect}
 
@@ -542,13 +610,16 @@ NEW = {
     "oblouk": dict(x=4, y=4, w=64, h=64, jednotka="", desetinna_mista=0, popisek="CPU", hodnota=True,
                    uhel=240, tloustka=8, pismo=_f(16, True), pismo_male=_f(9), **_SENS),
     "ikona": dict(x=4, y=4, w=11, h=11, nazev="cpu", meritko=1, barva=1),
+    "obrazek": dict(x=4, y=4, w=73, h=16, soubor="amd_logo.png", velikost="puvodni", prah=128, rastr=False,
+                    negativ=False, pozadi=False, barva=1),
     "cara": dict(x=0, y=20, w=240, h=1, smer="vodorovna", tloustka=1, barva=1),
     "obdelnik": dict(x=0, y=0, w=240, h=14, vypln="plna", dvojity=False, barva=1),
 }
 TYPES = {"text": "Text / hodnota", "cislo": "Velké číslo", "hodiny": "Hodiny / datum",
          "bar": "Bar", "sloupce": "Sloupce (více senzorů)", "graf": "Graf v čase",
          "budik": "Budík s ručičkou", "prstenec": "Prstenec ze segmentů", "oblouk": "Tlustý oblouk",
-         "ikona": "Ikona", "cara": "Čára", "obdelnik": "Obdélník / pruh"}
+         "ikona": "Ikona", "obrazek": "Obrázek (PNG, BMP, JPG)", "cara": "Čára",
+         "obdelnik": "Obdélník / pruh"}
 
 
 def new(typ):
@@ -618,7 +689,8 @@ def default_layout(rows=None, graph=None):
 def label(p):
     """Popis prvku pro seznam v editoru."""
     t = TYPES.get(p.get("typ"), p.get("typ", "?"))
-    extra = p.get("popisek") or p.get("senzor") or p.get("format") or p.get("nazev") or p.get("styl") or ""
+    extra = (p.get("popisek") or p.get("senzor") or p.get("format") or p.get("nazev") or p.get("soubor")
+             or p.get("styl") or "")
     if p.get("typ") == "bar":
         extra = f"{p.get('styl', 'plny')}: {p.get('senzor', '')}"
     return f"{t}: {extra}".rstrip(": ")

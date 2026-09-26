@@ -286,8 +286,8 @@
         "skryty": true
       },
       {
-        "x": 15,
-        "y": 88,
+        "x": 83,
+        "y": 32,
         "w": 66,
         "h": 14,
         "popisek": "C:",
@@ -305,8 +305,8 @@
         "typ": "text"
       },
       {
-        "x": 14,
-        "y": 97,
+        "x": 147,
+        "y": 32,
         "w": 26,
         "h": 11,
         "popisek": "",
@@ -324,8 +324,8 @@
         "typ": "text"
       },
       {
-        "x": 14,
-        "y": 116,
+        "x": 147,
+        "y": 41,
         "w": 26,
         "h": 11,
         "popisek": "",
@@ -343,8 +343,8 @@
         "typ": "text"
       },
       {
-        "x": 15,
-        "y": 108,
+        "x": 83,
+        "y": 41,
         "w": 66,
         "h": 14,
         "popisek": "D:",
@@ -601,8 +601,8 @@
         "typ": "ikona"
       },
       {
-        "x": 2,
-        "y": 90,
+        "x": 70,
+        "y": 38,
         "w": 11,
         "h": 11,
         "nazev": "disk",
@@ -611,21 +611,21 @@
         "typ": "ikona"
       },
       {
-        "x": 2,
-        "y": 110,
+        "x": 70,
+        "y": 23,
         "w": 11,
         "h": 11,
-        "nazev": "disk",
+        "nazev": "ram",
         "meritko": 1,
         "barva": 1,
         "typ": "ikona"
       },
       {
-        "x": 73,
-        "y": 13,
+        "x": 70,
+        "y": 17,
         "w": 100,
-        "h": 9,
-        "styl": "rysky",
+        "h": 5,
+        "styl": "segmenty",
         "senzor2": "",
         "senzor": "Použitá fyzická paměť",
         "min": 0,
@@ -634,13 +634,13 @@
         "typ": "bar"
       },
       {
-        "x": 86,
-        "y": 22,
+        "x": 89,
+        "y": 21,
         "w": 69,
         "h": 15,
         "popisek": "RAM",
         "senzor": "Použitá fyzická paměť",
-        "jednotka": " Gb",
+        "jednotka": "Gb",
         "delitel": 1024,
         "desetinna_mista": 1,
         "zarovnani": "stred",
@@ -653,16 +653,16 @@
         "typ": "text"
       },
       {
-        "x": 25,
-        "y": 72,
-        "w": 16,
-        "h": 15,
+        "x": 14,
+        "y": 73,
+        "w": 35,
+        "h": 13,
         "popisek": "",
         "senzor": "Průměrný počet aktivních jader",
         "jednotka": "auto",
         "delitel": 1,
         "desetinna_mista": 1,
-        "zarovnani": "vlevo",
+        "zarovnani": "stred",
         "pismo": {
           "rodina": "Silkscreen",
           "velikost": 8,
@@ -710,46 +710,78 @@
         "typ": "text"
       },
       {
-        "x": 66,
-        "y": 34,
-        "w": 109,
-        "h": 24,
-        "soubor": "amd_logo_velke.png",
+        "x": 191,
+        "y": 73,
+        "w": 35,
+        "h": 13,
+        "popisek": "",
+        "senzor": "Přidělená paměť GPU",
+        "jednotka": "Gb",
+        "delitel": 1000,
+        "desetinna_mista": 1,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 1,
+        "y": 86,
+        "w": 73,
+        "h": 16,
+        "soubor": "amd_logo.png",
         "velikost": "puvodni",
         "prah": 128,
         "rastr": false,
         "negativ": false,
         "pozadi": false,
         "barva": 1,
-        "typ": "obrazek"
+        "typ": "obrazek",
+        "skryty": false
       },
       {
-        "x": 60,
-        "y": 59,
-        "w": 101,
-        "h": 15,
+        "x": -2,
+        "y": 105,
+        "w": 72,
+        "h": 11,
         "soubor": "ryzen7.png",
-        "velikost": "puvodni",
+        "velikost": "prizpusobit",
         "prah": 128,
         "rastr": false,
         "negativ": false,
         "pozadi": false,
         "barva": 1,
-        "typ": "obrazek"
+        "typ": "obrazek",
+        "skryty": false
       },
       {
-        "x": 112,
-        "y": 75,
-        "w": 69,
-        "h": 18,
-        "soubor": "9700x_blok.png",
+        "x": 69,
+        "y": 104,
+        "w": 55,
+        "h": 12,
+        "soubor": "9700x.png",
         "velikost": "puvodni",
         "prah": 128,
         "rastr": false,
         "negativ": false,
         "pozadi": false,
         "barva": 1,
-        "typ": "obrazek"
+        "typ": "obrazek",
+        "skryty": false
+      },
+      {
+        "x": 65,
+        "y": 12,
+        "w": 111,
+        "h": 45,
+        "vypln": "zadna",
+        "dvojity": true,
+        "barva": 1,
+        "typ": "obdelnik"
       }
     ]
   },
@@ -827,9 +859,9 @@
       },
       "led4": {
         "nazev": "zóna 4",
-        "rezim": "off",
+        "rezim": "color-cycle",
         "barva": "#ffffff",
-        "rychlost": "normal"
+        "rychlost": "slowest"
       },
       "led5": {
         "nazev": "zóna 5",
@@ -913,7 +945,7 @@
     "jas": 100,
     "jas_f140": 100,
     "jas_deska": 100,
-    "stejne_pro_vse": false,
+    "stejne_pro_vse": true,
     "vlna": false,
     "efekt": {
       "typ": "duha_toceni",

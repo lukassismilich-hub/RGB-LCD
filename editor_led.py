@@ -148,7 +148,9 @@ class LedEditor:
             row += 1
         if ncolors:
             labels = {"kometa": ["kometa", "pozadí"], "trpyt": ["záblesky", "pozadí"],
-                      "prechod": ["barva 1", "barva 2"], "teplota": ["studená", "střední", "horká"]}.get(
+                      "prechod": ["barva 1", "barva 2"], "teplota": ["studená", "střední", "horká"],
+                      "dvojita_kometa": ["kometa 1", "kometa 2"], "policie": ["první", "druhá"],
+                      "tep": ["barva"], "stroboskop": ["barva"]}.get(
                 typ, [f"barva {i + 1}" for i in range(ncolors)])
             cols = eff.setdefault("barvy", list(fx.DEFAULT_EFFECT["barvy"]))
             while len(cols) < ncolors:

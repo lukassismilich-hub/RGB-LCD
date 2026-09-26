@@ -793,13 +793,13 @@
         "rezim": "super-fixed",
         "barvy": [
           "#ff0000",
-          "#ff8000",
-          "#ffff00",
-          "#00ff00",
+          "#ffbf00",
+          "#80ff00",
+          "#00ff40",
           "#00ffff",
           "#0040ff",
           "#8000ff",
-          "#ff00c0"
+          "#ff00bf"
         ],
         "barvy_efekt": [
           "#ff0000",
@@ -946,13 +946,13 @@
     "jas_f140": 100,
     "jas_deska": 100,
     "stejne_pro_vse": true,
-    "vlna": true,
+    "vlna": false,
     "efekt": {
       "typ": "duha_toceni",
       "barvy": [
-        "#0000ff",
-        "#80ffff",
-        "#ff0000"
+        "#ffffff",
+        "#00ffff",
+        "#0000ff"
       ],
       "rychlost": 1,
       "opacny_smer": true,

@@ -26,6 +26,16 @@ EFFECTS = {
     "trpyt": ("třpyt", 2, True, False),
     "ohen": ("oheň / svíčka", 0, True, False),
     "blikani": ("blikání", 1, True, False),
+    "paleta": ("paleta – točení", 3, True, True),
+    "vysece": ("výseče – točení", 3, True, True),
+    "dvojita_kometa": ("dvojitá kometa", 2, True, True),
+    "stirani": ("stírání barev", 3, True, True),
+    "polarni_zare": ("polární záře", 3, True, False),
+    "plazma": ("plazma (duha)", 0, True, False),
+    "duhovy_trpyt": ("duhový třpyt", 0, True, False),
+    "tep": ("tep srdce", 1, True, False),
+    "stroboskop": ("stroboskop", 1, True, False),
+    "policie": ("policie", 2, True, False),
     "teplota": ("podle teploty", 3, False, False),
     "vypnuto": ("vypnuto", 0, False, False),
 }
@@ -64,6 +74,26 @@ def _gradient(colors, t):
     t = max(0.0, min(1.0, t)) * (len(colors) - 1)
     i = min(int(t), len(colors) - 2)
     return _mix(colors[i], colors[i + 1], t - i)
+
+
+def _cyclic(colors, p, hard=False):
+    """Barva na pozici p (0..1) v kruhu barev: za posledni barvou zase prvni."""
+    k = len(colors)
+    x = (p % 1.0) * k
+    a = int(x) % k
+    if hard:
+        return colors[a]
+    f = x - int(x)
+    return _mix(colors[a], colors[(a + 1) % k], f * f * (3 - 2 * f))
+
+
+def _comet(head, n, tail, color, direction):
+    """Jas jedne komety pro kazdou LED (hlava na pozici head, ocas za ni)."""
+    out = []
+    for i in range(n):
+        d = (head - i) % n if direction > 0 else (i - head) % n     # vzdalenost za hlavou
+        out.append(_scale(color, max(0.0, 1 - d / tail) ** 2))
+    return out
 
 
 class Engine:
@@ -139,6 +169,73 @@ class Engine:
         if typ == "blikani":
             on = ((t * speed * 0.8 + offset) % 1.0) < 0.5
             return [cols[0] if on else black] * n
+        if typ in ("paleta", "vysece"):
+            ph = t * rate * direction + offset
+            return [_cyclic(cols, i / n + ph, hard=typ == "vysece") for i in range(n)]
+        if typ == "dvojita_kometa":
+            head = ((t * rate * direction + offset) % 1.0) * n
+            c2 = cols[1] if len(cols) > 1 else cols[0]
+            a = _comet(head, n, max(2.0, n * 0.4), cols[0], direction)
+            b = _comet((head + n / 2) % n, n, max(2.0, n * 0.4), c2, direction)
+            return [tuple(max(a[i][j], b[i][j]) for j in range(3)) for i in range(n)]
+        if typ == "stirani":
+            x = t * rate * 1.5 + offset
+            step = int(x)
+            edge = (x - step) * n
+            prev, cur = cols[step % len(cols)], cols[(step + 1) % len(cols)]
+            out = []
+            for i in range(n):
+                j = i if direction > 0 else n - 1 - i
+                out.append(_mix(prev, cur, edge - j))            # mekka hrana jedne LED
+            return out
+        if typ == "polarni_zare":
+            ph = t * rate * 0.35
+            out = []
+            for i in range(n):
+                u = i / n + offset
+                x = 0.5 + 0.3 * math.sin(2 * math.pi * (u + ph)) + 0.2 * math.sin(2 * math.pi * (2 * u - ph * 1.7) + 1.3)
+                k = 0.55 + 0.45 * math.sin(2 * math.pi * (u * 3 + ph * 0.8) + 0.5)
+                out.append(_scale(_gradient(cols, x), k))
+            return out
+        if typ == "plazma":
+            ph = t * rate
+            out = []
+            for i in range(n):
+                u = i / n + offset
+                v = math.sin(2 * math.pi * (2 * u + ph)) + math.sin(2 * math.pi * (u - ph * 0.7) + 1.1)
+                out.append(_hsv(v / 4 + ph * 0.25))
+            return out
+        if typ == "duhovy_trpyt":
+            st = self.state.setdefault(("duhovy_trpyt", key), [[0.0, 0.0] for _ in range(n)])
+            if len(st) != n:
+                st[:] = [[0.0, 0.0] for _ in range(n)]
+            decay = 0.6 ** (dt * speed * 2)
+            for s_ in st:
+                s_[0] *= decay
+                if self.rng.random() < dt * speed * 0.3:
+                    s_[:] = [1.0, self.rng.random()]
+            return [_hsv(h, v) for v, h in st]
+        if typ == "tep":
+            period = 60.0 / (40 + 10 * speed)                  # 50-140 uderu za minutu
+            p = ((t / period + offset) % 1.0) * period
+            k = math.exp(-p / 0.09)
+            if p >= 0.25:
+                k = max(k, 0.65 * math.exp(-(p - 0.25) / 0.09))
+            return [_scale(cols[0], max(0.03, k))] * n
+        if typ == "stroboskop":
+            freq = 0.4 * speed                                 # zablesky za sekundu
+            on = ((t * freq + offset) % 1.0) < max(0.06 * freq, 0.02)
+            return [cols[0] if on else black] * n
+        if typ == "policie":
+            c2 = cols[1] if len(cols) > 1 else cols[0]
+            p = (t * speed * 0.3 + offset) % 1.0
+            side = 0 if p < 0.5 else 1
+            on = int((p % 0.5) * 12) % 2 == 0                  # 3 zablesky na kazde strane
+            out = []
+            for i in range(n):
+                mine = (i < n / 2) == (side == 0)
+                out.append((cols[0] if side == 0 else c2) if on and mine else black)
+            return out
         if typ == "teplota":
             v = None
             item = (data or {}).get(eff.get("senzor", ""))

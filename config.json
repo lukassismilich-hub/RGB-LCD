@@ -256,266 +256,500 @@
         "typ": "hodiny"
       },
       {
-        "x": 2,
-        "y": 19,
-        "w": 36,
+        "x": 76,
+        "y": 16,
+        "w": 101,
+        "h": 15,
+        "soubor": "ryzen7.png",
+        "velikost": "puvodni",
+        "prah": 128,
+        "rastr": false,
+        "negativ": false,
+        "pozadi": false,
+        "barva": 1,
+        "typ": "obrazek",
+        "skryty": true
+      },
+      {
+        "x": 1,
+        "y": 14,
+        "w": 73,
+        "h": 16,
+        "soubor": "amd_logo.png",
+        "velikost": "puvodni",
+        "prah": 128,
+        "rastr": false,
+        "negativ": false,
+        "pozadi": false,
+        "barva": 1,
+        "typ": "obrazek",
+        "skryty": true
+      },
+      {
+        "x": 15,
+        "y": 88,
+        "w": 66,
         "h": 14,
-        "popisek": "CPU",
-        "senzor": "",
-        "jednotka": "°C",
+        "popisek": "C:",
+        "senzor": "@disk C: volno",
+        "jednotka": "Gb",
         "delitel": 1,
         "desetinna_mista": 0,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 36,
-        "y": 19,
-        "w": 50,
-        "h": 14,
-        "popisek": "",
-        "senzor": "CPU (Tctl/Tdie)",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vpravo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 90,
-        "y": 21,
-        "w": 88,
-        "h": 11,
-        "styl": "plny",
-        "senzor2": "",
-        "senzor": "CPU (Tctl/Tdie)",
-        "min": 0,
-        "max": 100,
-        "delitel": 1,
-        "typ": "bar"
-      },
-      {
-        "x": 180,
-        "y": 19,
-        "w": 58,
-        "h": 14,
-        "popisek": "",
-        "senzor": "Takt jader",
-        "jednotka": "GHz",
-        "delitel": 1000,
-        "desetinna_mista": 2,
-        "zarovnani": "vpravo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 2,
-        "y": 38,
-        "w": 36,
-        "h": 14,
-        "popisek": "GPU",
-        "senzor": "",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 36,
-        "y": 38,
-        "w": 50,
-        "h": 14,
-        "popisek": "",
-        "senzor": "Teplota GPU",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vpravo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 90,
-        "y": 40,
-        "w": 88,
-        "h": 11,
-        "styl": "plny",
-        "senzor2": "",
-        "senzor": "Teplota GPU",
-        "min": 0,
-        "max": 100,
-        "delitel": 1,
-        "typ": "bar"
-      },
-      {
-        "x": 180,
-        "y": 38,
-        "w": 58,
-        "h": 14,
-        "popisek": "",
-        "senzor": "Takt GPU",
-        "jednotka": "GHz",
-        "delitel": 1000,
-        "desetinna_mista": 2,
-        "zarovnani": "vpravo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 2,
-        "y": 57,
-        "w": 36,
-        "h": 14,
-        "popisek": "RAM",
-        "senzor": "",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 36,
-        "y": 57,
-        "w": 50,
-        "h": 14,
-        "popisek": "",
-        "senzor": "Použitá fyzická paměť",
-        "jednotka": "G",
-        "delitel": 1024,
-        "desetinna_mista": 1,
-        "zarovnani": "vpravo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 90,
-        "y": 59,
-        "w": 148,
-        "h": 11,
-        "styl": "plny",
-        "senzor2": "",
-        "senzor": "Použitá fyzická paměť",
-        "min": 0,
-        "max": 32,
-        "delitel": 1024,
-        "typ": "bar"
-      },
-      {
-        "x": 2,
-        "y": 83,
-        "w": 42,
-        "h": 14,
-        "popisek": "CPU",
-        "senzor": "",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 2,
-        "y": 98,
-        "w": 42,
-        "h": 14,
-        "popisek": "",
-        "senzor": "CPU (Tctl/Tdie)",
-        "jednotka": "°",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 2,
-        "y": 113,
-        "w": 42,
-        "h": 14,
-        "popisek": "2 min",
-        "senzor": "",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Tahoma",
-          "velikost": 10,
+          "rodina": "Press Start 2P",
+          "velikost": 8,
           "tucne": false
         },
         "barva": 1,
         "typ": "text"
       },
       {
-        "x": 46,
-        "y": 81,
-        "w": 194,
-        "h": 47,
-        "styl": "plocha",
-        "senzor": "CPU (Tctl/Tdie)",
-        "min": 30,
-        "max": 95,
+        "x": 14,
+        "y": 97,
+        "w": 26,
+        "h": 11,
+        "popisek": "",
+        "senzor": "Teplota disku (C:)",
+        "jednotka": "°C",
         "delitel": 1,
-        "delka_s": 120,
-        "ramecek": true,
-        "typ": "graf"
+        "desetinna_mista": 0,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 14,
+        "y": 116,
+        "w": 26,
+        "h": 11,
+        "popisek": "",
+        "senzor": "Teplota disku (D:)",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 15,
+        "y": 108,
+        "w": 66,
+        "h": 14,
+        "popisek": "D:",
+        "senzor": "@disk D: volno",
+        "jednotka": "Gb",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 172,
+        "y": 107,
+        "w": 67,
+        "h": 14,
+        "popisek": "Up:",
+        "senzor": "@síť Wi-Fi 2: odesílání",
+        "jednotka": "MB/s",
+        "delitel": 1,
+        "desetinna_mista": 1,
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 150,
+        "y": 90,
+        "w": 80,
+        "h": 15,
+        "popisek": "Wifi:",
+        "senzor": "@síť rychlost připojení",
+        "jednotka": "MB/s",
+        "delitel": 1,
+        "desetinna_mista": 1,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 194,
+        "y": 53,
+        "w": 29,
+        "h": 14,
+        "popisek": "",
+        "senzor": "GPU Spotřeba energie",
+        "jednotka": "W",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 194,
+        "y": 27,
+        "w": 29,
+        "h": 13,
+        "popisek": "",
+        "senzor": "Teplota GPU",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 17,
+        "y": 27,
+        "w": 29,
+        "h": 14,
+        "popisek": "",
+        "senzor": "CPU (Tctl/Tdie)",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 17,
+        "y": 53,
+        "w": 29,
+        "h": 14,
+        "popisek": "",
+        "senzor": "Celková spotřeba CPU",
+        "jednotka": "W",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 150,
+        "y": 97,
+        "w": 80,
+        "h": 15,
+        "popisek": "Wifi:",
+        "senzor": "@wifi signál",
+        "jednotka": "dB",
+        "delitel": 1,
+        "desetinna_mista": 1,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 172,
+        "y": 116,
+        "w": 67,
+        "h": 14,
+        "popisek": "Down:",
+        "senzor": "@síť Wi-Fi 2: stahování",
+        "jednotka": "MB/s",
+        "delitel": 1,
+        "desetinna_mista": 1,
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 26,
+        "y": 20,
+        "w": 11,
+        "h": 11,
+        "nazev": "cpu",
+        "meritko": 1,
+        "barva": 1,
+        "typ": "ikona"
+      },
+      {
+        "x": 202,
+        "y": 20,
+        "w": 11,
+        "h": 11,
+        "nazev": "gpu",
+        "meritko": 1,
+        "barva": 1,
+        "typ": "ikona"
+      },
+      {
+        "x": 0,
+        "y": 12,
+        "w": 64,
+        "h": 64,
+        "jednotka": "%",
+        "desetinna_mista": 0,
+        "popisek": "CPU",
+        "hodnota": true,
+        "segmenty": 20,
+        "uhel": 270,
+        "tloustka": 6,
+        "pismo": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "pismo_male": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "senzor": "Celkové vytížení CPU",
+        "min": 0,
+        "max": 100,
+        "delitel": 1,
+        "typ": "prstenec",
+        "skryty": false
+      },
+      {
+        "x": 176,
+        "y": 12,
+        "w": 64,
+        "h": 64,
+        "jednotka": "%",
+        "desetinna_mista": 0,
+        "popisek": "GPU",
+        "hodnota": true,
+        "segmenty": 20,
+        "uhel": 270,
+        "tloustka": 6,
+        "pismo": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "pismo_male": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "senzor": "Zatížení jádra GPU",
+        "min": 0,
+        "max": 100,
+        "delitel": 1,
+        "typ": "prstenec"
+      },
+      {
+        "x": 137,
+        "y": 97,
+        "w": 11,
+        "h": 11,
+        "nazev": "sit",
+        "meritko": 1,
+        "barva": 1,
+        "typ": "ikona"
+      },
+      {
+        "x": 2,
+        "y": 90,
+        "w": 11,
+        "h": 11,
+        "nazev": "disk",
+        "meritko": 1,
+        "barva": 1,
+        "typ": "ikona"
+      },
+      {
+        "x": 2,
+        "y": 110,
+        "w": 11,
+        "h": 11,
+        "nazev": "disk",
+        "meritko": 1,
+        "barva": 1,
+        "typ": "ikona"
+      },
+      {
+        "x": 73,
+        "y": 13,
+        "w": 100,
+        "h": 9,
+        "styl": "rysky",
+        "senzor2": "",
+        "senzor": "Použitá fyzická paměť",
+        "min": 0,
+        "max": 32768,
+        "delitel": 1,
+        "typ": "bar"
+      },
+      {
+        "x": 86,
+        "y": 22,
+        "w": 69,
+        "h": 15,
+        "popisek": "RAM",
+        "senzor": "Použitá fyzická paměť",
+        "jednotka": " Gb",
+        "delitel": 1024,
+        "desetinna_mista": 1,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Press Start 2P",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 25,
+        "y": 72,
+        "w": 16,
+        "h": 15,
+        "popisek": "",
+        "senzor": "Průměrný počet aktivních jader",
+        "jednotka": "auto",
+        "delitel": 1,
+        "desetinna_mista": 1,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 14,
+        "y": 65,
+        "w": 35,
+        "h": 13,
+        "popisek": "",
+        "senzor": "Takt jader",
+        "jednotka": "GHz",
+        "delitel": 1000,
+        "desetinna_mista": 1,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 191,
+        "y": 65,
+        "w": 35,
+        "h": 13,
+        "popisek": "",
+        "senzor": "Takt GPU",
+        "jednotka": "GHz",
+        "delitel": 1000,
+        "desetinna_mista": 1,
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 66,
+        "y": 34,
+        "w": 109,
+        "h": 24,
+        "soubor": "amd_logo_velke.png",
+        "velikost": "puvodni",
+        "prah": 128,
+        "rastr": false,
+        "negativ": false,
+        "pozadi": false,
+        "barva": 1,
+        "typ": "obrazek"
+      },
+      {
+        "x": 60,
+        "y": 59,
+        "w": 101,
+        "h": 15,
+        "soubor": "ryzen7.png",
+        "velikost": "puvodni",
+        "prah": 128,
+        "rastr": false,
+        "negativ": false,
+        "pozadi": false,
+        "barva": 1,
+        "typ": "obrazek"
+      },
+      {
+        "x": 112,
+        "y": 75,
+        "w": 69,
+        "h": 18,
+        "soubor": "9700x_blok.png",
+        "velikost": "puvodni",
+        "prah": 128,
+        "rastr": false,
+        "negativ": false,
+        "pozadi": false,
+        "barva": 1,
+        "typ": "obrazek"
       }
     ]
   }

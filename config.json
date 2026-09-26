@@ -4,7 +4,7 @@
   "gama_grafiky": 1.0,
   "rotace_s": 10.0,
   "obnova_s": 0.25,
-  "auto_obrazovky": true,
+  "auto_obrazovky": false,
   "skryte_senzory": [],
   "obrazovky": [
     {

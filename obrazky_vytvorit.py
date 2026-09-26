@@ -3,7 +3,7 @@
 #
 #   amd_logo.png, amd_logo_velke.png  napis AMD + sipka (vlastni kresba, ne stazene logo)
 #   amd_sipka.png                     samotna sipka
-#   ryzen7.png                        RYZEN 7 (Arial Black, zkosene)
+#   (RYZEN 7 a dalsi loga podle predloh: obrazky_z_predloh.py)
 #   9700x.png, 9700x_blok.png          9700X, blok = tmave pismo ve svetlem zkosenem pruhu
 #
 # Kresli se primo v cilove velikosti bez vyhlazovani, aby obrazky byly na displeji ostre.
@@ -105,7 +105,6 @@ def main():
     save(amd_logo(16), "amd_logo.png")
     save(amd_logo(24), "amd_logo_velke.png")
     save(arrow_only(16), "amd_sipka.png")
-    save(text_img("RYZEN 7", 20), "ryzen7.png")
     nine = text_img("9700X", 16)
     save(nine, "9700x.png")
     save(block(nine), "9700x_blok.png")

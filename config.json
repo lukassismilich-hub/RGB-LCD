@@ -759,21 +759,6 @@
         "skryty": false
       },
       {
-        "x": 69,
-        "y": 104,
-        "w": 55,
-        "h": 12,
-        "soubor": "9700x.png",
-        "velikost": "puvodni",
-        "prah": 128,
-        "rastr": false,
-        "negativ": false,
-        "pozadi": false,
-        "barva": 1,
-        "typ": "obrazek",
-        "skryty": false
-      },
-      {
         "x": 65,
         "y": 12,
         "w": 111,

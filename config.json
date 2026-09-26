@@ -362,8 +362,8 @@
         "typ": "text"
       },
       {
-        "x": 172,
-        "y": 107,
+        "x": 79,
+        "y": 58,
         "w": 67,
         "h": 14,
         "popisek": "Up:",
@@ -371,7 +371,7 @@
         "jednotka": "MB/s",
         "delitel": 1,
         "desetinna_mista": 1,
-        "zarovnani": "vpravo",
+        "zarovnani": "vlevo",
         "pismo": {
           "rodina": "Press Start 2P",
           "velikost": 8,
@@ -381,10 +381,10 @@
         "typ": "text"
       },
       {
-        "x": 150,
-        "y": 90,
+        "x": 82,
+        "y": 78,
         "w": 80,
-        "h": 15,
+        "h": 9,
         "popisek": "Wifi:",
         "senzor": "@síť rychlost připojení",
         "jednotka": "MB/s",
@@ -476,10 +476,10 @@
         "typ": "text"
       },
       {
-        "x": 150,
-        "y": 97,
+        "x": 82,
+        "y": 85,
         "w": 80,
-        "h": 15,
+        "h": 9,
         "popisek": "Wifi:",
         "senzor": "@wifi signál",
         "jednotka": "dB",
@@ -495,16 +495,16 @@
         "typ": "text"
       },
       {
-        "x": 172,
-        "y": 116,
+        "x": 79,
+        "y": 69,
         "w": 67,
         "h": 14,
-        "popisek": "Down:",
+        "popisek": "Dw:",
         "senzor": "@síť stahování",
         "jednotka": "MB/s",
         "delitel": 1,
         "desetinna_mista": 1,
-        "zarovnani": "vpravo",
+        "zarovnani": "vlevo",
         "pismo": {
           "rodina": "Press Start 2P",
           "velikost": 8,
@@ -591,8 +591,8 @@
         "typ": "prstenec"
       },
       {
-        "x": 137,
-        "y": 97,
+        "x": 64,
+        "y": 65,
         "w": 11,
         "h": 11,
         "nazev": "sit",
@@ -729,11 +729,11 @@
         "typ": "text"
       },
       {
-        "x": 1,
-        "y": 86,
-        "w": 73,
-        "h": 16,
-        "soubor": "amd_logo.png",
+        "x": 9,
+        "y": 99,
+        "w": 99,
+        "h": 24,
+        "soubor": "amd_24.png",
         "velikost": "puvodni",
         "prah": 128,
         "rastr": false,
@@ -744,12 +744,27 @@
         "skryty": false
       },
       {
-        "x": -2,
-        "y": 105,
-        "w": 72,
-        "h": 11,
-        "soubor": "ryzen7.png",
-        "velikost": "prizpusobit",
+        "x": 126,
+        "y": 94,
+        "w": 111,
+        "h": 16,
+        "soubor": "ryzen7_16.png",
+        "velikost": "puvodni",
+        "prah": 128,
+        "rastr": false,
+        "negativ": false,
+        "pozadi": false,
+        "barva": 1,
+        "typ": "obrazek",
+        "skryty": false
+      },
+      {
+        "x": 122,
+        "y": 110,
+        "w": 69,
+        "h": 18,
+        "soubor": "9700x_blok.png",
+        "velikost": "puvodni",
         "prah": 128,
         "rastr": false,
         "negativ": false,
@@ -931,18 +946,18 @@
     "jas_f140": 100,
     "jas_deska": 100,
     "stejne_pro_vse": true,
-    "vlna": false,
+    "vlna": true,
     "efekt": {
       "typ": "duha_toceni",
       "barvy": [
-        "#ff0000",
-        "#0060ff",
-        "#00ff40"
+        "#0000ff",
+        "#80ffff",
+        "#ff0000"
       ],
-      "rychlost": 3,
+      "rychlost": 1,
       "opacny_smer": true,
       "senzor": "CPU (Tctl/Tdie)",
-      "min": 40,
+      "min": 60.0,
       "max": 90
     },
     "efekt_f140": {

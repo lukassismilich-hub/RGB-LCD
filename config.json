@@ -758,7 +758,7 @@
     "nzxt_stejne": true,
     "nzxt": {
       "led1": {
-        "rezim": "rainbow-pulse",
+        "rezim": "super-fixed",
         "barvy": [
           "#ff0000",
           "#ff8000",
@@ -809,8 +809,8 @@
     "fusion": {
       "led1": {
         "nazev": "zóna 1",
-        "rezim": "off",
-        "barva": "#ffffff",
+        "rezim": "pulse",
+        "barva": "#ff0000",
         "rychlost": "normal"
       },
       "led2": {

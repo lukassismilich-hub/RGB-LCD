@@ -40,11 +40,12 @@ NEW_SCREEN = {
                           nadpis4="D", senzor4="", min4=0, max4=100),
     "chlazeni": {"typ": "chlazeni"},
     "graf_dva": dict(_TWO, typ="graf_dva", delka_s=120),
-    "hodiny_analog": {"typ": "hodiny_analog"},
-    "hodiny_datum": {"typ": "hodiny_datum"},
-    "obrazek": {"typ": "obrazek", "soubor": "predlohy/amd_ctverec.png", "uprava": "beze změny"},
+    "hodiny_analog": {"typ": "hodiny_analog", "datum": False},
+    "hodiny_datum": {"typ": "hodiny_datum", "datum": False},
+    "hodiny_pod_sebou": {"typ": "hodiny_pod_sebou", "datum": False},
+    "obrazek": {"typ": "obrazek", "soubor": "kraken/ryzen7_odznak.png", "uprava": "beze změny"},
 }
-CLOCKS = ("hodiny", "hodiny_analog", "hodiny_datum", "obrazek")   # bez posuvniku velikosti textu
+CLOCKS = ("hodiny", "hodiny_analog", "obrazek")         # bez posuvniku velikosti textu
 
 # (klic, popisek, druh pole) pro editor obrazovky
 _F_ONE = [("nadpis", "Popisek", "text"), ("senzor", "Senzor", "sensor"),
@@ -68,8 +69,9 @@ FIELDS = {
     "chlazeni": [],
     "graf_dva": [(k, t.replace("Horní / vnější", "Hodnota 1").replace("Dolní / vnitřní", "Hodnota 2"), kd)
                  for k, t, kd in _F_TWO] + [("delka_s", "Délka grafu (s)", "int")] + _F_FMT,
-    "hodiny_analog": [],
-    "hodiny_datum": [],
+    "hodiny_analog": [("datum", "Zobrazit datum", "bool")],
+    "hodiny_datum": [("datum", "Zobrazit datum", "bool")],
+    "hodiny_pod_sebou": [("datum", "Zobrazit datum", "bool")],
     "obrazek": [("soubor", "Obrázek (složka obrazky)", "image"), ("uprava", "Úprava", "mode")],
     "dva_bary": _F_TWO + _F_FMT,
     "dva_kruhy": _F_TWO + _F_FMT,
@@ -467,6 +469,10 @@ class App(tk.Tk):
                 self._with_value_hint(row, var)
             elif kind == "unit":
                 w = ttk.Combobox(self.ed, textvariable=var, values=UNITS, width=10)
+            elif kind == "bool":
+                bv = tk.BooleanVar(value=bool(s.get(key)))
+                w = ttk.Checkbutton(self.ed, variable=bv)
+                bv.trace_add("write", lambda *a, k=key, v=bv: self._set_flag(k, v.get()))
             elif kind == "image":
                 w = ttk.Combobox(self.ed, textvariable=var, values=screens.image_files(), width=32,
                                  state="readonly")
@@ -542,6 +548,11 @@ class App(tk.Tk):
         s[f"{part}_do"] = c
         self._color_btn[f"{part}_do"].config(bg=c, fg=self._contrast(c))
         self._update_preview()
+
+    def _set_flag(self, key, value):
+        if not self._building:
+            self.cfg["obrazovky"][self.sel][key] = bool(value)
+            self._update_preview()
 
     def _changed(self, key, var, kind):
         if self._building:

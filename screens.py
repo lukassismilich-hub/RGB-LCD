@@ -13,8 +13,9 @@
 #   "ctyri_hodnoty" - ctyri hodnoty v ctvrtinach kruhu, kazda se svym obloukem
 #   "chlazeni"      - kapalina, pumpa a ventilatory Krakenu
 #   "graf_dva"      - prubeh dvou hodnot v case
-#   "hodiny_analog" - rucickove hodiny s datem
-#   "hodiny_datum"  - digitalni hodiny s datem a sekundovym prstencem
+#   "hodiny_analog" - rucickove hodiny (datum volitelne)
+#   "hodiny_datum"  - digitalni hodiny se sekundovym prstencem, cas na radku (datum volitelne)
+#   "hodiny_pod_sebou" - totez, hodiny nad minutami
 #   "obrazek"       - obrazek / logo ze slozky obrazky/
 #
 # Barvy: kazda barevna cast ma dve barvy <cast>_od a <cast>_do (prechod).
@@ -45,8 +46,9 @@ TYPES = {"dva_bary": "Dva bary", "oblouk": "Oblouk (1 hodnota)", "budik": "Budí
          "dva_kruhy": "Dva kruhy", "graf": "Graf v čase", "hodiny": "Hodiny",
          "dva_oblouky": "Dva oblouky (vlevo a vpravo)", "segmenty": "Segmentový prstenec (1 hodnota)",
          "ctyri_hodnoty": "Čtyři hodnoty", "chlazeni": "Chlazení (kapalina, pumpa, ventilátory)",
-         "graf_dva": "Graf dvou hodnot", "hodiny_analog": "Ručičkové hodiny s datem",
-         "hodiny_datum": "Digitální hodiny s datem", "obrazek": "Obrázek / logo"}
+         "graf_dva": "Graf dvou hodnot", "hodiny_analog": "Ručičkové hodiny",
+         "hodiny_datum": "Digitální hodiny s prstencem", "hodiny_pod_sebou": "Digitální hodiny s prstencem – pod sebou",
+         "obrazek": "Obrázek / logo"}
 
 # barevne casti kazdeho typu: (klic, popisek, vychozi_od, vychozi_do)
 _TEXT = ("text", "Text (čísla a popisky)", "#ffffff", "#ffffff")
@@ -73,6 +75,8 @@ COLORS = {
                       ("sekundy", "Sekundová ručička", "#ff3c28", "#ff3c28"), ("datum", "Datum", "#28c8ff", "#28c8ff")],
     "hodiny_datum": [("hodiny", "Čas", "#ffffff", "#ffffff"), ("sekundy", "Sekundový prstenec", "#28c8ff", "#ff28c8"),
                      ("datum", "Datum", "#b4b4b4", "#b4b4b4")],
+    "hodiny_pod_sebou": [("hodiny", "Hodiny", "#ffffff", "#ffffff"), ("minuty", "Minuty", "#28c8ff", "#28c8ff"),
+                         ("sekundy", "Sekundový prstenec", "#28c8ff", "#ff28c8"), ("datum", "Datum", "#b4b4b4", "#b4b4b4")],
     "obrazek": [("tvar", "Barva tvaru (úprava „jen tvar“)", "#ffffff", "#ffffff")],
 }
 DAYS = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
@@ -772,8 +776,9 @@ def draw_analog(scr, data, template=False, history=None):
         a = math.radians(ang - 90)
         _text(img, (c + (r - 42 * S) * math.cos(a), c + (r - 42 * S) * math.sin(a)), str(num), f_n,
               (dial, dial), "mm")
-    date = f"{DAYS[now.weekday()][:2].upper()} {now.day}. {now.month}."
-    _text(img, (c, c + 44 * S), date, _raw_font("ExtraBold", 17), colors(scr, "datum"), "mm")
+    if scr.get("datum"):
+        date = f"{DAYS[now.weekday()][:2].upper()} {now.day}. {now.month}."
+        _text(img, (c, c + 44 * S), date, _raw_font("ExtraBold", 17), colors(scr, "datum"), "mm")
     hc = colors(scr, "rucicky")[0]
     sc = colors(scr, "sekundy")[0]
     h = (now.hour % 12 + now.minute / 60) * 30
@@ -786,27 +791,69 @@ def draw_analog(scr, data, template=False, history=None):
     return img
 
 
-def draw_clock_date(scr, data, template=False, history=None):
-    """Digitalni cas, den v tydnu a datum; prstenec ze 60 segmentu = sekundy."""
-    now = datetime.now()
-    img = _canvas()
-    d = ImageDraw.Draw(img)
-    c = W // 2
-    cols = colors(scr, "sekundy")
+def _seconds_ring(d, c, cols, second, template):
+    """Prstenec ze 60 segmentu, rozsvicene do aktualni sekundy."""
     box = (c - 112 * S, c - 112 * S, c + 112 * S, c + 112 * S)
     for i in range(60):
         a0 = -90 + i * 6 + 1
         col = mix(*cols, i / 59)
-        d.arc(box, a0, a0 + 4, fill=col if template or i <= now.second else _dim(col, 0.15), width=10 * S)
-    f_t = _raw_font("Black", 72)
+        d.arc(box, a0, a0 + 4, fill=col if template or i <= second else _dim(col, 0.15), width=10 * S)
+
+
+def draw_clock_date(scr, data, template=False, history=None):
+    """Digitalni cas uprostred prstence ze 60 segmentu (sekundy); "hodiny_pod_sebou" = hodiny
+    nad minutami. Velikost cislic ridi "Velikost textu", datum pod casem je volitelne."""
+    now = datetime.now()
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    c = W // 2
+    _seconds_ring(d, c, colors(scr, "sekundy"), now.second, template)
+    stacked = scr.get("typ") == "hodiny_pod_sebou"
+    show_date = bool(scr.get("datum"))
     hh, mm = f"{now.hour:02d}", f"{now.minute:02d}"
+    inner = 180 * S                                        # sirka uvnitr prstence
+    if stacked:
+        f = _font("Black", 64)
+        ch = _TCHAR or widest_digit(f)
+        if template:
+            hh = mm = ch * 2
+        # stejna vyska pro obe cisla (podle "0"), mezera 6 px; cely blok (i s datem) na stred
+        def too_big(f):                                    # obe cisla se musi vejit do prstence
+            b = d.textbbox((0, 0), "0", font=f, anchor="lt")
+            return d.textlength(ch * 2, font=f) > inner * 0.8 or 2 * (b[3] - b[1]) + 6 * S > inner * 0.85
+        while f.size > 20 * S and too_big(f):
+            f = ImageFont.truetype(f.path, f.size - S)
+        bb = d.textbbox((0, 0), "0", font=f, anchor="lt")
+        h = bb[3] - bb[1]
+        gap = 6 * S
+        f_d = _font("ExtraBold", 16)
+        date_h = (d.textbbox((0, 0), "0", font=f_d, anchor="lt")[3] + 8 * S) if show_date else 0
+        top = c - (2 * h + gap + date_h) / 2 - bb[1]
+        cm = colors(scr, "minuty")
+        for text, y, cols in ((hh, top, colors(scr, "hodiny")), (mm, top + h + gap, cm)):
+            w = d.textlength(text, font=f)
+            _text(img, (int(c - w / 2), int(y)), text, f, cols, "lt")
+        if show_date:
+            _text(img, (c, top + bb[1] + 2 * h + gap + 8 * S), f"{now.day}. {now.month}.", f_d,
+                  colors(scr, "datum"), "mt")
+        return img
+    txt = f"{hh}:{mm}"
+    f = _font("Black", 50)
     if template:
-        ch = _TCHAR or widest_digit(f_t)
-        hh, mm = ch * 2, ch * 2
-    _text(img, (c, c + 4 * S), f"{hh}:{mm}", f_t, colors(scr, "hodiny"), "ms")
-    dc = colors(scr, "datum")
-    _text(img, (c, c + 18 * S), DAYS[now.weekday()], _raw_font("ExtraBold", 20), dc, "mt")
-    _text(img, (c, c + 44 * S), f"{now.day}. {MONTHS[now.month - 1]} {now.year}", _raw_font("Bold", 17), dc, "mt")
+        ch = _TCHAR or widest_digit(f)
+        txt = f"{ch * 2}:{ch * 2}"
+    while f.size > 20 * S and d.textlength(txt, font=f) > inner:
+        f = ImageFont.truetype(f.path, f.size - S)
+    bb = d.textbbox((0, 0), "0", font=f, anchor="lt")
+    h = bb[3] - bb[1]
+    f_d = _font("ExtraBold", 16)
+    date_h = (d.textbbox((0, 0), "0", font=f_d, anchor="lt")[3] + 10 * S) if show_date else 0
+    top = c - (h + date_h) / 2 - bb[1]
+    w = d.textlength(txt, font=f)
+    _text(img, (int(c - w / 2), int(top)), txt, f, colors(scr, "hodiny"), "lt")
+    if show_date:
+        _text(img, (c, top + bb[1] + h + 10 * S), f"{DAYS[now.weekday()]} {now.day}. {now.month}.", f_d,
+              colors(scr, "datum"), "mt")
     return img
 
 
@@ -814,15 +861,16 @@ _image_cache = {}
 
 
 def image_files():
-    """Obrazky pro obrazovku "obrazek": obrazky/* a obrazky/predlohy/* (relativni cesty)."""
+    """Obrazky pro obrazovku "obrazek": obrazky/kraken/* (barevne, pruhledne pozadi), obrazky/*
+    a obrazky/predlohy/* (relativni cesty)."""
     out = []
-    for sub in ("", "predlohy"):
+    for sub in ("kraken", "", "predlohy"):
         try:
             names = sorted(os.listdir(os.path.join(IMAGES, sub)))
         except OSError:
             continue
         out += [(sub + "/" if sub else "") + n for n in names
-                if n.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
+                if n.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"))]
     return out
 
 
@@ -878,7 +926,7 @@ DRAW = {"dva_bary": draw_two_bars, "oblouk": draw_arc, "budik": draw_gauge,
         "dva_kruhy": draw_rings, "graf": draw_graph, "hodiny": draw_time,
         "dva_oblouky": draw_two_arcs, "segmenty": draw_segments, "ctyri_hodnoty": draw_four,
         "chlazeni": draw_cooling, "graf_dva": draw_graph_two, "hodiny_analog": draw_analog,
-        "hodiny_datum": draw_clock_date, "obrazek": draw_image}
+        "hodiny_datum": draw_clock_date, "hodiny_pod_sebou": draw_clock_date, "obrazek": draw_image}
 
 
 # ------------------------------------------------------- orez a zvetseni

@@ -42,6 +42,27 @@
       "velikost_obsahu": 1.0
     },
     {
+      "typ": "obrazek",
+      "soubor": "kraken/ryzen7_odznak.png",
+      "uprava": "beze změny",
+      "zapnuto": true,
+      "velikost_obsahu": 1.0
+    },
+    {
+      "typ": "obrazek",
+      "soubor": "kraken/ryzen_9700x_samolepka.png",
+      "uprava": "beze změny",
+      "zapnuto": true,
+      "velikost_obsahu": 1.0
+    },
+    {
+      "typ": "obrazek",
+      "soubor": "kraken/ryzen_9700x_procesor.png",
+      "uprava": "beze změny",
+      "zapnuto": true,
+      "velikost_obsahu": 1.0
+    },
+    {
       "typ": "oblouk",
       "zapnuto": true,
       "nadpis": "Kapalina",

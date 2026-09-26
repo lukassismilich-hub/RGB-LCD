@@ -8,6 +8,14 @@
 #   "dva_kruhy" - dve hodnoty jako soustredne kruhy
 #   "graf"      - prubeh jedne hodnoty v case
 #   "hodiny"    - hodiny ve 24h formatu
+#   "dva_oblouky"   - dve hodnoty jako oblouky vlevo a vpravo, cisla uprostred
+#   "segmenty"      - jedna hodnota jako prstenec ze segmentu
+#   "ctyri_hodnoty" - ctyri hodnoty v ctvrtinach kruhu, kazda se svym obloukem
+#   "chlazeni"      - kapalina, pumpa a ventilatory Krakenu
+#   "graf_dva"      - prubeh dvou hodnot v case
+#   "hodiny_analog" - rucickove hodiny s datem
+#   "hodiny_datum"  - digitalni hodiny s datem a sekundovym prstencem
+#   "obrazek"       - obrazek / logo ze slozky obrazky/
 #
 # Barvy: kazda barevna cast ma dve barvy <cast>_od a <cast>_do (prechod).
 # Stejne barvy = jednobarevne. Prechod se pocita pres odstin (HSV),
@@ -18,13 +26,14 @@ import json
 import math
 import os
 from datetime import datetime
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
 SIZE = 240
 S = 3                      # supersampling
 W = SIZE * S
 BASE = os.path.dirname(os.path.abspath(__file__))
 FONTS = os.path.join(BASE, "fonts")
+IMAGES = os.path.join(BASE, "obrazky")
 
 WHITE = (255, 255, 255)
 GREY = (150, 150, 150)
@@ -33,7 +42,11 @@ BLACK = (0, 0, 0)
 DEGREE_UNITS = ("°", "°C", "°F")
 
 TYPES = {"dva_bary": "Dva bary", "oblouk": "Oblouk (1 hodnota)", "budik": "Budík (1 hodnota)",
-         "dva_kruhy": "Dva kruhy", "graf": "Graf v čase", "hodiny": "Hodiny"}
+         "dva_kruhy": "Dva kruhy", "graf": "Graf v čase", "hodiny": "Hodiny",
+         "dva_oblouky": "Dva oblouky (vlevo a vpravo)", "segmenty": "Segmentový prstenec (1 hodnota)",
+         "ctyri_hodnoty": "Čtyři hodnoty", "chlazeni": "Chlazení (kapalina, pumpa, ventilátory)",
+         "graf_dva": "Graf dvou hodnot", "hodiny_analog": "Ručičkové hodiny s datem",
+         "hodiny_datum": "Digitální hodiny s datem", "obrazek": "Obrázek / logo"}
 
 # barevne casti kazdeho typu: (klic, popisek, vychozi_od, vychozi_do)
 _TEXT = ("text", "Text (čísla a popisky)", "#ffffff", "#ffffff")
@@ -48,7 +61,24 @@ COLORS = {
     "graf": [("graf", "Graf", "#3cdc28", "#ff1414"), _TEXT],
     "hodiny": [("hodiny", "Hodiny", "#3ce628", "#f0f014"),
                ("minuty", "Minuty", "#ffa014", "#ff1e14")],
+    "dva_oblouky": [("oblouk1", "Levý oblouk", "#3cff3c", "#b4f014"),
+                    ("oblouk2", "Pravý oblouk", "#3264ff", "#28c8ff"), _TEXT],
+    "segmenty": [("segmenty", "Segmenty", "#28c8ff", "#ff28c8"), _TEXT],
+    "ctyri_hodnoty": [("oblouky", "Oblouky", "#3cdc28", "#ff1414"), _TEXT],
+    "chlazeni": [("kapalina", "Teplota kapaliny", "#28c8ff", "#28c8ff"),
+                 ("pumpa", "Oblouk pumpy (vlevo)", "#3264ff", "#28c8ff"),
+                 ("ventilatory", "Oblouk ventilátorů (vpravo)", "#3cff3c", "#b4f014"), _TEXT],
+    "graf_dva": [("graf1", "Graf 1", "#3cff3c", "#3cff3c"), ("graf2", "Graf 2", "#3c8cff", "#3c8cff"), _TEXT],
+    "hodiny_analog": [("cifernik", "Ciferník", "#ffffff", "#ffffff"), ("rucicky", "Ručičky", "#ffffff", "#ffffff"),
+                      ("sekundy", "Sekundová ručička", "#ff3c28", "#ff3c28"), ("datum", "Datum", "#28c8ff", "#28c8ff")],
+    "hodiny_datum": [("hodiny", "Čas", "#ffffff", "#ffffff"), ("sekundy", "Sekundový prstenec", "#28c8ff", "#ff28c8"),
+                     ("datum", "Datum", "#b4b4b4", "#b4b4b4")],
+    "obrazek": [("tvar", "Barva tvaru (úprava „jen tvar“)", "#ffffff", "#ffffff")],
 }
+DAYS = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
+MONTHS = ["ledna", "února", "března", "dubna", "května", "června", "července", "srpna", "září",
+          "října", "listopadu", "prosince"]
+IMAGE_MODES = ["beze změny", "odstranit pozadí", "jen tvar", "odstranit pozadí, černou na bílou"]
 
 _font_cache = {}
 _TS = 1.0                  # meritko textu dane obrazovky
@@ -419,12 +449,18 @@ def draw_rings(scr, data, template=False, history=None):
     _arc(img, c, 104 * S, 16 * S, start - 90, 300, fr1, colors(scr, "kruh1"))
     _arc(img, c, 82 * S, 16 * S, start - 90, 300, fr2, colors(scr, "kruh2"))
 
-    k1, k2 = colors(scr, "kruh1"), colors(scr, "kruh2")
-    f_l = _font("ExtraBold", 13)
-    max_w = 84 * S
+    _center_pair(img, scr, v1, v2, colors(scr, "kruh1"), colors(scr, "kruh2"), unit, 40, 84 * S)
+    return img
+
+
+def _center_pair(img, scr, v1, v2, k1, k2, unit, px, max_w):
+    """Dve hodnoty nad sebou uprostred, popisky v barvach svych ukazatelu."""
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    c = W // 2
     for n, (val, y, lbl, kc) in enumerate(((v1, c - 6 * S, scr.get("nadpis1", ""), k1),
                                            (v2, c + 6 * S, scr.get("nadpis2", ""), k2))):
-        f = _fit_font(d, val, "Black", 40, max_w)
+        f = _fit_font(d, val, "Black", px, max_w)
         tw = d.textlength(val, font=f)
         x_left = c - tw / 2
         anchor_y = y
@@ -434,15 +470,15 @@ def draw_rings(scr, data, template=False, history=None):
         else:
             top = y
         _text(img, (x_left, top), val, f, tcols, "lt")
-        _unit_after(img, x_left, top, val, f, unit, tcols, deg_px=18, unit_px=12, deg_dy=0)
+        _unit_after(img, x_left, top, val, f, unit, tcols, deg_px=round(px * 0.45), unit_px=round(px * 0.3),
+                    deg_dy=0)
         # popisek v barve sveho kruhu
-        fl = _fit_font(d, lbl, "ExtraBold", 13, max_w)
+        fl = _fit_font(d, lbl, "ExtraBold", round(px * 0.33), max_w)
         if n == 0:
             _text(img, (c, top - 4 * S), lbl, fl, (kc[0], kc[0]), "ms")
         else:
             h = d.textbbox((0, 0), val, font=f, anchor="lt")[3]
             _text(img, (c, top + h + 5 * S), lbl, fl, (kc[0], kc[0]), "mt")
-    return img
 
 
 def draw_graph(scr, data, template=False, history=None):
@@ -529,19 +565,334 @@ def draw_time(scr, data, template=False, history=None):
     return img
 
 
+# ------------------------------------------------------------ dalsi obrazovky
+
+def _mirror_arc(img, c, r, thick, start, span, frac, cols, **kw):
+    """Oblouk zrcadleny podle svisle osy (pravy oblouk roste zdola nahoru jako levy)."""
+    layer = _canvas()
+    _arc(layer, c, r, thick, start, span, frac, cols, **kw)
+    img.paste(ImageChops.lighter(img, ImageOps.mirror(layer)))
+
+
+def draw_two_arcs(scr, data, template=False, history=None):
+    """Hodnota 1 = oblouk vlevo, hodnota 2 = oblouk vpravo, oba rostou zdola nahoru; cisla uprostred."""
+    img = _canvas()
+    unit = unit_for(scr, scr.get("senzor1"), data)
+    f_big = _font("Black", 46)
+    v1, fr1, _ = _value_text(scr, "1", data, f_big, template)
+    v2, fr2, _ = _value_text(scr, "2", data, f_big, template)
+    c = W // 2
+    k1, k2 = colors(scr, "oblouk1"), colors(scr, "oblouk2")
+    _arc(img, c, 108 * S, 20 * S, 105, 150, fr1, k1)
+    _mirror_arc(img, c, 108 * S, 20 * S, 105, 150, fr2, k2)
+    _center_pair(img, scr, v1, v2, k1, k2, unit, 46, 128 * S)
+    return img
+
+
+def draw_segments(scr, data, template=False, history=None):
+    """Prstenec ze 30 segmentu (300°), rozsvicene segmenty v prechodu barev, cislo uprostred."""
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    sensor = scr.get("senzor")
+    unit = unit_for(scr, sensor, data)
+    txt, frac, _ = _value_text(scr, "", data, _font("Black", 60), template)
+    c = W // 2
+    cols = colors(scr, "segmenty")
+    n, start, span = 30, 120, 300
+    step = span / n
+    lit = round(frac * n)
+    box = (c - 110 * S, c - 110 * S, c + 110 * S, c + 110 * S)
+    for i in range(n):
+        a0 = start + i * step + 1.2
+        col = mix(*cols, i / (n - 1))
+        d.arc(box, a0, a0 + step - 2.4, fill=col if i < lit else _dim(col, 0.18), width=24 * S)
+    title = scr.get("nadpis") or sensor or ""
+    _text(img, (c, c - 30 * S), title, _fit_font(d, title, "ExtraBold", 18, 120 * S), tcols, "ms")
+    f_big = _fit_font(d, txt, "Black", 60, 130 * S)
+    tw = d.textlength(txt, font=f_big)
+    _text(img, (c - tw / 2, c - 22 * S), txt, f_big, tcols, "lt")
+    _unit_after(img, c - tw / 2, c - 22 * S, txt, f_big, unit, tcols, deg_px=24, unit_px=16)
+    return img
+
+
+def draw_four(scr, data, template=False, history=None):
+    """Ctyri hodnoty ve ctvrtinach kruhu, kazda s vlastnim obloukem na obvodu
+    (1 vlevo nahore, 2 vpravo nahore, 3 vlevo dole, 4 vpravo dole)."""
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    cols = colors(scr, "oblouky")
+    c = W // 2
+    r = 112 * S
+    d.line((c, c - 88 * S, c, c + 88 * S), fill=(45, 45, 45), width=2 * S)
+    d.line((c - 88 * S, c, c + 88 * S, c), fill=(45, 45, 45), width=2 * S)
+    # oblouk vlevo nahore roste od vodorovne osy nahoru; ostatni ctvrtiny jsou jeho zrcadla,
+    # takze vsechny rostou od vodorovne osy k svisle
+    for n, sx, sy in (("1", -1, -1), ("2", 1, -1), ("3", -1, 1), ("4", 1, 1)):
+        txt, frac, _ = _value_text(scr, n, data, _font("Black", 34), template)
+        layer = _canvas()
+        _arc(layer, c, r, 14 * S, 185, 80, frac, cols)
+        if sx > 0:
+            layer = ImageOps.mirror(layer)
+        if sy > 0:
+            layer = ImageOps.flip(layer)
+        img.paste(ImageChops.lighter(img, layer))
+        cx, cy = c + sx * 46 * S, c + sy * 40 * S
+        f = _fit_font(d, txt, "Black", 34, 70 * S)
+        unit = unit_for(scr, scr.get("senzor" + n), data)
+        tw = d.textlength(txt, font=f)
+        h = d.textbbox((0, 0), txt, font=f, anchor="lt")[3]
+        top = cy - h / 2
+        _text(img, (cx - tw / 2, top), txt, f, tcols, "lt")
+        _unit_after(img, cx - tw / 2, top, txt, f, unit, tcols, deg_px=16, unit_px=11, deg_dy=0)
+        lbl = scr.get("nadpis" + n, "")
+        fl = _fit_font(d, lbl, "ExtraBold", 12, 70 * S)
+        if sy < 0:
+            _text(img, (cx, top - 4 * S), lbl, fl, (GREY, GREY), "ms")
+        else:
+            _text(img, (cx, top + h + 4 * S), lbl, fl, (GREY, GREY), "mt")
+    return img
+
+
+def draw_cooling(scr, data, template=False, history=None):
+    """Kraken: teplota kapaliny uprostred, vykon pumpy (vlevo) a ventilatoru (vpravo) jako oblouky."""
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    c = W // 2
+    kp, kv = colors(scr, "pumpa"), colors(scr, "ventilatory")
+
+    def g(key):
+        return None if template else value_for(key, data)
+    pd, pr, fd, fr, lq = g("@pumpa_vykon"), g("@pumpa"), g("@ventilatory_vykon"), g("@ventilatory"), g("@kapalina")
+    _arc(img, c, 108 * S, 20 * S, 105, 150, 1.0 if template else _frac(pd, 0, 100), kp)
+    _mirror_arc(img, c, 108 * S, 20 * S, 105, 150, 1.0 if template else _frac(fd, 0, 100), kv)
+    _text(img, (c, c - 40 * S), "KAPALINA", _font("ExtraBold", 15), tcols, "ms")
+    if template:
+        ch = _TCHAR or widest_digit(_font("Black", 58))
+        txt = ch * 2 + "." + ch
+    else:
+        txt = _fmt(lq, 1)
+    f_big = _fit_font(d, txt, "Black", 58, 120 * S)
+    tw = d.textlength(txt, font=f_big)
+    lc = colors(scr, "kapalina")
+    _text(img, (c - tw / 2 - 6 * S, c - 34 * S), txt, f_big, lc, "lt")
+    _unit_after(img, c - tw / 2 - 6 * S, c - 34 * S, txt, f_big, "°C", lc, deg_px=24)
+    y = c + 34 * S
+    for lbl, duty, rpm, kc in (("PUMPA", pd, pr, kp), ("VENTILÁTORY", fd, fr, kv)):
+        if template:
+            line = f"{lbl} 100 % · 8888"
+        else:
+            line = f"{lbl} {_fmt(duty, 0)} %" + ("" if rpm is None else f" · {_fmt(rpm, 0)}")
+        _text(img, (c, y), line, _fit_font(d, line, "ExtraBold", 14, 130 * S), (kc[1], kc[1]), "mt")
+        y += 20 * S
+    return img
+
+
+def draw_graph_two(scr, data, template=False, history=None):
+    """Dve hodnoty v case v jednom grafu, kazda ve svem rozsahu min-max."""
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    gx0, gx1 = 18 * S, 222 * S
+    gy0, gy1 = 104 * S, 214 * S
+    d.rounded_rectangle((gx0, gy0, gx1, gy1), 8 * S, outline=DARK, width=2 * S)
+    for i in (1, 2, 3):
+        y = gy0 + (gy1 - gy0) * i / 4
+        d.line((gx0 + 4 * S, y, gx1 - 4 * S, y), fill=(45, 45, 45), width=S)
+    div = float(scr.get("delitel", 1)) or 1
+    pad = 6 * S
+    for n, left in (("2", False), ("1", True)):                     # 1 se kresli navrch
+        cols = colors(scr, "graf" + n)
+        sensor = scr.get("senzor" + n)
+        lo, hi = float(scr.get("min" + n, 0)), float(scr.get("max" + n, 100))
+        vals = [1.0] * 40 if template else [v / div for v in (history or {}).get(sensor, [])]
+        if len(vals) >= 2:
+            m = len(vals)
+            pts = [(gx0 + pad + (gx1 - gx0 - 2 * pad) * i / (m - 1),
+                    gy1 - pad - (gy1 - gy0 - 2 * pad) * (1.0 if template else _frac(v, lo, hi)))
+                   for i, v in enumerate(vals)]
+            if n == "1":                                   # plocha jen pod prvni hodnotou
+                area = Image.new("L", img.size, 0)
+                ImageDraw.Draw(area).polygon(pts + [(pts[-1][0], gy1 - pad), (pts[0][0], gy1 - pad)], fill=90)
+                _paint(img, area, _vgrad(gx1 - gx0, gy1 - gy0, *cols), (gx0, gy0))
+            d.line(pts, fill=BLACK, width=10 * S, joint="curve")
+            line = Image.new("L", img.size, 0)
+            ImageDraw.Draw(line).line(pts, fill=255, width=6 * S, joint="curve")
+            _paint(img, line, _vgrad(gx1 - gx0, gy1 - gy0, *cols), (gx0, gy0))
+            ex, ey = pts[-1]
+            d.ellipse((ex - 8 * S, ey - 8 * S, ex + 8 * S, ey + 8 * S), fill=cols[1])
+        txt, _fr, _v = _value_text(scr, n, data, _font("Black", 40), template)
+        unit = unit_for(scr, sensor, data)
+        f = _fit_font(d, txt, "Black", 40, 70 * S)
+        tw = d.textlength(txt, font=f)
+        extra = (14 if unit in DEGREE_UNITS else 30 if unit else 0) * S
+        # hodnoty u stredu, at je kulaty okraj displeje neurizne
+        xl = W // 2 - 10 * S - tw - extra if left else W // 2 + 10 * S
+        vc = (cols[0], cols[0])
+        _text(img, (xl, 50 * S), txt, f, vc, "lt")
+        _unit_after(img, xl, 50 * S, txt, f, unit, vc, deg_px=18, unit_px=12)
+        title = scr.get("nadpis" + n) or sensor or ""
+        tx = W // 2 - 10 * S if left else W // 2 + 10 * S
+        _text(img, (tx, 44 * S), title, _fit_font(d, title, "ExtraBold", 14, 90 * S), tcols, "rs" if left else "ls")
+    secs = int(scr.get("delka_s", 120))
+    span_txt = f"{secs // 60} min" if secs >= 60 else f"{secs} s"
+    _text(img, (W // 2, gy1 + 8 * S), span_txt, _font("ExtraBold", 12), (GREY, GREY), "mt")
+    return img
+
+
+def _hand(d, c, angle, length, width, col, back=0):
+    """Rucicka od stredu (s presahem dozadu) se zakulacenymi konci; uhel 0 = 12 hodin."""
+    a = math.radians(angle - 90)
+    x0, y0 = c - back * math.cos(a), c - back * math.sin(a)
+    x1, y1 = c + length * math.cos(a), c + length * math.sin(a)
+    d.line((x0, y0, x1, y1), fill=col, width=width)
+    for x, y in ((x0, y0), (x1, y1)):
+        d.ellipse((x - width / 2, y - width / 2, x + width / 2, y + width / 2), fill=col)
+
+
+def draw_analog(scr, data, template=False, history=None):
+    """Rucickove hodiny: cifernik s ryskami, hodinova, minutova a sekundova rucicka, datum."""
+    now = datetime.now()
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    c = W // 2
+    r = 114 * S
+    dial = colors(scr, "cifernik")[0]
+    d.ellipse((c - r, c - r, c + r, c + r), outline=_dim(dial, 0.55), width=3 * S)
+    for i in range(60):
+        a = math.radians(i * 6 - 90)
+        big = i % 5 == 0
+        r1, r2 = r - 8 * S, r - (24 if i % 15 == 0 else 18 if big else 12) * S
+        d.line((c + r1 * math.cos(a), c + r1 * math.sin(a), c + r2 * math.cos(a), c + r2 * math.sin(a)),
+               fill=dial if big else _dim(dial, 0.5), width=(5 if i % 15 == 0 else 4 if big else 2) * S)
+    f_n = _raw_font("ExtraBold", 22)
+    for num, ang in ((12, 0), (3, 90), (6, 180), (9, 270)):
+        a = math.radians(ang - 90)
+        _text(img, (c + (r - 42 * S) * math.cos(a), c + (r - 42 * S) * math.sin(a)), str(num), f_n,
+              (dial, dial), "mm")
+    date = f"{DAYS[now.weekday()][:2].upper()} {now.day}. {now.month}."
+    _text(img, (c, c + 44 * S), date, _raw_font("ExtraBold", 17), colors(scr, "datum"), "mm")
+    hc = colors(scr, "rucicky")[0]
+    sc = colors(scr, "sekundy")[0]
+    h = (now.hour % 12 + now.minute / 60) * 30
+    m = (now.minute + now.second / 60) * 6
+    _hand(d, c, h, 58 * S, 11 * S, hc, back=10 * S)
+    _hand(d, c, m, 88 * S, 7 * S, hc, back=12 * S)
+    _hand(d, c, now.second * 6, 96 * S, 3 * S, sc, back=22 * S)
+    d.ellipse((c - 9 * S, c - 9 * S, c + 9 * S, c + 9 * S), fill=sc)
+    d.ellipse((c - 3 * S, c - 3 * S, c + 3 * S, c + 3 * S), fill=BLACK)
+    return img
+
+
+def draw_clock_date(scr, data, template=False, history=None):
+    """Digitalni cas, den v tydnu a datum; prstenec ze 60 segmentu = sekundy."""
+    now = datetime.now()
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    c = W // 2
+    cols = colors(scr, "sekundy")
+    box = (c - 112 * S, c - 112 * S, c + 112 * S, c + 112 * S)
+    for i in range(60):
+        a0 = -90 + i * 6 + 1
+        col = mix(*cols, i / 59)
+        d.arc(box, a0, a0 + 4, fill=col if template or i <= now.second else _dim(col, 0.15), width=10 * S)
+    f_t = _raw_font("Black", 72)
+    hh, mm = f"{now.hour:02d}", f"{now.minute:02d}"
+    if template:
+        ch = _TCHAR or widest_digit(f_t)
+        hh, mm = ch * 2, ch * 2
+    _text(img, (c, c + 4 * S), f"{hh}:{mm}", f_t, colors(scr, "hodiny"), "ms")
+    dc = colors(scr, "datum")
+    _text(img, (c, c + 18 * S), DAYS[now.weekday()], _raw_font("ExtraBold", 20), dc, "mt")
+    _text(img, (c, c + 44 * S), f"{now.day}. {MONTHS[now.month - 1]} {now.year}", _raw_font("Bold", 17), dc, "mt")
+    return img
+
+
+_image_cache = {}
+
+
+def image_files():
+    """Obrazky pro obrazovku "obrazek": obrazky/* a obrazky/predlohy/* (relativni cesty)."""
+    out = []
+    for sub in ("", "predlohy"):
+        try:
+            names = sorted(os.listdir(os.path.join(IMAGES, sub)))
+        except OSError:
+            continue
+        out += [(sub + "/" if sub else "") + n for n in names
+                if n.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
+    return out
+
+
+def _load_image(name, mode, cols):
+    path = os.path.join(IMAGES, *name.split("/"))
+    key = (path, os.path.getmtime(path), mode, cols)
+    if key in _image_cache:
+        return _image_cache[key]
+    src = Image.open(path).convert("RGBA")
+    rgb = Image.new("RGB", src.size, BLACK)
+    rgb.paste(src, (0, 0), src.getchannel("A"))
+    if mode != IMAGE_MODES[0]:                         # pozadi = barva leveho horniho rohu
+        bg = Image.new("RGB", rgb.size, rgb.getpixel((0, 0)))
+        diff = ImageChops.difference(rgb, bg).convert("L")
+        mask = diff.point(lambda v: 0 if v < 30 else 255 if v > 90 else round((v - 30) * 255 / 60))
+        if mode == IMAGE_MODES[2]:                     # jen tvar, obarveny prechodem
+            rgb = _hgrad(rgb.width, rgb.height, *cols)
+        elif mode == IMAGE_MODES[3]:                   # cerne casti loga by na displeji nebyly videt
+            r, g, b = rgb.split()
+            dark = ImageChops.lighter(ImageChops.lighter(r, g), b).point(
+                lambda v: 255 if v < 60 else 0 if v > 120 else round((120 - v) * 255 / 60))
+            rgb = Image.composite(Image.new("RGB", rgb.size, WHITE), rgb, dark)
+        out = Image.new("RGB", rgb.size, BLACK)
+        out.paste(rgb, (0, 0), mask)
+        rgb = out
+    bb = rgb.convert("L").point(lambda v: 255 if v > 12 else 0).getbbox()
+    if bb:
+        rgb = rgb.crop(bb)
+    if len(_image_cache) > 16:
+        _image_cache.clear()
+    _image_cache[key] = rgb
+    return rgb
+
+
+def draw_image(scr, data, template=False, history=None):
+    """Obrazek / logo uprostred, cely v kruhu displeje; velikost ridi "Velikost obsahu"."""
+    img = _canvas()
+    try:
+        pic = _load_image(scr.get("soubor", ""), scr.get("uprava", IMAGE_MODES[0]), colors(scr, "tvar"))
+    except (OSError, ValueError):
+        d = ImageDraw.Draw(img)
+        d.ellipse((W // 2 - 100 * S, W // 2 - 100 * S, W // 2 + 100 * S, W // 2 + 100 * S), outline=DARK,
+                  width=3 * S)
+        _text(img, (W // 2, W // 2), "chybí obrázek", _font("ExtraBold", 18), (GREY, GREY), "mm")
+        return img
+    k = W * 0.96 / math.hypot(pic.width, pic.height)        # cely obrazek (i rohy) v kruhu displeje
+    pic = pic.resize((max(1, round(pic.width * k)), max(1, round(pic.height * k))), Image.LANCZOS)
+    img.paste(pic, ((W - pic.width) // 2, (W - pic.height) // 2))
+    return img
+
+
 DRAW = {"dva_bary": draw_two_bars, "oblouk": draw_arc, "budik": draw_gauge,
-        "dva_kruhy": draw_rings, "graf": draw_graph, "hodiny": draw_time}
+        "dva_kruhy": draw_rings, "graf": draw_graph, "hodiny": draw_time,
+        "dva_oblouky": draw_two_arcs, "segmenty": draw_segments, "ctyri_hodnoty": draw_four,
+        "chlazeni": draw_cooling, "graf_dva": draw_graph_two, "hodiny_analog": draw_analog,
+        "hodiny_datum": draw_clock_date, "obrazek": draw_image}
 
 
 # ------------------------------------------------------- orez a zvetseni
 
 _boxes = {}
 _TEMPLATE_CHARS = (None, "0", "3", "6", "8", "9")   # None = nejsirsi cislice
+FULL_FRAME = ("obrazek",)                          # bez orezu na obsah
 
 
 def _content_box(scr, data):
     """Vyrez = sjednoceni obsahu pro nejsirsi i nejvyssi (oble) cislice."""
     global _TCHAR
+    if scr.get("typ") in FULL_FRAME:                  # obsah uz je rozvrzeny na cely kruh
+        return (0, 0, W, W)
     key = json.dumps(scr, sort_keys=True, ensure_ascii=False) + f"|{_TS}"
     if key not in _boxes:
         box = None
@@ -606,14 +957,21 @@ def auto_screen(name, item, seen_max=None):
 def used_sensors(screens):
     out = set()
     for s in screens:
-        for k in ("senzor", "senzor1", "senzor2"):
+        for k in ("senzor", "senzor1", "senzor2", "senzor3", "senzor4"):
             if s.get(k):
                 out.add(s[k])
     return out
 
 
-def history_sensors(screens):
-    return {s["senzor"] for s in screens if s.get("typ") == "graf" and s.get("senzor")}
+def history_spans(screens):
+    """{senzor: delka historie v s} pro obrazovky s grafem."""
+    out = {}
+    for s in screens:
+        keys = {"graf": ("senzor",), "graf_dva": ("senzor1", "senzor2")}.get(s.get("typ"), ())
+        for k in keys:
+            if s.get(k):
+                out[s[k]] = max(out.get(s[k], 0), float(s.get("delka_s", 120)))
+    return out
 
 
 def build_list(cfg, data, seen_max=None):

@@ -2,7 +2,7 @@
   "jas": 100,
   "velikost_obsahu": 1.0,
   "gama_grafiky": 0.8,
-  "rotace_s": 10.0,
+  "rotace_s": 5.0,
   "obnova_s": 0.25,
   "auto_obrazovky": false,
   "skryte_senzory": [],
@@ -27,6 +27,11 @@
       "bar2_do": "#0000a0",
       "velikost_obsahu": 1.0,
       "velikost_textu": 1.1
+    },
+    {
+      "typ": "hodiny_datum",
+      "zapnuto": true,
+      "velikost_obsahu": 1.0
     },
     {
       "typ": "oblouk",
@@ -67,7 +72,7 @@
     },
     {
       "typ": "hodiny",
-      "zapnuto": true,
+      "zapnuto": false,
       "velikost_obsahu": 1.0,
       "minuty_od": "#ffb74a",
       "hodiny_od": "#6bec5e",
@@ -97,7 +102,7 @@
       "desetinna_mista": 0,
       "typ": "graf",
       "delka_s": 120,
-      "zapnuto": true,
+      "zapnuto": false,
       "velikost_obsahu": 1.0,
       "velikost_textu": 1.4,
       "graf_do": "#ff0080",

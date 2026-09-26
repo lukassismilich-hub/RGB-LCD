@@ -33,7 +33,18 @@ NEW_SCREEN = {
     "dva_kruhy": dict(_TWO, typ="dva_kruhy"),
     "graf": dict(_ONE, typ="graf", delka_s=120),
     "hodiny": {"typ": "hodiny"},
+    "dva_oblouky": dict(_TWO, typ="dva_oblouky", nadpis1="CPU", senzor1="CPU (Tctl/Tdie)",
+                        nadpis2="GPU", senzor2="Teplota GPU"),
+    "segmenty": dict(_ONE, typ="segmenty"),
+    "ctyri_hodnoty": dict(_TWO, typ="ctyri_hodnoty", nadpis3="C", senzor3="", min3=0, max3=100,
+                          nadpis4="D", senzor4="", min4=0, max4=100),
+    "chlazeni": {"typ": "chlazeni"},
+    "graf_dva": dict(_TWO, typ="graf_dva", delka_s=120),
+    "hodiny_analog": {"typ": "hodiny_analog"},
+    "hodiny_datum": {"typ": "hodiny_datum"},
+    "obrazek": {"typ": "obrazek", "soubor": "predlohy/amd_ctverec.png", "uprava": "beze změny"},
 }
+CLOCKS = ("hodiny", "hodiny_analog", "hodiny_datum", "obrazek")   # bez posuvniku velikosti textu
 
 # (klic, popisek, druh pole) pro editor obrazovky
 _F_ONE = [("nadpis", "Popisek", "text"), ("senzor", "Senzor", "sensor"),
@@ -44,7 +55,22 @@ _F_TWO = [("nadpis1", "Horní / vnější – popisek", "text"), ("senzor1", "Ho
           ("min2", "Dolní / vnitřní – minimum", "num"), ("max2", "Dolní / vnitřní – maximum", "num")]
 _F_FMT = [("jednotka", "Jednotka", "unit"), ("delitel", "Dělitel (1000 = MHz→GHz)", "num"),
           ("desetinna_mista", "Desetinná místa", "int")]
+_F_TWO_LR = [(k, t.replace("Horní / vnější", "Levý").replace("Dolní / vnitřní", "Pravý"), kd)
+             for k, t, kd in _F_TWO]
+_F_FOUR = [(f"{k}{n}", f"{pos} – {t}", kd)
+           for n, pos in (("1", "Vlevo nahoře"), ("2", "Vpravo nahoře"), ("3", "Vlevo dole"), ("4", "Vpravo dole"))
+           for k, t, kd in (("nadpis", "popisek", "text"), ("senzor", "senzor", "sensor"),
+                            ("min", "minimum", "num"), ("max", "maximum", "num"))]
 FIELDS = {
+    "dva_oblouky": _F_TWO_LR + _F_FMT,
+    "segmenty": _F_ONE + _F_FMT,
+    "ctyri_hodnoty": _F_FOUR + _F_FMT,
+    "chlazeni": [],
+    "graf_dva": [(k, t.replace("Horní / vnější", "Hodnota 1").replace("Dolní / vnitřní", "Hodnota 2"), kd)
+                 for k, t, kd in _F_TWO] + [("delka_s", "Délka grafu (s)", "int")] + _F_FMT,
+    "hodiny_analog": [],
+    "hodiny_datum": [],
+    "obrazek": [("soubor", "Obrázek (složka obrazky)", "image"), ("uprava", "Úprava", "mode")],
     "dva_bary": _F_TWO + _F_FMT,
     "dva_kruhy": _F_TWO + _F_FMT,
     "oblouk": _F_ONE + _F_FMT,
@@ -144,10 +170,12 @@ class App(tk.Tk):
 
     def _label(self, s):
         mark = "✓" if s.get("zapnuto", True) else "✗"
-        if s["typ"] in ("dva_bary", "dva_kruhy"):
-            name = f"{s.get('nadpis1', '')} / {s.get('nadpis2', '')}"
-        elif s["typ"] in ("oblouk", "budik", "graf"):
+        if "nadpis1" in s:
+            name = " / ".join(s.get(f"nadpis{n}", "") for n in "1234" if f"nadpis{n}" in s)
+        elif "senzor" in s:
             name = s.get("nadpis") or s.get("senzor", "")
+        elif s["typ"] == "obrazek":
+            name = s.get("soubor", "")
         else:
             name = ""
         return f"{mark}  {TYPES[s['typ']]}: {name}".rstrip(": ")
@@ -165,7 +193,7 @@ class App(tk.Tk):
         new = copy.deepcopy(NEW_SCREEN[typ])
         new["zapnuto"] = True
         new["velikost_obsahu"] = 0.92
-        if typ != "hodiny":
+        if typ not in CLOCKS:
             new["velikost_textu"] = 1.0
         self.cfg["obrazovky"].insert(self.sel + 1, new)
         self.sel += 1 if self.cfg["obrazovky"][:-1] else 0
@@ -413,7 +441,7 @@ class App(tk.Tk):
             row=row, column=0, columnspan=3, sticky="w", padx=8, pady=(6, 8))
         row += 1
         sizes = [("velikost_obsahu", "Velikost obsahu", 0.6, 1.0, 0.01)]
-        if s["typ"] != "hodiny":
+        if s["typ"] not in CLOCKS:
             sizes.append(("velikost_textu", "Velikost textu", 0.7, 1.4, 0.05))
         for key, text, lo, hi, res in sizes:
             ttk.Label(self.ed, text=text).grid(row=row, column=0, sticky="w", padx=8, pady=3)
@@ -439,6 +467,12 @@ class App(tk.Tk):
                 self._with_value_hint(row, var)
             elif kind == "unit":
                 w = ttk.Combobox(self.ed, textvariable=var, values=UNITS, width=10)
+            elif kind == "image":
+                w = ttk.Combobox(self.ed, textvariable=var, values=screens.image_files(), width=32,
+                                 state="readonly")
+            elif kind == "mode":
+                w = ttk.Combobox(self.ed, textvariable=var, values=screens.IMAGE_MODES, width=18,
+                                 state="readonly")
             else:
                 w = ttk.Entry(self.ed, textvariable=var, width=14 if kind != "text" else 24)
             w.grid(row=row, column=1, sticky="w", padx=4, pady=3)
@@ -607,7 +641,7 @@ class App(tk.Tk):
         hist = dict(self.hist)
         sample = False
         scr = dict(scr)
-        for n in ("", "1", "2"):
+        for n in ("", "1", "2", "3", "4"):
             if ("senzor" + n) not in scr:
                 continue
             if not scr["senzor" + n]:                 # senzor jeste nevybrany -> ukazka
@@ -620,14 +654,21 @@ class App(tk.Tk):
             data[name] = {"value": (lo + (hi - lo) * 0.6) * div,
                           "unit": "°C" if name == config.LIQUID else ""}
             sample = True
-        if scr.get("typ") == "graf":
-            name = scr.get("senzor")
+        for n in {"graf": ("",), "graf_dva": ("1", "2")}.get(scr.get("typ"), ()):
+            name = scr.get("senzor" + n)
             if name and len(hist.get(name, [])) < 2:
-                lo, hi = float(scr.get("min", 0)), float(scr.get("max", 100))
+                lo, hi = float(scr.get("min" + n, 0)), float(scr.get("max" + n, 100))
                 div = float(scr.get("delitel", 1)) or 1
-                hist[name] = [(lo + (hi - lo) * (0.45 + 0.25 * math.sin(i / 7))) * div
+                ph = 0 if n != "2" else 2.0
+                hist[name] = [(lo + (hi - lo) * (0.45 + 0.25 * math.sin(i / 7 + ph))) * div
                               for i in range(90)]
                 sample = True
+        if scr.get("typ") == "chlazeni":                  # bez bezici aplikace nejsou data Krakenu
+            for k, v in (("@kapalina", 31.4), ("@pumpa", 1720), ("@pumpa_vykon", 45),
+                         ("@ventilatory", 650), ("@ventilatory_vykon", 30)):
+                if k not in data:
+                    data[k] = {"value": v, "unit": ""}
+                    sample = True
         return scr, data, hist, sample
 
     def _tick(self):

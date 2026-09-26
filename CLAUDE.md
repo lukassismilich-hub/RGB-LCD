@@ -31,7 +31,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - `kraken.py` – komunikace s Krakenem přes liquidctl (LCD, jas, stav, křivky, fixní výkon)
 - `hwinfo.py` – čtení senzorů z HWiNFO; stejný název u více zařízení dostane krátké rozlišení: „Teplota disku (C:)“, „Aktuální rychlost stahování (Wi-Fi 2)“
 - `systemdata.py` – hodnoty, které HWiNFO neposílá, přímo z Windows API (ctypes): `@disk C: volno/obsazeno/celkem` (GB, %), `@síť stahování/odesílání` (MB/s, součet i po adaptérech), `@síť rychlost připojení` (Mbps), `@wifi signál` (dBm), `@wifi kvalita` (%), `@wifi rychlost`
-- `screens.py` – vykreslování obrazovek (Pillow)
+- `screens.py` – vykreslování obrazovek Krakenu (Pillow): dva bary, oblouk, budík, dva kruhy, graf, hodiny, dva oblouky (vlevo/vpravo), segmentový prstenec, čtyři hodnoty, chlazení (kapalina + výkon a otáčky pumpy a ventilátorů), graf dvou hodnot, ručičkové hodiny, digitální hodiny s datem a sekundovým prstencem, obrázek/logo (`obrazky/` i `obrazky/predlohy/`, úpravy: odstranit pozadí, jen tvar v barvě, černou na bílou). Displej je kulatý – obsah se ořízne na obsah a zvětší, obrázek se vejde do kruhu celý.
 - `cooling.py` – řízení pumpy a ventilátorů podle teploty CPU, vyhlazení, pojistky
 - `ukonceni.py` – zachycení ukončení (zavření okna, Ctrl+Break, odhlášení, vypnutí PC, `WM_CLOSE` od `ukoncit.bat`), aby se stihla nahrát záloha chlazení; jediná instance (mutex `Local\RGB_LCD_dashboard`); skryté okno třídy `RGB_LCD_ukonceni`
 - `camservice.py` – zastavení služby CAMService přes Windows API (při startu a když ji něco znovu spustí)

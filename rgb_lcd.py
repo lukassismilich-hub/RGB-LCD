@@ -71,10 +71,7 @@ def collect(kraken):
 def update_history(history, cfg, data):
     """Historie hodnot pro obrazovky typu graf: {senzor: deque[(cas, hodnota)]}"""
     now = time.monotonic()
-    keep = {}
-    for s in cfg["obrazovky"]:
-        if s.get("typ") == "graf" and s.get("senzor"):
-            keep[s["senzor"]] = max(keep.get(s["senzor"], 0), float(s.get("delka_s", 120)))
+    keep = screens.history_spans(cfg["obrazovky"])        # grafy na Krakenu
     for name, span in mono.graph_sensors(cfg.get("alphacool", {})).items():   # grafy na Alphacoolu
         keep[name] = max(keep.get(name, 0), span)
     for name in list(history):

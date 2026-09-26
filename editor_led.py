@@ -188,7 +188,17 @@ class LedEditor:
 
     # -------------------------------------------------------------- deska
     def _build_board(self):
-        f = self.board
+        # ARGB hlavicky nahore; ostatni zony (male LED na desce, 12V RGB) sbalene - bezne se neresi
+        self.argb = ttk.Frame(self.board)
+        self.argb.grid(row=0, column=0, sticky="w", pady=(4, 4))
+        self._build_argb()
+        f = ttk.Frame(self.board)
+        show = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.board, text="Zobrazit další zóny desky (malé LED na desce, 12V RGB)",
+                        variable=show, command=lambda: f.grid() if show.get() else f.grid_remove()).grid(
+            row=1, column=0, sticky="w", padx=4, pady=(6, 2))
+        f.grid(row=2, column=0, sticky="w")
+        f.grid_remove()
         for c, t in enumerate(("Zóna", "Název", "Režim", "Barva", "Rychlost")):
             ttk.Label(f, text=t, foreground="#666").grid(row=0, column=c, sticky="w", padx=4, pady=(4, 0))
         names = {k: v[0] for k, v in led.FUSION_MODES.items()}
@@ -198,7 +208,7 @@ class LedEditor:
             if f"led{r}" in led.ARGB_ZONES:
                 hdr = next(k for k, v in led.ARGB_HEADERS.items() if v[0] == f"led{r}")
                 ttk.Label(f, text=f"led{r}").grid(row=r, column=0, sticky="w", padx=4, pady=2)
-                ttk.Label(f, text=f"= ARGB hlavička {hdr} (viz níže)", foreground="#666").grid(
+                ttk.Label(f, text=f"= ARGB hlavička {hdr} (viz výše)", foreground="#666").grid(
                     row=r, column=1, columnspan=4, sticky="w", padx=4)
                 continue
             z = self.lcfg["fusion"][f"led{r}"]
@@ -224,10 +234,6 @@ class LedEditor:
                 self._zone_state(z, b, sc)
             mv.trace_add("write", on_mode)
             self._zone_state(z, b, sc)
-
-        self.argb = ttk.Frame(f)
-        self.argb.grid(row=9, column=0, columnspan=5, sticky="w", pady=(10, 4))
-        self._build_argb()
 
     def _build_argb(self):
         for w in self.argb.winfo_children():

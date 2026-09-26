@@ -113,7 +113,7 @@ def load():
     lc = cfg["led"]
     for k, v in DEFAULTS["led"].items():               # doplneni novych klicu LED
         lc.setdefault(k, json.loads(json.dumps(v)))
-    for group in ("nzxt", "fusion"):
+    for group in ("nzxt", "fusion", "argb"):
         for ch, v in DEFAULTS["led"][group].items():
             lc[group].setdefault(ch, json.loads(json.dumps(v)))
     for scr in cfg["obrazovky"]:                        # stare jednobarevne bary -> prechod od/do

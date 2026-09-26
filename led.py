@@ -7,9 +7,15 @@
 #
 # NZXT: kanaly led1-led3, na led1 a led2 je po jednom F140 (8 LED). Rezim "super-fixed"
 #   = kazda LED vlastni barvou.
-# Gigabyte: zony led1-led8, jen jedna barva / efekt na celou zonu (liquidctl nic vic neumi).
-#   Na zone led6 jsou ventilatory na desce. LED desky jinak ridi Gigabyte Control Center (GCC)
-#   - pokud bezi, nastaveni prepise.
+# Gigabyte: zony led1-led8 = jedna barva / efekt na celou zonu (liquidctl). Zona led6 je ARGB
+#   hlavicka D_LED1 a led7 hlavicka D_LED2 - ty se ridi zvlast (config["led"]["argb"]):
+#   - primy rezim (kazda LED zvlast, jedna barva, vypnuto): registr 0x32 = maska vypnutych
+#     vestavenych efektu (D_LED1 0x01, D_LED2 0x02) a barvy po LED prikazem 0x58 / 0x59
+#     (paket [0xCC, hlavicka, offset 2 B, pocet bajtu, az 19 LED], poradi bajtu z kalibrace)
+#   - vestavene efekty cipu (pulz, blikani, stridani barev): maska 0x32 bit vynulovat + efekt zony
+#   Protokol podle OpenRGB (GigabyteRGBFusion2USBController). Na D_LED1 jsou 3 ventilatory
+#   paralelne (rozbocovac), kazdy 16 LED - vsechny sviti stejne.
+#   LED desky jinak ridi Gigabyte Control Center (GCC) - pokud bezi, nastaveni prepise.
 
 import copy
 import json
@@ -57,19 +63,51 @@ FUSION_SPEEDS = {"slowest": "nejpomaleji", "slower": "pomaleji", "normal": "norm
 
 RAINBOW = ["#ff0000", "#ff8000", "#ffff00", "#00ff00", "#00ffff", "#0040ff", "#8000ff", "#ff00c0"]
 
+# ARGB hlavicky desky: nazev -> (zona pro vestavene efekty, prikaz pro barvy po LED, bit masky 0x32)
+ARGB_HEADERS = {"D_LED1": ("led6", 0x58, 0x01), "D_LED2": ("led7", 0x59, 0x02)}
+ARGB_ZONES = {v[0] for v in ARGB_HEADERS.values()}
+ARGB_MAX_LEDS = 32
+# rezimy ARGB: primy (aplikace posila barvy) a vestavene efekty cipu
+ARGB_MODES = {
+    "off": ("vypnuto", "primy"),
+    "fixed": ("jedna barva", "primy"),
+    "super-fixed": ("každá LED zvlášť", "primy"),
+    "pulse": ("pulz", "efekt"),
+    "flash": ("blikání", "efekt"),
+    "double-flash": ("dvojité blikání", "efekt"),
+    "color-cycle": ("střídání barev", "efekt"),
+}
+
+
+def rainbow(n):
+    """n barev duhy po obvodu (pro kruh s n LED)."""
+    import colorsys
+    out = []
+    for i in range(n):
+        r, g, b = colorsys.hsv_to_rgb(i / n, 1.0, 1.0)
+        out.append(f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}")
+    return out
+
 
 def default_config():
     fan = {"rezim": "super-fixed", "barvy": list(RAINBOW), "barvy_efekt": ["#ff0000", "#0040ff"],
            "rychlost": "normal", "obraceny_smer": False}
     zones = {f"led{i}": {"nazev": f"zóna {i}", "rezim": "off", "barva": "#ffffff", "rychlost": "normal"}
              for i in range(1, 9)}
-    zones["led6"].update(nazev="ventilátory na desce", rezim="fixed", barva="#8000ff")
+    zones["led6"]["nazev"] = zones["led7"]["nazev"] = "ARGB hlavička – viz níže"
+    argb = {
+        "D_LED1": {"nazev": "ventilátory na desce (3× paralelně)", "pocet_led": 16, "rezim": "super-fixed",
+                   "barvy": rainbow(16), "barva": "#8000ff", "rychlost": "normal", "obraceny_smer": False},
+        "D_LED2": {"nazev": "nepřipojeno", "pocet_led": 16, "rezim": "off", "barvy": rainbow(16),
+                   "barva": "#ffffff", "rychlost": "normal", "obraceny_smer": False},
+    }
     return {
         "zapnuto": True,
         "nzxt_stejne": True,                       # led2 = stejne jako led1
         "nzxt": {"led1": dict(fan, nazev="F140 (1)"), "led2": dict(copy.deepcopy(fan), nazev="F140 (2)"),
                  "led3": {"nazev": "nepřipojeno", "rezim": "off", "barvy": ["#ffffff"], "rychlost": "normal"}},
         "fusion": zones,
+        "argb": argb,
     }
 
 
@@ -95,6 +133,54 @@ def _nzxt_colors(ch):
     if mode == "super-fixed":                      # presne 8 LED, ostatni zhasnout
         cols = (cols + [[0, 0, 0]] * LEDS_PER_FAN)[:LEDS_PER_FAN]
     return mode, cols
+
+
+def argb_order(report):
+    """Pozice bajtu R, G, B pro hlavicky D_LED1/2 z odpovedi na 0x60 (kalibrace, typicky GRB)."""
+    import struct
+    out = {}
+    for name, off in (("D_LED1", 44), ("D_LED2", 48)):
+        v = struct.unpack_from("<I", bytes(report), off)[0]
+        order = ((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
+        out[name] = order if sorted(order) == [0, 1, 2] else (1, 0, 2)    # nesmysl -> GRB
+    return out
+
+
+def _argb_report(dev):
+    for _ in range(3):
+        dev.send_feature_report([0xCC, 0x60] + [0] * 62)
+        r = dev.get_feature_report(0xCC, 64)
+        if len(r) >= 52 and r[0] in (0xCC, 0) and r[1] == 0x01:
+            return r
+        time.sleep(0.3)
+    return None
+
+
+def _argb_strip(dev, cmd, colors, order):
+    """Barvy po LED na hlavicku (po 19 LED v jednom paketu)."""
+    sent = 0
+    for i in range(0, len(colors), 19):
+        chunk = colors[i:i + 19]
+        pkt = [0] * 64
+        pkt[0], pkt[1], pkt[2], pkt[3], pkt[4] = 0xCC, cmd, sent & 0xFF, sent >> 8, len(chunk) * 3
+        for j, (r, g, b) in enumerate(chunk):
+            o = 5 + j * 3
+            pkt[o + order[0]], pkt[o + order[1]], pkt[o + order[2]] = r, g, b
+        dev.send_feature_report(pkt)
+        sent += len(chunk) * 3
+
+
+def _argb_colors(h):
+    n = max(1, min(ARGB_MAX_LEDS, int(h.get("pocet_led", 16))))
+    mode = h.get("rezim", "off")
+    if mode == "super-fixed":
+        cols = [hex_rgb(c) for c in h.get("barvy", [])][:n]
+        cols += [[0, 0, 0]] * (n - len(cols))
+    elif mode == "fixed":
+        cols = [hex_rgb(h.get("barva", "#ffffff"))] * n
+    else:
+        cols = [[0, 0, 0]] * n
+    return cols + [[0, 0, 0]] * (ARGB_MAX_LEDS - n)      # zbytek hlavicky zhasnout
 
 
 def _devices():
@@ -144,7 +230,10 @@ def apply(lcfg):
         try:
             with fusion.connect():
                 _init(fusion)
+                argb = lcfg.get("argb", {})
                 for name, z in sorted(lcfg.get("fusion", {}).items()):
+                    if name in ARGB_ZONES:
+                        continue                       # ARGB hlavicky nize
                     mode = z.get("rezim", "off")
                     _n, takes_color, has_speed = FUSION_MODES.get(mode, FUSION_MODES["off"])
                     cols = [hex_rgb(z.get("barva", "#ffffff"))] if takes_color else []
@@ -152,6 +241,26 @@ def apply(lcfg):
                     if mode == "double-flash" and speed == "slower":
                         speed = "normal"               # v liquidctl 1.16 preklep v nazvu rychlosti
                     fusion.set_color(name, mode, cols, speed=speed)
+                dev = fusion.device
+                report = _argb_report(dev)
+                orders = argb_order(report) if report else {k: (1, 0, 2) for k in ARGB_HEADERS}
+                mask = 0
+                for hname, (zone, cmd, bit) in ARGB_HEADERS.items():   # nejdriv efekty (maska 0)
+                    h = argb.get(hname, {})
+                    mode = h.get("rezim", "off")
+                    if ARGB_MODES.get(mode, ("", "primy"))[1] == "primy":
+                        mask |= bit
+                        continue
+                    speed = h.get("rychlost", "normal")
+                    if mode == "double-flash" and speed == "slower":
+                        speed = "normal"
+                    cols = [hex_rgb(h.get("barva", "#ffffff"))] if FUSION_MODES[mode][1] else []
+                    fusion.set_color(zone, mode, cols, speed=speed)
+                dev.send_feature_report([0xCC, 0x32, mask] + [0] * 61)   # primy rezim tam, kde je
+                time.sleep(0.05)
+                for hname, (zone, cmd, bit) in ARGB_HEADERS.items():
+                    if mask & bit:
+                        _argb_strip(dev, cmd, _argb_colors(argb.get(hname, {})), orders[hname])
         except Exception as e:
             errors.append(f"Gigabyte: {e}")
     return errors

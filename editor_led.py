@@ -41,8 +41,8 @@ class LedEditor:
         self._build_board()
         ttk.Label(parent, foreground="#666", justify="left", text=(
             "Změny se na LED projeví po Uložit. LED desky jinak ovládá Gigabyte Control Center (GCC) – "
-            "pokud běží, nastavení desky přepíše\n(autostart_zapnout.bat ho vypne). Deska umí jen jednu barvu "
-            "nebo efekt na celou zónu, každou LED zvlášť jen ventilátory F140.")).grid(
+            "pokud běží, nastavení desky přepíše\n(autostart_zapnout.bat ho vypne). Zóny desky umí jen jednu barvu "
+            "nebo efekt na celou zónu; ARGB hlavičky D_LED i každou LED zvlášť.")).grid(
             row=2, column=0, sticky="w", padx=8, pady=(8, 0))
         self.refresh()
 
@@ -100,54 +100,59 @@ class LedEditor:
             self._build_fans()
         mode.trace_add("write", on_mode)
 
-    def _ring(self, parent, ch):
-        cols = (list(ch.get("barvy", [])) + list(led.RAINBOW))[:led.LEDS_PER_FAN]
+    def _ring(self, parent, ch, n=led.LEDS_PER_FAN, rebuild=None, front="čelo PC ▸"):
+        rebuild = rebuild or self._build_fans
+        cols = (list(ch.get("barvy", [])) + led.rainbow(n))[:n]
         ch["barvy"] = cols
+        dot = DOT if n <= 8 else 9
         c = tk.Canvas(parent, width=RING, height=RING, bg="#202020", highlightthickness=0)
         c.grid(row=0, column=0, rowspan=4)
-        R = RING / 2 - DOT - 18
+        R = RING / 2 - dot - 18
         cx = cy = RING / 2
         rev = ch.get("obraceny_smer", False)
-        c.create_oval(cx - R + DOT, cy - R + DOT, cx + R - DOT, cy + R - DOT, outline="#444")
+        c.create_oval(cx - R + dot, cy - R + dot, cx + R - dot, cy + R - dot, outline="#444")
         for i, col in enumerate(cols):
-            ang = math.radians((-1 if rev else 1) * 360 * i / led.LEDS_PER_FAN)   # LED 1 vpravo (celo PC)
+            ang = math.radians((-1 if rev else 1) * 360 * i / n)   # LED 1 vpravo
             x, y = cx + R * math.cos(ang), cy + R * math.sin(ang)
             tag = f"led{i}"
-            c.create_oval(x - DOT, y - DOT, x + DOT, y + DOT, fill=col, outline="#ddd", tags=tag)
-            c.create_text(x, y, text=str(i + 1), fill=_contrast(col), font=("Segoe UI", 8, "bold"), tags=tag)
-            c.tag_bind(tag, "<Button-1>", lambda e, i=i: self._pick(ch, i))
-        c.create_text(RING - 3, cy + DOT + 12, text="čelo PC ▸", fill="#aaa", anchor="e", font=("Segoe UI", 7))
+            c.create_oval(x - dot, y - dot, x + dot, y + dot, fill=col, outline="#ddd", tags=tag)
+            c.create_text(x, y, text=str(i + 1), fill=_contrast(col), font=("Segoe UI", 7 if n > 8 else 8, "bold"),
+                          tags=tag)
+            c.tag_bind(tag, "<Button-1>", lambda e, i=i: self._pick(ch, i, rebuild))
+        if front:
+            c.create_text(RING - 3, cy + dot + 12, text=front, fill="#aaa", anchor="e", font=("Segoe UI", 7))
         btns = ttk.Frame(parent)
         btns.grid(row=0, column=1, sticky="nw", padx=8)
 
         def all_one():
             col = colorchooser.askcolor(color=cols[0], parent=parent)[1]
             if col:
-                ch["barvy"] = [col] * led.LEDS_PER_FAN
-                self._build_fans()
+                ch["barvy"] = [col] * n
+                rebuild()
 
         def rainbow():
-            ch["barvy"] = list(led.RAINBOW)
-            self._build_fans()
+            ch["barvy"] = led.rainbow(n)
+            rebuild()
 
         def rotate():
             ch["barvy"] = cols[-1:] + cols[:-1]
-            self._build_fans()
+            rebuild()
 
         def flip():
             ch["obraceny_smer"] = not rev
-            self._build_fans()
+            rebuild()
         for text, cmd in (("Vše jednou barvou…", all_one), ("Duha", rainbow), ("Posunout o 1 ↻", rotate),
                           ("Obrátit směr v náhledu", flip)):
             ttk.Button(btns, text=text, command=cmd, width=22).pack(anchor="w", pady=2)
         ttk.Label(btns, foreground="#666", justify="left",
-                  text="Klik na LED = barva.\nLED 1 je u čela PC.").pack(anchor="w", pady=(6, 0))
+                  text="Klik na LED = barva." + ("\nLED 1 je u čela PC." if front else "")).pack(
+            anchor="w", pady=(6, 0))
 
-    def _pick(self, ch, i):
+    def _pick(self, ch, i, rebuild=None):
         col = colorchooser.askcolor(color=ch["barvy"][i], parent=self.fans)[1]
         if col:
             ch["barvy"][i] = col
-            self._build_fans()
+            (rebuild or self._build_fans)()
 
     def _color_row(self, parent, ch, lo, hi):
         # ulozeny seznam se nezkracuje - rezim s mene barvami pouzije jen prvni
@@ -190,6 +195,12 @@ class LedEditor:
         rev_names = {v: k for k, v in names.items()}
         rev_speed = {v: k for k, v in led.FUSION_SPEEDS.items()}
         for r in range(1, 9):
+            if f"led{r}" in led.ARGB_ZONES:
+                hdr = next(k for k, v in led.ARGB_HEADERS.items() if v[0] == f"led{r}")
+                ttk.Label(f, text=f"led{r}").grid(row=r, column=0, sticky="w", padx=4, pady=2)
+                ttk.Label(f, text=f"= ARGB hlavička {hdr} (viz níže)", foreground="#666").grid(
+                    row=r, column=1, columnspan=4, sticky="w", padx=4)
+                continue
             z = self.lcfg["fusion"][f"led{r}"]
             ttk.Label(f, text=f"led{r}").grid(row=r, column=0, sticky="w", padx=4, pady=2)
             nv = tk.StringVar(value=z.get("nazev", ""))
@@ -213,6 +224,72 @@ class LedEditor:
                 self._zone_state(z, b, sc)
             mv.trace_add("write", on_mode)
             self._zone_state(z, b, sc)
+
+        self.argb = ttk.Frame(f)
+        self.argb.grid(row=9, column=0, columnspan=5, sticky="w", pady=(10, 4))
+        self._build_argb()
+
+    def _build_argb(self):
+        for w in self.argb.winfo_children():
+            w.destroy()
+        names = {k: v[0] for k, v in led.ARGB_MODES.items()}
+        rev_names = {v: k for k, v in names.items()}
+        rev_speed = {v: k for k, v in led.FUSION_SPEEDS.items()}
+        for col, hname in enumerate(led.ARGB_HEADERS):
+            h = self.lcfg.setdefault("argb", {}).setdefault(hname, {"rezim": "off", "pocet_led": 16})
+            fr = ttk.LabelFrame(self.argb, text=f"ARGB {hname} – {h.get('nazev', '')}")
+            fr.grid(row=0, column=col, sticky="nw", padx=4)
+            nv = tk.StringVar(value=h.get("nazev", ""))
+            ttk.Label(fr, text="Název").grid(row=0, column=0, sticky="w", padx=4, pady=2)
+            ttk.Entry(fr, textvariable=nv, width=26).grid(row=0, column=1, columnspan=2, sticky="w", padx=4)
+            nv.trace_add("write", lambda *a, h=h, nv=nv: h.__setitem__("nazev", nv.get()))
+            mv = tk.StringVar(value=names.get(h.get("rezim", "off"), "vypnuto"))
+            ttk.Label(fr, text="Režim").grid(row=1, column=0, sticky="w", padx=4, pady=2)
+            ttk.Combobox(fr, textvariable=mv, values=list(names.values()), state="readonly", width=16).grid(
+                row=1, column=1, sticky="w", padx=4)
+            pv = tk.StringVar(value=str(h.get("pocet_led", 16)))
+            ttk.Label(fr, text="Počet LED").grid(row=2, column=0, sticky="w", padx=4, pady=2)
+            ttk.Spinbox(fr, textvariable=pv, from_=1, to=led.ARGB_MAX_LEDS, width=5).grid(
+                row=2, column=1, sticky="w", padx=4)
+            mode = h.get("rezim", "off")
+            area = ttk.Frame(fr)
+            area.grid(row=3, column=0, columnspan=3, sticky="w", padx=4, pady=6)
+            if mode == "super-fixed":
+                self._ring(area, h, n=max(1, min(led.ARGB_MAX_LEDS, int(h.get("pocet_led", 16)))),
+                           rebuild=self._build_argb, front=None)
+            elif mode == "off":
+                ttk.Label(area, foreground="#666", text="Zhasnuto.").pack(anchor="w")
+            else:
+                takes_color = mode == "fixed" or led.FUSION_MODES.get(mode, ("", False, False))[1]
+                if takes_color:
+                    b = tk.Button(area, text="barva", width=8, relief="groove", bg=h.get("barva", "#ffffff"),
+                                  fg=_contrast(h.get("barva", "#ffffff")))
+                    b.config(command=lambda h=h, b=b: self._pick_zone(h, b))
+                    b.pack(side="left")
+                if mode in led.FUSION_MODES and led.FUSION_MODES[mode][2]:
+                    sv = tk.StringVar(value=led.FUSION_SPEEDS.get(h.get("rychlost", "normal"), "normálně"))
+                    ttk.Combobox(area, textvariable=sv, values=list(led.FUSION_SPEEDS.values()),
+                                 state="readonly", width=13).pack(side="left", padx=6)
+                    sv.trace_add("write", lambda *a, h=h, sv=sv: h.__setitem__("rychlost", rev_speed[sv.get()]))
+                if led.ARGB_MODES[mode][1] == "efekt":
+                    ttk.Label(area, foreground="#666", text=" vestavěný efekt čipu").pack(side="left")
+
+            def on_mode(*a, h=h, mv=mv):
+                h["rezim"] = rev_names[mv.get()]
+                h.setdefault("barvy", led.rainbow(int(h.get("pocet_led", 16))))
+                self._build_argb()
+
+            def on_count(*a, h=h, pv=pv):
+                try:
+                    n = max(1, min(led.ARGB_MAX_LEDS, int(pv.get())))
+                except ValueError:
+                    return
+                if n != h.get("pocet_led"):
+                    h["pocet_led"] = n
+                    if h.get("rezim") == "super-fixed":
+                        self._build_argb()
+            mv.trace_add("write", on_mode)
+            pv.trace_add("write", on_count)
 
     def _zone_state(self, z, b, sc):
         _n, takes_color, has_speed = led.FUSION_MODES.get(z.get("rezim", "off"), led.FUSION_MODES["off"])

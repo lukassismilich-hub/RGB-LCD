@@ -17,7 +17,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - Základní deska: Gigabyte B650M Aorus Elite (ARGB hlavičky, Gigabyte RGB Fusion 2.0 5702 Controller, IT5701, FW 4.0.30.2)
 - AIO: NZXT Kraken 240 RGB (RL-KR240-B1), FW 2.0.0, LCD 240×240 px, v liquidctl jako „NZXT Kraken 2023“
 - NZXT 2023 RGB Controller (FW 1.5.0): kanál led1 a led2 = po jednom F140 RGB Core (8 LED, LED 1 směrem k čelu PC), led3 volný. Rychlost F140 neřídí – F140 jsou zapojené do desky na Systém 1 a Systém 2 (SYS_FAN), na CPU_FAN je tachometr pumpy (odhad podle otáček).
-- Gigabyte RGB Fusion 2.0: jiné ventilátory (ne F140) na zóně led6. LED desky jinak řídí Gigabyte Control Center (GCC, úloha `\GCC`) a přepisuje je – `autostart_zapnout.bat` GCC vypíná. `initialize()` občas napoprvé vrátí nesmysl (AssertionError) → opakovat.
+- Gigabyte RGB Fusion 2.0: na ARGB hlavičce D_LED1 jsou 3 ventilátory (ne F140) paralelně přes rozbočovač, každý 16 LED, svítí stejně; D_LED2 volná. Liquidctl D_LED neovládne, když má hlavička vypnuté vestavěné efekty (přímý režim, nechal tak GCC) – řeší `led.py` vlastními příkazy podle OpenRGB (0x32 maska, 0x58/0x59 barvy po LED, pořadí GRB z kalibrace). Zóna led6 = D_LED1, led7 = D_LED2. LED desky jinak řídí Gigabyte Control Center (GCC, úloha `\GCC`) a přepisuje je – `autostart_zapnout.bat` GCC vypíná. `initialize()` občas napoprvé vrátí nesmysl (AssertionError) → opakovat.
 - CPU Ryzen (teplota rychle kolísá → proto vyhlazování)
 
 ## Prostředí

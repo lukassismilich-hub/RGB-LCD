@@ -156,7 +156,7 @@ def main():
                 cooling.update(kraken, cfg["chlazeni"], data)
                 hist = update_history(history, cfg, data)
                 alpha.update(cfg["alphacool"], data, hist, cfg["obnova_s"])
-                leds.update(cfg["led"])
+                leds.update(cfg["led"], data)
                 write_state(data, cooling.state, hist, alpha.state, leds.state)
                 if not any(not k.startswith("@") for k in data) and not warned_hwinfo:
                     log.warning("Z HWiNFO nejsou data - bezi HWiNFO se zapnutym Gadget reportingem?")

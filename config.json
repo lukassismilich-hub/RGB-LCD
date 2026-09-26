@@ -809,7 +809,7 @@
     "fusion": {
       "led1": {
         "nazev": "zóna 1",
-        "rezim": "pulse",
+        "rezim": "off",
         "barva": "#ff0000",
         "rychlost": "normal"
       },
@@ -833,7 +833,7 @@
       },
       "led5": {
         "nazev": "zóna 5",
-        "rezim": "fixed",
+        "rezim": "off",
         "barva": "#00ff40",
         "rychlost": "normal"
       },
@@ -854,6 +854,60 @@
         "rezim": "off",
         "barva": "#ffffff",
         "rychlost": "normal"
+      }
+    },
+    "argb": {
+      "D_LED1": {
+        "nazev": "ventilátory na desce (3× paralelně)",
+        "pocet_led": 16,
+        "rezim": "fixed",
+        "barvy": [
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000",
+          "#ff0000"
+        ],
+        "barva": "#ffffff",
+        "rychlost": "slowest",
+        "obraceny_smer": false
+      },
+      "D_LED2": {
+        "nazev": "nepřipojeno",
+        "pocet_led": 16,
+        "rezim": "off",
+        "barvy": [
+          "#ff0000",
+          "#ff6000",
+          "#ffbf00",
+          "#dfff00",
+          "#80ff00",
+          "#20ff00",
+          "#00ff40",
+          "#00ff9f",
+          "#00ffff",
+          "#009fff",
+          "#0040ff",
+          "#2000ff",
+          "#8000ff",
+          "#df00ff",
+          "#ff00bf",
+          "#ff0060"
+        ],
+        "barva": "#ffffff",
+        "rychlost": "normal",
+        "obraceny_smer": false
       }
     }
   }

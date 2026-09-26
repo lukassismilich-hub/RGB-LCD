@@ -1,7 +1,7 @@
 {
   "jas": 100,
   "velikost_obsahu": 1.0,
-  "gama_grafiky": 1.0,
+  "gama_grafiky": 0.8,
   "rotace_s": 10.0,
   "obnova_s": 0.25,
   "auto_obrazovky": false,
@@ -810,7 +810,7 @@
       "led1": {
         "nazev": "zóna 1",
         "rezim": "off",
-        "barva": "#ff0000",
+        "barva": "#ffffff",
         "rychlost": "normal"
       },
       "led2": {
@@ -834,7 +834,7 @@
       "led5": {
         "nazev": "zóna 5",
         "rezim": "off",
-        "barva": "#00ff40",
+        "barva": "#ffffff",
         "rychlost": "normal"
       },
       "led6": {
@@ -863,21 +863,21 @@
         "rezim": "fixed",
         "barvy": [
           "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000"
+          "#ff6000",
+          "#ffbf00",
+          "#dfff00",
+          "#80ff00",
+          "#20ff00",
+          "#00ff40",
+          "#00ff9f",
+          "#00ffff",
+          "#009fff",
+          "#0040ff",
+          "#2000ff",
+          "#8000ff",
+          "#df00ff",
+          "#ff00bf",
+          "#ff0060"
         ],
         "barva": "#ffffff",
         "rychlost": "slowest",
@@ -909,6 +909,50 @@
         "rychlost": "normal",
         "obraceny_smer": false
       }
+    },
+    "jas": 100,
+    "jas_f140": 100,
+    "jas_deska": 100,
+    "stejne_pro_vse": false,
+    "vlna": false,
+    "efekt": {
+      "typ": "duha_toceni",
+      "barvy": [
+        "#ff0000",
+        "#0060ff",
+        "#00ff40"
+      ],
+      "rychlost": 3,
+      "opacny_smer": true,
+      "senzor": "CPU (Tctl/Tdie)",
+      "min": 40,
+      "max": 90
+    },
+    "efekt_f140": {
+      "typ": "duha_toceni",
+      "barvy": [
+        "#ff0000",
+        "#0060ff",
+        "#00ff40"
+      ],
+      "rychlost": 4,
+      "opacny_smer": false,
+      "senzor": "CPU (Tctl/Tdie)",
+      "min": 40,
+      "max": 90
+    },
+    "efekt_deska": {
+      "typ": "duha_toceni",
+      "barvy": [
+        "#ff0000",
+        "#0060ff",
+        "#00ff40"
+      ],
+      "rychlost": 4,
+      "opacny_smer": false,
+      "senzor": "CPU (Tctl/Tdie)",
+      "min": 40,
+      "max": 90
     }
   }
 }

@@ -36,17 +36,18 @@ DAYS = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
 
 _index = None
 _font_cache = {}
-FALLBACK = ("Tahoma", "Verdana", "Segoe UI", "Arial")
+DEFAULT_FAMILY = "Terminus (TTF)"                  # ostre ve 12, 14, 16, ... 32 px, i tucne, cestina
+SMALL_FAMILY = "Micro 5"                           # drobne popisky, ostre v 11 px
+FALLBACK = (DEFAULT_FAMILY, "Departure Mono", "Pixel Operator")
 
 
 def _font_dirs():
-    return [os.path.join(BASE, "fonts"),
-            os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "Fonts"),
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts")]
+    """Jen pisma aplikace (fonts/) - pisma Windows se na 1 bitu kresli nerovne."""
+    return [os.path.join(BASE, "fonts")]
 
 
 def font_index():
-    """{rodina: {"regular": cesta, "bold": cesta}} ze slozky fonts/ a pisem Windows."""
+    """{rodina: {"regular": cesta, "bold": cesta}} ze slozky fonts/."""
     global _index
     if _index is not None:
         return _index
@@ -91,7 +92,7 @@ def font_families():
 def get_font(spec):
     """spec = {"rodina", "velikost", "tucne"} -> ImageFont (s nahradnim pismem)."""
     spec = spec or {}
-    fam = spec.get("rodina", "Tahoma")
+    fam = spec.get("rodina", DEFAULT_FAMILY)
     px = max(5, int(spec.get("velikost", 11)))
     bold = bool(spec.get("tucne"))
     k = (fam, px, bold)
@@ -233,8 +234,8 @@ def draw_number(img, d, p, data, now):
     fill = int(p.get("barva", 1))
     v = _val(p, data)
     txt = fmt(v, p.get("desetinna_mista", 0))
-    fb = get_font(p.get("pismo", {"rodina": "Tahoma", "velikost": 36, "tucne": True}))
-    fs = get_font(p.get("pismo_male", {"rodina": "Tahoma", "velikost": 11}))
+    fb = get_font(p.get("pismo", _f(36, True)))
+    fs = get_font(p.get("pismo_male", _f(11)))
     d.text((x, y), txt, font=fb, fill=fill, anchor="lt")
     right = x + d.textlength(txt, font=fb) + 2
     u = unit(data, p.get("senzor"), p.get("jednotka", "auto"))
@@ -384,17 +385,17 @@ def draw_graph(img, d, p, data, now, history):
 def _value_center(d, p, data, cx, cy):
     if not p.get("hodnota", True):
         return
-    f = get_font(p.get("pismo", {"rodina": "Tahoma", "velikost": 16, "tucne": True}))
+    f = get_font(p.get("pismo", _f(16, True)))
     _center_text(d, cx, cy, _text_value(p, data), f, 1)
     if p.get("popisek"):
-        fs = get_font(p.get("pismo_male", {"rodina": "Tahoma", "velikost": 9}))
+        fs = get_font(p.get("pismo_male", _f(9)))
         bb = d.textbbox((cx, cy), "0", font=f, anchor="mm")
         d.text((cx, bb[3] + 2), p["popisek"], font=fs, fill=1, anchor="mt")
 
 
 def draw_gauge(img, d, p, data, now):
     x, y, w, h = p["x"], p["y"], p["w"], p["h"]
-    f = get_font(p.get("pismo", {"rodina": "Tahoma", "velikost": 12, "tucne": True}))
+    f = get_font(p.get("pismo", _f(12, True)))
     txt_h = (6 + d.textbbox((0, 0), "0°", font=f, anchor="lt")[3]) if p.get("hodnota", True) else 2
     r = max(6, min(w / 2 - 1, h - txt_h - 1))
     cx, cy = x + w / 2, y + r + 1
@@ -603,8 +604,14 @@ def render(acfg, data, history=None, now=None):
 
 # ------------------------------------------------ nove prvky (vychozi hodnoty)
 
-def _f(size, bold=False, fam="Tahoma"):
-    return {"rodina": fam, "velikost": size, "tucne": bold}
+def _f(size, bold=False, fam=None):
+    """Vychozi pismo prvku; velikost se zaokrouhli na ostrou velikost pixeloveho pisma."""
+    if fam:
+        return {"rodina": fam, "velikost": size, "tucne": bold}
+    if size <= 10:
+        return {"rodina": SMALL_FAMILY, "velikost": 11, "tucne": False}
+    sharp = min((12, 14, 16, 18, 20, 22, 24, 28, 32), key=lambda v: abs(v - size))
+    return {"rodina": DEFAULT_FAMILY, "velikost": sharp, "tucne": bold}
 
 
 _SENS = {"senzor": "CPU (Tctl/Tdie)", "min": 0, "max": 100, "delitel": 1}

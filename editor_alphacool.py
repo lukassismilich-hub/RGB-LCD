@@ -472,9 +472,9 @@ class AlphaEditor:
         return fr
 
     def _font_field(self, p, key):
-        spec = p.setdefault(key, {"rodina": "Tahoma", "velikost": 11, "tucne": False})
+        spec = p.setdefault(key, prvky._f(12))
         fr = ttk.Frame(self.props)
-        fam = tk.StringVar(value=spec.get("rodina", "Tahoma"))
+        fam = tk.StringVar(value=spec.get("rodina", prvky.DEFAULT_FAMILY))
         size = tk.StringVar(value=str(spec.get("velikost", 11)))
         bold = tk.BooleanVar(value=bool(spec.get("tucne")))
         ttk.Combobox(fr, textvariable=fam, values=prvky.font_families(), width=20,

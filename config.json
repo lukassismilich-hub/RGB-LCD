@@ -31,6 +31,14 @@
     {
       "typ": "hodiny_datum",
       "zapnuto": true,
+      "velikost_obsahu": 1.0,
+      "velikost_textu": 1.4
+    },
+    {
+      "typ": "obrazek",
+      "soubor": "predlohy/ryzen7.png",
+      "uprava": "beze změny",
+      "zapnuto": true,
       "velikost_obsahu": 1.0
     },
     {

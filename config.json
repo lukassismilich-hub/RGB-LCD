@@ -29,55 +29,6 @@
       "velikost_textu": 1.1
     },
     {
-      "typ": "hodiny_datum",
-      "zapnuto": true,
-      "velikost_obsahu": 1.0,
-      "velikost_textu": 1.4
-    },
-    {
-      "typ": "obrazek",
-      "soubor": "predlohy/ryzen7.png",
-      "uprava": "beze změny",
-      "zapnuto": true,
-      "velikost_obsahu": 1.0
-    },
-    {
-      "typ": "obrazek",
-      "soubor": "kraken/ryzen7_odznak.png",
-      "uprava": "beze změny",
-      "zapnuto": true,
-      "velikost_obsahu": 1.0
-    },
-    {
-      "typ": "obrazek",
-      "soubor": "kraken/ryzen_9700x_samolepka.png",
-      "uprava": "beze změny",
-      "zapnuto": true,
-      "velikost_obsahu": 1.0
-    },
-    {
-      "typ": "obrazek",
-      "soubor": "kraken/ryzen_9700x_procesor.png",
-      "uprava": "beze změny",
-      "zapnuto": true,
-      "velikost_obsahu": 1.0
-    },
-    {
-      "typ": "oblouk",
-      "zapnuto": true,
-      "nadpis": "Kapalina",
-      "senzor": "@kapalina",
-      "min": 0,
-      "max": 60,
-      "jednotka": "°",
-      "delitel": 1,
-      "desetinna_mista": 0,
-      "velikost_obsahu": 1.0,
-      "velikost_textu": 1.1,
-      "oblouk_od": "#00ff00",
-      "oblouk_do": "#ff0000"
-    },
-    {
       "nadpis1": "CPU",
       "senzor1": "Takt jader",
       "min1": 0,
@@ -95,47 +46,58 @@
       "velikost_textu": 1.2,
       "kruh1_do": "#ff0080",
       "kruh2_od": "#00ff00",
-      "kruh2_do": "#ff8000",
+      "kruh2_do": "#ff0000",
       "kruh1_od": "#80ffff",
       "text_od": "#ffffff"
     },
     {
-      "typ": "hodiny",
-      "zapnuto": false,
-      "velikost_obsahu": 1.0,
-      "minuty_od": "#ffb74a",
-      "hodiny_od": "#6bec5e",
-      "hodiny_do": "#ffff00"
+      "typ": "hodiny_pod_sebou",
+      "datum": false,
+      "zapnuto": true,
+      "velikost_obsahu": 0.92,
+      "velikost_textu": 1.4,
+      "hodiny_od": "#00ff00",
+      "hodiny_do": "#ff0000",
+      "minuty_od": "#00ff00",
+      "minuty_do": "#ff0000",
+      "sekundy_od": "#00ff00",
+      "sekundy_do": "#ff0000"
     },
     {
-      "typ": "oblouk",
+      "typ": "obrazek",
+      "soubor": "kraken/ryzen7_odznak.png",
+      "uprava": "beze změny",
       "zapnuto": true,
+      "velikost_obsahu": 1.0,
+      "velikost_textu": 1.4
+    },
+    {
+      "nadpis": "Kapalina",
+      "senzor": "@kapalina",
+      "min": 0,
+      "max": 100,
+      "jednotka": "auto",
+      "delitel": 1,
+      "desetinna_mista": 0,
+      "typ": "segmenty",
+      "zapnuto": true,
+      "velikost_obsahu": 1.0,
+      "velikost_textu": 1.4
+    },
+    {
       "nadpis": "RAM",
       "senzor": "Použitá fyzická paměť",
       "min": 0,
-      "max": 32,
-      "jednotka": "Gb",
-      "delitel": 1024,
-      "desetinna_mista": 1,
-      "velikost_obsahu": 1.0,
-      "velikost_textu": 0.75,
-      "oblouk_do": "#ff1414"
-    },
-    {
-      "nadpis": "CPU",
-      "senzor": "Pouzdro CPU (průměr)",
-      "min": 1,
       "max": 100,
-      "jednotka": "°",
-      "delitel": 1,
-      "desetinna_mista": 0,
-      "typ": "graf",
-      "delka_s": 120,
-      "zapnuto": false,
+      "jednotka": "",
+      "delitel": 1000,
+      "desetinna_mista": 1,
+      "typ": "segmenty",
+      "zapnuto": true,
       "velikost_obsahu": 1.0,
       "velikost_textu": 1.4,
-      "graf_do": "#ff0080",
-      "graf_od": "#00ff00"
+      "segmenty_od": "#00ff00",
+      "segmenty_do": "#0000ff"
     }
   ],
   "dvojite_odesilani": false,
@@ -397,7 +359,7 @@
       },
       {
         "x": 79,
-        "y": 58,
+        "y": 56,
         "w": 67,
         "h": 14,
         "popisek": "Up:",
@@ -415,18 +377,18 @@
         "typ": "text"
       },
       {
-        "x": 82,
-        "y": 78,
+        "x": 78,
+        "y": 75,
         "w": 80,
         "h": 9,
         "popisek": "Wifi:",
         "senzor": "@síť rychlost připojení",
-        "jednotka": "MB/s",
+        "jednotka": " MB/s",
         "delitel": 1,
         "desetinna_mista": 1,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Silkscreen",
+          "rodina": "Tiny5",
           "velikost": 8,
           "tucne": false
         },
@@ -510,18 +472,18 @@
         "typ": "text"
       },
       {
-        "x": 82,
-        "y": 85,
+        "x": 78,
+        "y": 82,
         "w": 80,
         "h": 9,
         "popisek": "Wifi:",
         "senzor": "@wifi signál",
-        "jednotka": "dB",
+        "jednotka": " dB",
         "delitel": 1,
         "desetinna_mista": 1,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Silkscreen",
+          "rodina": "Tiny5",
           "velikost": 8,
           "tucne": false
         },
@@ -530,7 +492,7 @@
       },
       {
         "x": 79,
-        "y": 69,
+        "y": 65,
         "w": 67,
         "h": 14,
         "popisek": "Dw:",
@@ -625,8 +587,8 @@
         "typ": "prstenec"
       },
       {
-        "x": 64,
-        "y": 65,
+        "x": 66,
+        "y": 61,
         "w": 11,
         "h": 11,
         "nazev": "sit",
@@ -761,51 +723,6 @@
         },
         "barva": 1,
         "typ": "text"
-      },
-      {
-        "x": 9,
-        "y": 99,
-        "w": 99,
-        "h": 24,
-        "soubor": "amd_24.png",
-        "velikost": "puvodni",
-        "prah": 128,
-        "rastr": false,
-        "negativ": false,
-        "pozadi": false,
-        "barva": 1,
-        "typ": "obrazek",
-        "skryty": false
-      },
-      {
-        "x": 126,
-        "y": 94,
-        "w": 111,
-        "h": 16,
-        "soubor": "ryzen7_16.png",
-        "velikost": "puvodni",
-        "prah": 128,
-        "rastr": false,
-        "negativ": false,
-        "pozadi": false,
-        "barva": 1,
-        "typ": "obrazek",
-        "skryty": false
-      },
-      {
-        "x": 122,
-        "y": 110,
-        "w": 69,
-        "h": 18,
-        "soubor": "9700x_blok.png",
-        "velikost": "puvodni",
-        "prah": 128,
-        "rastr": false,
-        "negativ": false,
-        "pozadi": false,
-        "barva": 1,
-        "typ": "obrazek",
-        "skryty": false
       },
       {
         "x": 65,

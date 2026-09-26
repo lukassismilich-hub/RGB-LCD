@@ -17,6 +17,7 @@ import camservice
 import config
 from cooling import Cooling
 import hwinfo
+from led import LedWorker
 import mono
 import screens
 import systemdata
@@ -89,12 +90,13 @@ def update_history(history, cfg, data):
     return {k: [v for _, v in dq] for k, dq in history.items()}
 
 
-def write_state(data, cooling_state, hist, alpha_state):
+def write_state(data, cooling_state, hist, alpha_state, led_state):
     try:
         tmp = STATE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"cas": time.time(), "data": data, "chlazeni": cooling_state,
-                       "historie": hist, "alphacool": alpha_state}, f, ensure_ascii=False)
+                       "historie": hist, "alphacool": alpha_state, "led": led_state}, f,
+                      ensure_ascii=False)
         os.replace(tmp, STATE)
     except OSError:
         pass
@@ -122,6 +124,9 @@ def main():
     warned_hwinfo = False
     alpha = AlphacoolWorker()            # vlastni vlakno - chlazeni nezdrzuje
     alpha.start()
+    leds = LedWorker()                   # LED ventilatoru a desky, taky vlastni vlakno
+    leds.start()
+    leds.update(cfg["led"])
 
     try:
         while not STOP.is_set():
@@ -151,7 +156,8 @@ def main():
                 cooling.update(kraken, cfg["chlazeni"], data)
                 hist = update_history(history, cfg, data)
                 alpha.update(cfg["alphacool"], data, hist, cfg["obnova_s"])
-                write_state(data, cooling.state, hist, alpha.state)
+                leds.update(cfg["led"])
+                write_state(data, cooling.state, hist, alpha.state, leds.state)
                 if not any(not k.startswith("@") for k in data) and not warned_hwinfo:
                     log.warning("Z HWiNFO nejsou data - bezi HWiNFO se zapnutym Gadget reportingem?")
                     warned_hwinfo = True
@@ -196,6 +202,7 @@ def main():
             hand_over(kraken, cooling, cfg["chlazeni"], "aplikace konci - ZALOHA")
             kraken.close()
             alpha.stop(1.5)                  # az po predani chlazeni - to ma prednost
+            leds.stop(0.5)
         finally:
             ukonceni.DONE.set()
 

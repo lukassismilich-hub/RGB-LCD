@@ -16,7 +16,8 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 ## Hardware
 - Základní deska: Gigabyte B650M Aorus Elite (ARGB hlavičky, Gigabyte RGB Fusion 2.0 5702 Controller, IT5701, FW 4.0.30.2)
 - AIO: NZXT Kraken 240 RGB (RL-KR240-B1), FW 2.0.0, LCD 240×240 px, v liquidctl jako „NZXT Kraken 2023“
-- NZXT 2023 RGB Controller (FW 1.5.0), na něm 2× F140 RGB Core, hlásí 3 ARGB kanály
+- NZXT 2023 RGB Controller (FW 1.5.0): kanál led1 a led2 = po jednom F140 RGB Core (8 LED, LED 1 směrem k čelu PC), led3 volný. Rychlost F140 neřídí – F140 jsou zapojené do desky na Systém 1 a Systém 2 (SYS_FAN), na CPU_FAN je tachometr pumpy (odhad podle otáček).
+- Gigabyte RGB Fusion 2.0: jiné ventilátory (ne F140) na zóně led6. LED desky jinak řídí Gigabyte Control Center (GCC, úloha `\GCC`) a přepisuje je – `autostart_zapnout.bat` GCC vypíná. `initialize()` občas napoprvé vrátí nesmysl (AssertionError) → opakovat.
 - CPU Ryzen (teplota rychle kolísá → proto vyhlazování)
 
 ## Prostředí
@@ -40,6 +41,8 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - `prvky.py` – grafické prvky pro Alphacool (1 bit, bez vyhlazování, „šedá“ = rastr): text, velké číslo, hodiny, bar (plný/segmenty/rysky s maximem/rastr, 2. senzor = rozdělený), sloupce, graf (plocha/sloupce/mřížka), budík, prstenec ze segmentů, tlustý oblouk, ikony 11×11, čára, obdélník. Rozvržení = `config["alphacool"]["prvky"]` (volné x/y/w/h, pořadí = pořadí kreslení). Písma: rodina/velikost/tučně ze složky `fonts/` a z písem Windows (`font_index()`); na 1 bitu vypadají nejlépe Tahoma/Verdana/Segoe UI/Arial. Starý pevný přehled (`radky`/`graf`) se při načtení převede (`default_layout`).
 - `mono.py` – vstup pro vykreslení Alphacoolu (volá `prvky.render`), náhled v barvách modrého displeje, seznam senzorů grafů pro historii
 - `editor_alphacool.py` – editor rozvržení v okně nastavení: náhled 3×, výběr/posun/velikost myší, šipky, seznam prvků, vlastnosti vč. písma
+- `led.py` – LED přes liquidctl ve vlastním vlákně `LedWorker`: F140 (NZXT, režimy vč. „každá LED zvlášť“ = super-fixed, 8 barev) a zóny desky (Gigabyte, jen celá zóna: pevná/pulz/blikání/střídání). Nastaví se při startu, změně nastavení, po probuzení PC (skok hodin > 20 s) a po chybě za 30 s. `config["led"]`; barvy po LED (`barvy`) a barvy efektů (`barvy_efekt`) jsou zvlášť. `covering-marquee` vynechán (v liquidctl 1.16 chybí rychlost), `double-flash` + `slower` má v liquidctl překlep.
+- `editor_led.py` – záložka LED v okně nastavení (kruh s 8 LED, režimy, zóny desky)
 - `config.py` – výchozí nastavení, načítání/ukládání, migrace starého formátu
 - `config.json` – uživatelské nastavení (změny se načtou za běhu podle mtime, bez restartu)
 - `nastaveni.py` – okno nastavení (tkinter): obrazovky, editor, obecné, živý náhled 240×240, záložka Chlazení
@@ -76,7 +79,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - Nikdy nespouštěj test, který nechá pumpu nebo ventilátory na nízkém fixním výkonu bez pojistky. Před každým testem, který mění chlazení, se uživatele zeptej.
 
 ## Co zbývá
-1. **Ovládání LED** – F140 RGB Core přes NZXT 2023 RGB Controller (liquidctl: `led1`–`led3`, `sync`), ARGB na desce přes Gigabyte RGB Fusion 2.0 (`led1`–`led8`). Kraken 2023 (PID 0x300E) nemá v liquidctl 1.16 žádné LED kanály (`_COLOR_CHANNELS_KRAKEN2023 = {}`). Cíl: jednotné ovládání z aplikace a okna nastavení.
+1. ~~Ovládání LED~~ – hotovo (`led.py`, záložka LED). Kraken 2023 (PID 0x300E) nemá v liquidctl 1.16 žádné LED kanály. Otevřené: rychlost F140 na SYS_FAN desky – liquidctl ji neumí (BIOS Smart Fan 6, nebo LibreHardwareMonitor + ovladač jádra).
 2. ~~Automatické spuštění po startu Windows~~ – hotovo (`autostart_zapnout.bat`). Bez ikony v liště jde aplikaci ukončit jen přes `ukoncit.bat` (zabití ve Správci úloh přeskočí zálohu chlazení!).
 3. **Ikona v systémové liště.**
 

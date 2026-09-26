@@ -61,13 +61,13 @@ def load_data():
             st = json.load(f)
         if time.time() - st.get("cas", 0) < 10:
             return (st["data"], True, st.get("chlazeni", {}), st.get("historie", {}),
-                    st.get("alphacool", {}))
+                    st.get("alphacool", {}), st.get("led", {}))
     except (OSError, ValueError, KeyError):
         pass
     import systemdata
     data = hwinfo.read_full()
     data.update(systemdata.read())
-    return data, False, {}, {}, {}
+    return data, False, {}, {}, {}, {}
 
 
 class App(tk.Tk):
@@ -83,7 +83,7 @@ class App(tk.Tk):
         self.minsize(1120, 720)
         self.cfg = config.load()
         self.saved = copy.deepcopy(self.cfg)
-        self.data, self.running, self.cstate, self.hist, self.astate = load_data()
+        self.data, self.running, self.cstate, self.hist, self.astate, self.lstate = load_data()
         self.sel = 0
         self._preview_img = None
         self._building = False
@@ -97,12 +97,16 @@ class App(tk.Tk):
         self.alpha_page = ttk.Frame(self.pages)
         self.pages.add(self.kraken_page, text="  Kraken (LCD a chlazení)  ")
         self.pages.add(self.alpha_page, text="  Alphacool LCD  ")
+        self.led_page = ttk.Frame(self.pages)
+        self.pages.add(self.led_page, text="  LED (ventilátory a deska)  ")
         self.kraken_page.columnconfigure(1, weight=1)
         self.kraken_page.rowconfigure(0, weight=1)
         self._build_list()
         self._build_editor()
         self._build_right()
         self._build_alphacool()
+        from editor_led import LedEditor
+        self.leds = LedEditor(self.led_page, self)
         self._build_bottom()
         self.pages.select(App.last_page)
         self.pages.bind("<<NotebookTabChanged>>",
@@ -627,11 +631,12 @@ class App(tk.Tk):
         return scr, data, hist, sample
 
     def _tick(self):
-        self.data, self.running, self.cstate, self.hist, self.astate = load_data()
+        self.data, self.running, self.cstate, self.hist, self.astate, self.lstate = load_data()
         self._update_preview()
         self._update_cool_status()
         self._draw_curves()
         self._update_alpha()
+        self.leds.refresh()
         self.after(1000, self._tick)
 
     # ---------------------------------------------------------- ulozeni

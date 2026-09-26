@@ -2,8 +2,9 @@
 #
 #   autostart_zapnout.bat  -> naplanovana uloha "RGB-LCD" (pri prihlaseni, nejvyssi prava,
 #                             pythonw bez okna) + vypnuti automatickeho spusteni NZXT CAM
+#                             + vypnuti Gigabyte Control Center (uloha \GCC, prepisuje LED desky)
 #   autostart_vypnout.bat  -> ukonci aplikaci (chlazeni prevezme Kraken), smaze ulohu
-#                             a automaticke spusteni NZXT CAM zase zapne
+#                             a automaticke spusteni NZXT CAM a Gigabyte Control Center zase zapne
 #
 # Nejvyssi prava jsou potreba kvuli zastaveni sluzby CAMService. Diky naplanovane uloze
 # se pri kazdem startu nepta UAC - jen jednou pri instalaci.
@@ -75,6 +76,23 @@ function Set-CamAutostart([bool]$enabled) {
     else { Write-Host '  Automaticke spusteni NZXT CAM vypnuto (jde zapnout ve Spravci uloh > Po spusteni).' }
 }
 
+function Set-GccAutostart([bool]$enabled) {
+    # Gigabyte Control Center ridi LED desky a prepisuje nastaveni aplikace - spousti ho uloha \GCC
+    $task = Get-ScheduledTask -TaskName 'GCC' -TaskPath '\' -ErrorAction SilentlyContinue
+    if (-not $task) {
+        Write-Host '  Gigabyte Control Center nema naplanovanou ulohu - neni co menit.'
+        return
+    }
+    if ($enabled) {
+        Enable-ScheduledTask -TaskName 'GCC' -TaskPath '\' | Out-Null
+        Write-Host '  Automaticke spusteni Gigabyte Control Center zapnuto.'
+    } else {
+        Disable-ScheduledTask -TaskName 'GCC' -TaskPath '\' | Out-Null
+        Get-Process -Name 'GCC' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Host '  Gigabyte Control Center ukoncen a jeho automaticke spusteni vypnuto (LED desky ridi aplikace).'
+    }
+}
+
 try {
     # registr prave toho uzivatele, pro ktereho se autostart nastavuje (i kdyz UAC potvrdil jiny ucet)
     $sid = (New-Object Security.Principal.NTAccount($Uzivatel)).Translate([Security.Principal.SecurityIdentifier]).Value
@@ -102,6 +120,7 @@ try {
         Write-Host "  Naplanovana uloha '$TaskName' vytvorena (spusti se 10 s po prihlaseni)."
 
         Set-CamAutostart $false
+        Set-GccAutostart $false
         $camApp = Get-Process -Name 'NZXT CAM' -ErrorAction SilentlyContinue
         if ($camApp) {
             Write-Host '  POZOR: NZXT CAM prave bezi - zavri ho (i v oznamovaci oblasti), jinak bude aplikaci prekazet.' -ForegroundColor Yellow
@@ -133,6 +152,7 @@ try {
             Write-Host "  Naplanovana uloha '$TaskName' neexistuje."
         }
         Set-CamAutostart $true
+        Set-GccAutostart $true
     }
     Write-Host ''
     Write-Host 'Hotovo.' -ForegroundColor Green

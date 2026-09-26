@@ -3,6 +3,7 @@
 import json
 import os
 
+import led
 import prvky
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -67,6 +68,8 @@ DEFAULTS = {
         "inverze": False,
         "prvky": prvky.default_layout(),
     },
+    # LED: ventilatory F140 (NZXT RGB Controller) a zony zakladni desky (Gigabyte RGB Fusion)
+    "led": led.default_config(),
 }
 
 
@@ -107,6 +110,12 @@ def load():
         a["prvky"] = prvky.default_layout(a.pop("radky"), a.pop("graf", {}))
     for k, v in DEFAULTS["alphacool"].items():         # doplneni novych klicu Alphacoolu
         a.setdefault(k, json.loads(json.dumps(v)))
+    lc = cfg["led"]
+    for k, v in DEFAULTS["led"].items():               # doplneni novych klicu LED
+        lc.setdefault(k, json.loads(json.dumps(v)))
+    for group in ("nzxt", "fusion"):
+        for ch, v in DEFAULTS["led"][group].items():
+            lc[group].setdefault(ch, json.loads(json.dumps(v)))
     for scr in cfg["obrazovky"]:                        # stare jednobarevne bary -> prechod od/do
         for n in ("1", "2"):
             if "barva" + n in scr:

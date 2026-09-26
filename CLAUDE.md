@@ -49,7 +49,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - `config.json` – uživatelské nastavení (změny se načtou za běhu podle mtime, bez restartu)
 - `nastaveni.py` – okno nastavení (tkinter): obrazovky, editor, obecné, živý náhled 240×240, záložka Chlazení
 - `stav.json` – živá data pro okno nastavení
-- `fonts/` – Montserrat (Light, SemiBold, Bold, ExtraBold, Black) pro Kraken; pixelová písma pro Alphacool z Google Fonts (licence OFL, `OFL-*.txt`): Silkscreen (8/16 px, jen velká písmena, CHYBÍ ě č ř ů ď ť ň), Press Start 2P (8/16/24), VT323 (16/32), Tiny5 (10) – pixelová písma jsou ostrá jen v násobcích nativní velikosti
+- `fonts/` – Montserrat (Light, SemiBold, Bold, ExtraBold, Black) pro Kraken; pixelová písma pro Alphacool z Google Fonts (licence OFL, `OFL-*.txt`): Silkscreen (8/16 px, jen velká písmena, CHYBÍ ě č ř ů ď ť ň), Press Start 2P (8/16/24), VT323 (16/32), Tiny5 (10); s češtinou: Departure Mono (11), Terminus TTF (12/14/16/…, i tučné; 12 = verzálky 8 px), Pixelify Sans, Jersey 10 (20), Micro 5 (11, nejmenší), Pixel Operator (16, i tučné; varianty 8 / HB 8 / Mono 8 mají háčky jen částečně, licence CC0); bez češtiny Spleen 5×8 (`.otb`, jen 8 px, BSD) – pixelová písma jsou ostrá jen v násobcích nativní velikosti; bitmapové `.otb` se v jiné velikosti vykreslí ve své
 - `spustit.bat`, `nastaveni.bat`
 
 ## Vyřešené problémy – neřeš znovu

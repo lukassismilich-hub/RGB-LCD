@@ -53,15 +53,20 @@ def font_index():
     idx = {}
     seen = set()
     for d in _font_dirs():
-        for ext in ("ttf", "otf", "ttc"):
+        for ext in ("ttf", "otf", "ttc", "otb"):
             for path in glob.glob(os.path.join(d, f"*.{ext}")):
                 key = os.path.normcase(path)
                 if key in seen:
                     continue
                 seen.add(key)
-                try:
-                    fam, style = ImageFont.truetype(path, 10).getname()
-                except Exception:
+                fam = None
+                for size in (10, 8, 12, 16):          # bitmapova pisma (.otb) maji jen svou velikost
+                    try:
+                        fam, style = ImageFont.truetype(path, size).getname()
+                        break
+                    except Exception:
+                        continue
+                if fam is None:
                     continue
                 s = (style or "").lower()
                 slot = idx.setdefault(fam, {})
@@ -97,7 +102,17 @@ def get_font(spec):
             _font_cache[k] = ImageFont.load_default()
         else:
             path = slot.get("bold") if bold and slot.get("bold") else slot["regular"]
-            _font_cache[k] = ImageFont.truetype(path, px)
+            try:
+                _font_cache[k] = ImageFont.truetype(path, px)
+            except OSError:                        # bitmapove pismo (.otb) jen ve sve velikosti
+                for size in (8, 12, 16, 24, 32):
+                    try:
+                        _font_cache[k] = ImageFont.truetype(path, size)
+                        break
+                    except OSError:
+                        continue
+                else:
+                    _font_cache[k] = ImageFont.load_default()
     return _font_cache[k]
 
 

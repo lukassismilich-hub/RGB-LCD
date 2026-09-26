@@ -752,5 +752,109 @@
         "typ": "obrazek"
       }
     ]
+  },
+  "led": {
+    "zapnuto": true,
+    "nzxt_stejne": true,
+    "nzxt": {
+      "led1": {
+        "rezim": "rainbow-pulse",
+        "barvy": [
+          "#ff0000",
+          "#ff8000",
+          "#ffff00",
+          "#00ff00",
+          "#00ffff",
+          "#0040ff",
+          "#8000ff",
+          "#ff00c0"
+        ],
+        "barvy_efekt": [
+          "#ff0000",
+          "#0040ff"
+        ],
+        "rychlost": "slowest",
+        "obraceny_smer": false,
+        "nazev": "F140 (1)"
+      },
+      "led2": {
+        "rezim": "super-fixed",
+        "barvy": [
+          "#ff0000",
+          "#ff8000",
+          "#ffff00",
+          "#00ff00",
+          "#00ffff",
+          "#0040ff",
+          "#8000ff",
+          "#ff00c0"
+        ],
+        "barvy_efekt": [
+          "#ff0000",
+          "#0040ff"
+        ],
+        "rychlost": "normal",
+        "obraceny_smer": false,
+        "nazev": "F140 (2)"
+      },
+      "led3": {
+        "nazev": "nepřipojeno",
+        "rezim": "off",
+        "barvy": [
+          "#ffffff"
+        ],
+        "rychlost": "normal"
+      }
+    },
+    "fusion": {
+      "led1": {
+        "nazev": "zóna 1",
+        "rezim": "off",
+        "barva": "#ffffff",
+        "rychlost": "normal"
+      },
+      "led2": {
+        "nazev": "zóna 2",
+        "rezim": "off",
+        "barva": "#ffffff",
+        "rychlost": "normal"
+      },
+      "led3": {
+        "nazev": "zóna 3",
+        "rezim": "off",
+        "barva": "#ffffff",
+        "rychlost": "normal"
+      },
+      "led4": {
+        "nazev": "zóna 4",
+        "rezim": "off",
+        "barva": "#ffffff",
+        "rychlost": "normal"
+      },
+      "led5": {
+        "nazev": "zóna 5",
+        "rezim": "fixed",
+        "barva": "#00ff40",
+        "rychlost": "normal"
+      },
+      "led6": {
+        "nazev": "ventilátory na desce",
+        "rezim": "double-flash",
+        "barva": "#8000ff",
+        "rychlost": "normal"
+      },
+      "led7": {
+        "nazev": "zóna 7",
+        "rezim": "off",
+        "barva": "#ffffff",
+        "rychlost": "normal"
+      },
+      "led8": {
+        "nazev": "zóna 8",
+        "rezim": "off",
+        "barva": "#ffffff",
+        "rychlost": "normal"
+      }
+    }
   }
 }

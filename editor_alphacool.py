@@ -100,7 +100,19 @@ class AlphaEditor:
 
     @property
     def items(self):
-        return self.acfg.setdefault("prvky", [])
+        return self.acfg.setdefault(prvky.layout_key(self.acfg), [])
+
+    @property
+    def scale(self):
+        return 2 if prvky.portrait(self.acfg) else SCALE       # na vysku mensi, at se okno vejde
+
+    @property
+    def _cw(self):
+        return prvky.canvas_size(self.acfg)[0]
+
+    @property
+    def _ch(self):
+        return prvky.canvas_size(self.acfg)[1]
 
     def _build_display(self, f):
         disp = ttk.LabelFrame(f, text="Displej")
@@ -115,13 +127,37 @@ class AlphaEditor:
                 self.refresh()
             ttk.Checkbutton(disp, text=text, variable=v, command=on).grid(
                 row=0, column=col, sticky="w", padx=(6, 16), pady=(4, 2))
+        rf = ttk.Frame(disp)
+        rf.grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 2))
+        ttk.Label(rf, text="Otočení displeje").pack(side="left")
+        names = list(prvky.ROTATIONS.values())
+        rv = tk.StringVar(value=prvky.ROTATIONS[prvky.rotation(self.acfg)])
+        ttk.Combobox(rf, textvariable=rv, values=names, state="readonly", width=32).pack(side="left", padx=6)
+        rv.trace_add("write", lambda *a: self._set_rotation(
+            next(k for k, v in prvky.ROTATIONS.items() if v == rv.get())))
         self.status = ttk.Label(disp, font=("Segoe UI", 10, "bold"))
-        self.status.grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 6))
+        self.status.grid(row=2, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 6))
+
+    def _set_rotation(self, rot):
+        """Na sirku a na vysku maji kazde sve rozvrzeni; na vysku se poprve vytvori vychozi."""
+        self.acfg["otoceni"] = rot
+        if prvky.portrait(self.acfg) and not self.acfg.get("prvky_na_vysku"):
+            self.acfg["prvky_na_vysku"] = prvky.default_portrait_layout()
+        self.sel = None
+        self._resize_canvas()
+        self._refresh_list()
+        self._build_props()
+        self.refresh()
+
+    def _resize_canvas(self):
+        self.canvas.config(width=self._cw * self.scale, height=self._ch * self.scale)
+        self.canvas_box.config(text=f"Rozvržení {self._cw}×{self._ch} (zvětšeno {self.scale}×)")
 
     def _build_canvas(self, f):
-        box = ttk.LabelFrame(f, text="Rozvržení 240×128 (zvětšeno 3×)")
+        box = ttk.LabelFrame(f, text=f"Rozvržení {self._cw}×{self._ch} (zvětšeno {self.scale}×)")
         box.grid(row=1, column=0, sticky="w")
-        W, H = mono.WIDTH * SCALE, mono.HEIGHT * SCALE
+        self.canvas_box = box
+        W, H = self._cw * self.scale, self._ch * self.scale
         self.canvas = tk.Canvas(box, width=W, height=H, bg="black", highlightthickness=1,
                                 highlightbackground="#888", cursor="crosshair")
         self.canvas.pack(padx=6, pady=6)
@@ -186,7 +222,7 @@ class AlphaEditor:
         p = prvky.new(typ)
         if self.sel is not None:                        # kousek vedle vybraneho
             q = self.items[self.sel]
-            p["x"], p["y"] = min(q["x"] + 6, mono.WIDTH - 8), min(q["y"] + 6, mono.HEIGHT - 8)
+            p["x"], p["y"] = min(q["x"] + 6, self._cw - 8), min(q["y"] + 6, self._ch - 8)
         self.items.append(p)
         self.sel = len(self.items) - 1
         self._changed(rebuild=True)
@@ -195,7 +231,7 @@ class AlphaEditor:
         if self.sel is None:
             return
         p = copy.deepcopy(self.items[self.sel])
-        p["x"], p["y"] = min(p["x"] + 4, mono.WIDTH - 4), min(p["y"] + 4, mono.HEIGHT - 4)
+        p["x"], p["y"] = min(p["x"] + 4, self._cw - 4), min(p["y"] + 4, self._ch - 4)
         self.items.insert(self.sel + 1, p)
         self.sel += 1
         self._changed(rebuild=True)
@@ -235,10 +271,10 @@ class AlphaEditor:
 
     def _on_press(self, e):
         self.canvas.focus_set()
-        x, y = e.x / SCALE, e.y / SCALE
+        x, y = e.x / self.scale, e.y / self.scale
         if self.sel is not None:                        # ctverecek pro zmenu velikosti
             p = self.items[self.sel]
-            hx, hy = (p["x"] + p["w"]) * SCALE, (p["y"] + p["h"]) * SCALE
+            hx, hy = (p["x"] + p["w"]) * self.scale, (p["y"] + p["h"]) * self.scale
             if abs(e.x - hx) <= HANDLE + 2 and abs(e.y - hy) <= HANDLE + 2:
                 self._drag = ("size", e.x, e.y, dict(p))
                 return
@@ -252,14 +288,14 @@ class AlphaEditor:
         if not self._drag or self.sel is None:
             return
         mode, sx, sy, orig = self._drag
-        dx, dy = round((e.x - sx) / SCALE), round((e.y - sy) / SCALE)
+        dx, dy = round((e.x - sx) / self.scale), round((e.y - sy) / self.scale)
         p = self.items[self.sel]
         if mode == "move":
-            p["x"] = max(-p["w"] + 2, min(mono.WIDTH - 2, orig["x"] + dx))
-            p["y"] = max(-p["h"] + 2, min(mono.HEIGHT - 2, orig["y"] + dy))
+            p["x"] = max(-p["w"] + 2, min(self._cw - 2, orig["x"] + dx))
+            p["y"] = max(-p["h"] + 2, min(self._ch - 2, orig["y"] + dy))
         else:
-            p["w"] = max(1, min(mono.WIDTH * 2, orig["w"] + dx))
-            p["h"] = max(1, min(mono.HEIGHT * 2, orig["h"] + dy))
+            p["w"] = max(1, min(self._cw * 2, orig["w"] + dx))
+            p["h"] = max(1, min(self._ch * 2, orig["h"] + dy))
         self._changed(geometry_only=True)
 
     def _on_key(self, key, e):
@@ -280,8 +316,8 @@ class AlphaEditor:
         if self.sel is None or self.sel >= len(self.items):
             return
         p = self.items[self.sel]
-        x0, y0 = p["x"] * SCALE, p["y"] * SCALE
-        x1, y1 = (p["x"] + p["w"]) * SCALE, (p["y"] + p["h"]) * SCALE
+        x0, y0 = p["x"] * self.scale, p["y"] * self.scale
+        x1, y1 = (p["x"] + p["w"]) * self.scale, (p["y"] + p["h"]) * self.scale
         self.canvas.create_rectangle(x0 - 1, y0 - 1, x1, y1, outline=SEL_COLOR, dash=(4, 2), tags="sel")
         self.canvas.create_rectangle(x1 - HANDLE, y1 - HANDLE, x1 + HANDLE, y1 + HANDLE,
                                      fill=SEL_COLOR, outline="black", tags="sel")
@@ -293,7 +329,7 @@ class AlphaEditor:
         except Exception as e:
             self.status.config(text=f"Chyba náhledu: {e}", foreground="#c33")
             return
-        self._img = ImageTk.PhotoImage(mono.preview(img, SCALE))
+        self._img = ImageTk.PhotoImage(mono.preview(img, self.scale))
         self.canvas.itemconfig(self._bg, image=self._img)
         self._draw_selection()
         self._update_status()

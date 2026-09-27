@@ -66,7 +66,9 @@ DEFAULTS = {
         "zapnuto": True,
         "podsviceni": True,
         "inverze": False,
+        "otoceni": 0,                                    # 0 / 90 / 180 / 270 (prvky.ROTATIONS)
         "prvky": prvky.default_layout(),
+        "prvky_na_vysku": prvky.default_portrait_layout(),
     },
     # LED: ventilatory F140 (NZXT RGB Controller) a zony zakladni desky (Gigabyte RGB Fusion)
     "led": led.default_config(),

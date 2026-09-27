@@ -152,7 +152,7 @@ class AlphacoolWorker(threading.Thread):
                     last = None
                     self._set_state("pripojen", "displej pripojen (240x128)")
                 self.disp.backlight(acfg.get("podsviceni", True))
-                img = mono.render(acfg, data, hist)
+                img = mono.to_panel(mono.render(acfg, data, hist), acfg)
                 b = img.tobytes()
                 if b != last:
                     self.disp.show(img)

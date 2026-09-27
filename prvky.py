@@ -1,6 +1,7 @@
 # prvky.py - graficke prvky pro monochromaticky displej Alphacool 240x128 (1 bit)
 #
 # Rozvrzeni = seznam prvku v config["alphacool"]["prvky"], kresli se v tom poradi
+# (na vysku - otoceni 90/270 - ma vlastni rozvrzeni 128x240 v "prvky_na_vysku")
 # (pozdejsi prvek je navrchu). Kazdy prvek ma typ, polohu x, y a velikost w, h
 # v bodech displeje. Kresli se bez vyhlazovani, "sede" plochy jsou rastr.
 #
@@ -28,6 +29,41 @@ from datetime import datetime
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 WIDTH, HEIGHT = 240, 128
+# otoceni = jak je displej namontovany: 90 = otoceny doprava (po smeru hodin), 270 = doleva
+ROTATIONS = {0: "0° (na šířku)", 90: "90° – na výšku, otočený doprava", 180: "180° (vzhůru nohama)",
+             270: "270° – na výšku, otočený doleva"}
+
+
+def rotation(acfg):
+    try:
+        r = int(acfg.get("otoceni", 0)) % 360
+    except (TypeError, ValueError):
+        return 0
+    return r if r in ROTATIONS else 0
+
+
+def portrait(acfg):
+    return rotation(acfg) in (90, 270)
+
+
+def layout_key(acfg):
+    return "prvky_na_vysku" if portrait(acfg) else "prvky"
+
+
+def items(acfg):
+    """Prvky rozvrzeni pro aktualni otoceni."""
+    return acfg.get(layout_key(acfg), [])
+
+
+def canvas_size(acfg):
+    """Velikost kresleni tak, jak displej vidi uzivatel (na vysku 128x240)."""
+    return (HEIGHT, WIDTH) if portrait(acfg) else (WIDTH, HEIGHT)
+
+
+def to_panel(img, acfg):
+    """Nakresleny obrazek -> obrazek 240x128 v orientaci panelu."""
+    r = rotation(acfg)
+    return img.rotate(r, expand=True) if r else img
 BASE = os.path.dirname(os.path.abspath(__file__))
 MISSING = "–"
 DAYS = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
@@ -582,11 +618,12 @@ DRAW = {"obrazek": draw_image, "text": draw_text, "cislo": draw_number, "hodiny"
 
 
 def render(acfg, data, history=None, now=None):
-    """acfg = config["alphacool"] -> obrazek 240x128 v rezimu "1" (1 = rozsviceny bod)."""
-    img = Image.new("1", (WIDTH, HEIGHT), 0)
+    """acfg = config["alphacool"] -> obrazek v rezimu "1" (1 = rozsviceny bod) tak, jak ho vidi
+    uzivatel: 240x128, na vysku 128x240 (pro displej ho otoci to_panel)."""
+    img = Image.new("1", canvas_size(acfg), 0)
     d = ImageDraw.Draw(img)
     now = now or datetime.now()
-    for p in acfg.get("prvky", []):
+    for p in items(acfg):
         if p.get("skryty"):
             continue
         try:
@@ -665,6 +702,27 @@ OLD_ROWS = [
 ]
 OLD_GRAPH = {"popisek": "CPU", "senzor": "CPU (Tctl/Tdie)", "min": 30, "max": 95, "jednotka": "°",
              "delitel": 1, "desetinna_mista": 0, "delka_s": 120}
+
+
+def default_portrait_layout():
+    """Vychozi rozvrzeni na vysku (128x240): hodiny, CPU a GPU velkym cislem s barem, RAM, graf."""
+    out = [
+        dict(new("obdelnik"), x=0, y=0, w=128, h=15, vypln="plna"),
+        dict(new("hodiny"), x=0, y=0, w=128, h=15, format="HH:MM:SS", zarovnani="stred",
+             pismo=_f(12, True), barva=0),
+    ]
+    for i, (lbl, sensor) in enumerate((("CPU", "CPU (Tctl/Tdie)"), ("GPU", "Teplota GPU"))):
+        y = 20 + i * 62
+        out.append(dict(new("cislo"), x=2, y=y, w=124, h=44, senzor=sensor, popisek=lbl))
+        out.append(dict(new("bar"), x=4, y=y + 47, w=120, h=9, styl="segmenty", senzor=sensor))
+    out += [
+        dict(new("text"), x=2, y=146, w=124, h=14, popisek="RAM", senzor="Použitá fyzická paměť",
+             jednotka="G", delitel=1024, desetinna_mista=1, pismo=_f(12, True)),
+        dict(new("bar"), x=4, y=162, w=120, h=9, styl="plny", senzor="Použitá fyzická paměť", min=0, max=32,
+             delitel=1024),
+        dict(new("graf"), x=0, y=180, w=128, h=60, senzor="CPU (Tctl/Tdie)", min=30, max=95),
+    ]
+    return out
 
 
 def default_layout(rows=None, graph=None):

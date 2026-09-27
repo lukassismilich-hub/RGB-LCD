@@ -854,6 +854,152 @@
         "delitel": 1,
         "typ": "budik"
       }
+    ],
+    "otoceni": 0,
+    "prvky_na_vysku": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 15,
+        "vypln": "plna",
+        "dvojity": false,
+        "barva": 1,
+        "typ": "obdelnik"
+      },
+      {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 15,
+        "format": "HH:MM:SS",
+        "zarovnani": "stred",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 0,
+        "typ": "hodiny"
+      },
+      {
+        "x": 2,
+        "y": 20,
+        "w": 124,
+        "h": 44,
+        "senzor": "CPU (Tctl/Tdie)",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "popisek": "CPU",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 32,
+          "tucne": true
+        },
+        "pismo_male": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "cislo"
+      },
+      {
+        "x": 4,
+        "y": 67,
+        "w": 120,
+        "h": 9,
+        "styl": "segmenty",
+        "senzor2": "",
+        "senzor": "CPU (Tctl/Tdie)",
+        "min": 0,
+        "max": 100,
+        "delitel": 1,
+        "typ": "bar"
+      },
+      {
+        "x": 2,
+        "y": 82,
+        "w": 124,
+        "h": 44,
+        "senzor": "Teplota GPU",
+        "jednotka": "°C",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "popisek": "GPU",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 32,
+          "tucne": true
+        },
+        "pismo_male": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "cislo"
+      },
+      {
+        "x": 4,
+        "y": 129,
+        "w": 120,
+        "h": 9,
+        "styl": "segmenty",
+        "senzor2": "",
+        "senzor": "Teplota GPU",
+        "min": 0,
+        "max": 100,
+        "delitel": 1,
+        "typ": "bar"
+      },
+      {
+        "x": 2,
+        "y": 146,
+        "w": 124,
+        "h": 14,
+        "popisek": "RAM",
+        "senzor": "Použitá fyzická paměť",
+        "jednotka": "G",
+        "delitel": 1024,
+        "desetinna_mista": 1,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "text"
+      },
+      {
+        "x": 4,
+        "y": 162,
+        "w": 120,
+        "h": 9,
+        "styl": "plny",
+        "senzor2": "",
+        "senzor": "Použitá fyzická paměť",
+        "min": 0,
+        "max": 32,
+        "delitel": 1024,
+        "typ": "bar"
+      },
+      {
+        "x": 0,
+        "y": 180,
+        "w": 128,
+        "h": 60,
+        "styl": "plocha",
+        "senzor": "CPU (Tctl/Tdie)",
+        "min": 30,
+        "max": 95,
+        "delitel": 1,
+        "delka_s": 120,
+        "ramecek": true,
+        "typ": "graf"
+      }
     ]
   },
   "led": {

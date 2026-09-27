@@ -1,7 +1,7 @@
 {
   "jas": 100,
   "velikost_obsahu": 1.0,
-  "gama_grafiky": 0.8,
+  "gama_grafiky": 1.0,
   "rotace_s": 5.0,
   "obnova_s": 0.25,
   "auto_obrazovky": false,
@@ -9,7 +9,7 @@
   "obrazovky": [
     {
       "typ": "dva_bary",
-      "zapnuto": true,
+      "zapnuto": false,
       "nadpis1": "CPU",
       "senzor1": "CPU (Tctl/Tdie)",
       "min1": 0,
@@ -22,9 +22,9 @@
       "delitel": 1,
       "desetinna_mista": 0,
       "bar1_od": "#3cff3c",
-      "bar1_do": "#ff0000",
-      "bar2_od": "#00ffff",
-      "bar2_do": "#0000a0",
+      "bar1_do": "#ff0080",
+      "bar2_od": "#0080ff",
+      "bar2_do": "#ff0000",
       "velikost_obsahu": 1.0,
       "velikost_textu": 1.1
     },
@@ -34,16 +34,16 @@
       "min1": 0,
       "max1": 5.6,
       "nadpis2": "GPU",
-      "senzor2": "Takt GPU",
+      "senzor2": "Takt GPU (naměřený)",
       "min2": 0,
-      "max2": 2.8,
+      "max2": 2.9,
       "jednotka": "",
       "delitel": 1000,
       "desetinna_mista": 1,
       "typ": "dva_kruhy",
       "zapnuto": true,
       "velikost_obsahu": 1.0,
-      "velikost_textu": 1.2,
+      "velikost_textu": 1.3,
       "kruh1_do": "#ff0080",
       "kruh2_od": "#00ff00",
       "kruh2_do": "#ff0000",
@@ -65,7 +65,7 @@
     },
     {
       "typ": "obrazek",
-      "soubor": "kraken/ryzen7_odznak.png",
+      "soubor": "predlohy/ryzen7_odznak.png",
       "uprava": "beze změny",
       "zapnuto": true,
       "velikost_obsahu": 1.0,
@@ -97,7 +97,27 @@
       "velikost_obsahu": 1.0,
       "velikost_textu": 1.4,
       "segmenty_od": "#00ff00",
-      "segmenty_do": "#0000ff"
+      "segmenty_do": "#8000ff"
+    },
+    {
+      "nadpis1": "CPU",
+      "senzor1": "CPU (Tctl/Tdie)",
+      "min1": 0,
+      "max1": 100,
+      "nadpis2": "GPU",
+      "senzor2": "Teplota GPU",
+      "min2": 0,
+      "max2": 100,
+      "jednotka": "auto",
+      "delitel": 1,
+      "desetinna_mista": 0,
+      "typ": "dva_oblouky",
+      "zapnuto": true,
+      "velikost_obsahu": 1.0,
+      "velikost_textu": 1.4,
+      "oblouk1_od": "#80ff80",
+      "oblouk1_do": "#ff0080",
+      "oblouk2_do": "#ff0000"
     }
   ],
   "dvojite_odesilani": false,
@@ -148,7 +168,7 @@
         ],
         [
           90,
-          75
+          80
         ],
         [
           95,
@@ -229,7 +249,7 @@
         "format": "HH:MM:SS",
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
           "tucne": true
         },
@@ -244,7 +264,7 @@
         "format": "den datum",
         "zarovnani": "vpravo",
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
           "tucne": true
         },
@@ -293,9 +313,9 @@
         "desetinna_mista": 0,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "barva": 1,
         "typ": "text"
@@ -350,9 +370,9 @@
         "desetinna_mista": 0,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "barva": 1,
         "typ": "text"
@@ -369,7 +389,7 @@
         "desetinna_mista": 1,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator Mono 8",
           "velikost": 8,
           "tucne": false
         },
@@ -377,8 +397,8 @@
         "typ": "text"
       },
       {
-        "x": 78,
-        "y": 75,
+        "x": 80,
+        "y": 77,
         "w": 80,
         "h": 9,
         "popisek": "Wifi:",
@@ -388,7 +408,7 @@
         "desetinna_mista": 1,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Tiny5",
+          "rodina": "Spleen",
           "velikost": 8,
           "tucne": false
         },
@@ -472,8 +492,8 @@
         "typ": "text"
       },
       {
-        "x": 78,
-        "y": 82,
+        "x": 80,
+        "y": 86,
         "w": 80,
         "h": 9,
         "popisek": "Wifi:",
@@ -483,7 +503,7 @@
         "desetinna_mista": 1,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Terminus (TTF)",
+          "rodina": "Spleen",
           "velikost": 8,
           "tucne": false
         },
@@ -502,7 +522,7 @@
         "desetinna_mista": 1,
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator Mono 8",
           "velikost": 8,
           "tucne": false
         },
@@ -542,14 +562,14 @@
         "uhel": 270,
         "tloustka": 6,
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "pismo_male": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "senzor": "Celkové vytížení CPU",
         "min": 0,
@@ -571,14 +591,14 @@
         "uhel": 270,
         "tloustka": 6,
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "pismo_male": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "senzor": "Zatížení jádra GPU",
         "min": 0,
@@ -641,16 +661,16 @@
         "desetinna_mista": 1,
         "zarovnani": "stred",
         "pismo": {
-          "rodina": "Press Start 2P",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "barva": 1,
         "typ": "text"
       },
       {
         "x": 14,
-        "y": 73,
+        "y": 78,
         "w": 35,
         "h": 13,
         "popisek": "",
@@ -660,7 +680,7 @@
         "desetinna_mista": 1,
         "zarovnani": "stred",
         "pismo": {
-          "rodina": "Silkscreen",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
           "tucne": false
         },
@@ -668,56 +688,56 @@
         "typ": "text"
       },
       {
-        "x": 14,
-        "y": 65,
+        "x": 19,
+        "y": 68,
         "w": 35,
         "h": 13,
         "popisek": "",
         "senzor": "Takt jader",
-        "jednotka": "GHz",
+        "jednotka": " GHz",
         "delitel": 1000,
-        "desetinna_mista": 1,
+        "desetinna_mista": 2,
         "zarovnani": "stred",
         "pismo": {
-          "rodina": "Silkscreen",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "barva": 1,
         "typ": "text"
       },
       {
-        "x": 191,
-        "y": 65,
+        "x": 193,
+        "y": 68,
         "w": 35,
         "h": 13,
         "popisek": "",
-        "senzor": "Takt GPU",
-        "jednotka": "GHz",
+        "senzor": "Takt GPU (naměřený)",
+        "jednotka": " GHz",
         "delitel": 1000,
-        "desetinna_mista": 1,
+        "desetinna_mista": 2,
         "zarovnani": "stred",
         "pismo": {
-          "rodina": "Silkscreen",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
-          "tucne": false
+          "tucne": true
         },
         "barva": 1,
         "typ": "text"
       },
       {
         "x": 191,
-        "y": 73,
+        "y": 77,
         "w": 35,
         "h": 13,
         "popisek": "",
         "senzor": "Přidělená paměť GPU",
         "jednotka": "Gb",
         "delitel": 1000,
-        "desetinna_mista": 1,
+        "desetinna_mista": 2,
         "zarovnani": "stred",
         "pismo": {
-          "rodina": "Silkscreen",
+          "rodina": "Pixel Operator 8",
           "velikost": 8,
           "tucne": false
         },
@@ -733,6 +753,106 @@
         "dvojity": true,
         "barva": 1,
         "typ": "obdelnik"
+      },
+      {
+        "x": 4,
+        "y": 95,
+        "w": 40,
+        "h": 31,
+        "jednotka": " RPM",
+        "desetinna_mista": 0,
+        "popisek": "",
+        "hodnota": true,
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "senzor": "Systém 1",
+        "min": 0,
+        "max": 2000,
+        "delitel": 1,
+        "typ": "budik"
+      },
+      {
+        "x": 52,
+        "y": 95,
+        "w": 40,
+        "h": 31,
+        "jednotka": " RPM",
+        "desetinna_mista": 0,
+        "popisek": "",
+        "hodnota": true,
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "senzor": "Systém 2",
+        "min": 0,
+        "max": 2000,
+        "delitel": 1,
+        "typ": "budik"
+      },
+      {
+        "x": 100,
+        "y": 95,
+        "w": 40,
+        "h": 31,
+        "jednotka": " RPM",
+        "desetinna_mista": 0,
+        "popisek": "",
+        "hodnota": true,
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "senzor": "Systém 3",
+        "min": 0,
+        "max": 2000,
+        "delitel": 1,
+        "typ": "budik"
+      },
+      {
+        "x": 148,
+        "y": 95,
+        "w": 40,
+        "h": 31,
+        "jednotka": " RPM",
+        "desetinna_mista": 0,
+        "popisek": "",
+        "hodnota": true,
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "senzor": "@ventilatory",
+        "min": 0,
+        "max": 1800,
+        "delitel": 1,
+        "typ": "budik"
+      },
+      {
+        "x": 196,
+        "y": 95,
+        "w": 40,
+        "h": 31,
+        "jednotka": " RPM",
+        "desetinna_mista": 0,
+        "popisek": "",
+        "hodnota": true,
+        "pismo": {
+          "rodina": "Silkscreen",
+          "velikost": 8,
+          "tucne": false
+        },
+        "senzor": "@pumpa",
+        "min": 0,
+        "max": 3200,
+        "delitel": 1,
+        "typ": "budik"
       }
     ]
   },
@@ -897,15 +1017,15 @@
     "jas_f140": 100,
     "jas_deska": 100,
     "stejne_pro_vse": true,
-    "vlna": false,
+    "vlna": true,
     "efekt": {
-      "typ": "duha_toceni",
+      "typ": "paleta",
       "barvy": [
-        "#ffffff",
-        "#00ffff",
-        "#0000ff"
+        "#0000ff",
+        "#ff0000",
+        "#00ff00"
       ],
-      "rychlost": 1,
+      "rychlost": 5,
       "opacny_smer": true,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,

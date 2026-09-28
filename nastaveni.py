@@ -46,8 +46,44 @@ NEW_SCREEN = {
     "hodiny_datum": {"typ": "hodiny_datum", "datum": False},
     "hodiny_pod_sebou": {"typ": "hodiny_pod_sebou", "datum": False},
     "obrazek": {"typ": "obrazek", "soubor": "kraken/ryzen7_odznak.png", "uprava": "beze změny"},
+    # ctvercove obrazovky (navrhy z Claude Design)
+    "dlazdice": {"typ": "dlazdice",
+                 "nadpis1": "CPU", "senzor1": "CPU (Tctl/Tdie)", "min1": 0, "max1": 100,
+                 "nadpis2": "GPU", "senzor2": "Teplota GPU", "min2": 0, "max2": 100,
+                 "nadpis3": "RAM", "senzor3": "Použitá fyzická paměť", "min3": 0, "max3": 32, "delitel3": 1000,
+                 "desetinna3": 1,
+                 "nadpis4": "KAPALINA", "senzor4": "@kapalina", "min4": 20, "max4": 60},
+    "cpu_detail": {"typ": "cpu_detail", "nadpis": "CPU", "podnadpis": "Tctl/Tdie", "senzor": "CPU (Tctl/Tdie)",
+                   "min": 30, "max": 95, "delka_s": 120,
+                   "senzor1": "Takt jader", "delitel1": 1000, "desetinna1": 1, "popisek1": "GHz takt",
+                   "senzor2": "Celková spotřeba CPU", "popisek2": "W spotřeba",
+                   "senzor3": "Celkové vytížení CPU", "popisek3": "% zátěž"},
+    "chlazeni_radky": {"typ": "chlazeni_radky", "min": 20, "max": 60},
+    "hodiny_stav": {"typ": "hodiny_stav", "datum": True,
+                    "nadpis1": "CPU", "senzor1": "CPU (Tctl/Tdie)",
+                    "nadpis2": "GPU", "senzor2": "Teplota GPU",
+                    "nadpis3": "H₂O", "senzor3": "@kapalina"},
+    "graf_plny": {"typ": "graf_plny", "nadpis": "CPU", "senzor": "CPU (Tctl/Tdie)", "min": 30, "max": 95,
+                  "delka_s": 120},
+    "sit_disky": {"typ": "sit_disky", "senzor_dolu": "@síť stahování", "senzor_nahoru": "@síť odesílání",
+                  "desetinna": 1, "disk1": "C:", "disk2": "D:"},
+    "gpu_sloupce": {"typ": "gpu_sloupce", "nadpis": "GPU", "podnadpis": "",
+                    "nadpis1": "TEPLOTA", "senzor1": "Teplota GPU", "min1": 0, "max1": 100,
+                    "nadpis2": "ZÁTĚŽ", "senzor2": "Zatížení jádra GPU", "min2": 0, "max2": 100,
+                    "nadpis3": "TAKT GHz", "senzor3": "Takt GPU", "min3": 0, "max3": 3.2, "delitel3": 1000,
+                    "desetinna3": 1,
+                    "nadpis4": "VRAM GB", "senzor4": "Přidělená paměť GPU", "min4": 0, "max4": 12, "delitel4": 1000,
+                    "desetinna4": 1},
+    "velke_cislo": {"typ": "velke_cislo", "nadpis": "CPU", "popisek": "TEPLOTA", "senzor": "CPU (Tctl/Tdie)",
+                    "min": 0, "max": 100},
+    "hladina": {"typ": "hladina", "nadpis": "KAPALINA", "senzor": "@kapalina", "min": 20, "max": 60,
+                "desetinna": 1},
+    "graf_dokola": {"typ": "graf_dokola", "nadpis": "ZÁTĚŽ CPU", "senzor": "Celkové vytížení CPU",
+                    "min": 0, "max": 100, "delka_s": 60},
 }
-CLOCKS = ("hodiny", "hodiny_analog", "obrazek")         # bez posuvniku velikosti textu
+SQUARE = ("dlazdice", "cpu_detail", "chlazeni_radky", "hodiny_stav", "graf_plny", "sit_disky", "gpu_sloupce",
+          "velke_cislo", "hladina", "graf_dokola")
+CLOCKS = ("hodiny", "hodiny_analog", "obrazek") + SQUARE   # bez posuvniku velikosti textu
 
 # (klic, popisek, druh pole) pro editor obrazovky
 _F_ONE = [("nadpis", "Popisek", "text"), ("senzor", "Senzor", "sensor"),
@@ -82,6 +118,52 @@ FIELDS = {
     "graf": _F_ONE + [("delka_s", "Délka grafu (s)", "int")] + _F_FMT,
     "hodiny": [],
 }
+
+
+def _slot_fields(n, pos, extra=()):
+    """Pole jednoho udaje ctvercovych obrazovek (n = "1".."4", pos = popis pozice)."""
+    p = f"{pos} – " if pos else ""
+    return ([(f"nadpis{n}", f"{p}popisek", "text"), (f"senzor{n}", f"{p}senzor", "sensor")]
+            + list(extra)
+            + [(f"delitel{n}", f"{p}dělitel", "num"), (f"desetinna{n}", f"{p}desetinná místa", "int")])
+
+
+def _range(n, pos):
+    p = f"{pos} – " if pos else ""
+    return [(f"min{n}", f"{p}minimum", "num"), (f"max{n}", f"{p}maximum", "num")]
+
+
+FIELDS.update({
+    "dlazdice": sum((_slot_fields(n, pos, _range(n, pos))
+                     for n, pos in (("1", "Vlevo nahoře"), ("2", "Vpravo nahoře"), ("3", "Vlevo dole"),
+                                    ("4", "Vpravo dole"))), []),
+    "cpu_detail": [("nadpis", "Nadpis", "text"), ("podnadpis", "Podnadpis", "text"), ("senzor", "Hlavní senzor", "sensor"),
+                   ("desetinna", "Desetinná místa", "int"), ("min", "Graf – minimum", "num"),
+                   ("max", "Graf – maximum", "num"), ("delka_s", "Délka grafu (s)", "int")]
+                  + sum(([(f"popisek{n}", f"Údaj {n} – popisek", "text"), (f"senzor{n}", f"Údaj {n} – senzor", "sensor"),
+                          (f"delitel{n}", f"Údaj {n} – dělitel", "num"), (f"desetinna{n}", f"Údaj {n} – desetinná místa", "int")]
+                         for n in "123"), []),
+    "chlazeni_radky": [("min", "Stupnice kapaliny – od (°C)", "num"), ("max", "Stupnice kapaliny – do (°C)", "num")],
+    "hodiny_stav": [("datum", "Zobrazit datum", "bool")]
+                   + sum((_slot_fields(n, f"Údaj {n}") for n in "123"), []),
+    "graf_plny": [("nadpis", "Nadpis", "text"), ("senzor", "Senzor", "sensor"), ("min", "Minimum", "num"),
+                  ("max", "Maximum", "num"), ("delitel", "Dělitel", "num"), ("desetinna", "Desetinná místa", "int"),
+                  ("delka_s", "Délka grafu (s)", "int")],
+    "sit_disky": [("senzor_dolu", "Stahování – senzor (MB/s)", "sensor"),
+                  ("senzor_nahoru", "Odesílání – senzor (MB/s)", "sensor"),
+                  ("desetinna", "Desetinná místa", "int"), ("disk1", "Disk 1 (např. C:)", "text"),
+                  ("disk2", "Disk 2 (prázdný = skrýt)", "text")],
+    "gpu_sloupce": [("nadpis", "Nadpis", "text"), ("podnadpis", "Podnadpis (prázdný = název karty)", "text")]
+                   + sum((_slot_fields(n, f"Sloupec {n}", _range(n, f"Sloupec {n}")) for n in "1234"), []),
+    "velke_cislo": [("nadpis", "Nadpis", "text"), ("popisek", "Popisek vpravo", "text"), ("senzor", "Senzor", "sensor"),
+                    ("min", "Minimum", "num"), ("max", "Maximum", "num"), ("jednotka", "Jednotka", "unit"),
+                    ("delitel", "Dělitel", "num"), ("desetinna", "Desetinná místa", "int")],
+    "hladina": [("nadpis", "Nadpis", "text"), ("senzor", "Senzor", "sensor"), ("min", "Prázdná při", "num"),
+                ("max", "Plná při", "num"), ("desetinna", "Desetinná místa", "int")],
+    "graf_dokola": [("nadpis", "Nadpis", "text"), ("senzor", "Senzor", "sensor"), ("min", "Minimum", "num"),
+                    ("max", "Maximum", "num"), ("desetinna", "Desetinná místa", "int"),
+                    ("delka_s", "Délka historie (s)", "int")],
+})
 
 
 def load_data():
@@ -378,7 +460,7 @@ class App(tk.Tk):
     def add(self, typ):
         new = copy.deepcopy(NEW_SCREEN[typ])
         new["zapnuto"] = True
-        new["velikost_obsahu"] = 0.92
+        new["velikost_obsahu"] = 1.0 if typ in SQUARE else 0.92
         if typ not in CLOCKS:
             new["velikost_textu"] = 1.0
         self.cfg["obrazovky"].insert(self.sel + 1, new)
@@ -684,8 +766,10 @@ class App(tk.Tk):
         ttk.Separator(self.ed).grid(row=row, column=0, columnspan=2, sticky="ew", padx=(0, 12), pady=10)
         row += 1
         for key, text, kind in FIELDS[s["typ"]]:
-            ttk.Label(self.ed, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=(6, 2))
-            var = tk.StringVar(value=str(s.get(key, "")))
+            ttk.Label(self.ed, text=text, style="Muted.TLabel").grid(row=row, column=0, columnspan=2, sticky="w",
+                                                                    pady=(6, 2))
+            dflt = 1 if key.startswith("delitel") else 0 if key.startswith("desetinna") else ""
+            var = tk.StringVar(value=str(s.get(key, dflt)))
             wide = kind in ("sensor", "text", "image")
             if kind == "sensor":
                 w = ttk.Combobox(self.ed, textvariable=var, values=self._sensor_names(), width=30)
@@ -893,16 +977,19 @@ class App(tk.Tk):
             data[name] = {"value": (lo + (hi - lo) * 0.6) * div,
                           "unit": "°C" if name == config.LIQUID else ""}
             sample = True
-        for n in {"graf": ("",), "graf_dva": ("1", "2")}.get(scr.get("typ"), ()):
-            name = scr.get("senzor" + n)
+        for key in screens.HISTORY_KEYS.get(scr.get("typ"), ()):
+            n = key[len("senzor"):] if key[len("senzor"):] in ("1", "2") else ""
+            name = scr.get(key)
             if name and len(hist.get(name, [])) < 2:
                 lo, hi = float(scr.get("min" + n, 0)), float(scr.get("max" + n, 100))
+                if scr.get("typ") == "sit_disky":
+                    lo, hi = 0.0, 5.0
                 div = float(scr.get("delitel", 1)) or 1
-                ph = 0 if n != "2" else 2.0
+                ph = 0 if n != "2" and key != "senzor_nahoru" else 2.0
                 hist[name] = [(lo + (hi - lo) * (0.45 + 0.25 * math.sin(i / 7 + ph))) * div
                               for i in range(90)]
                 sample = True
-        if scr.get("typ") == "chlazeni":                  # bez bezici aplikace nejsou data Krakenu
+        if scr.get("typ") in ("chlazeni", "chlazeni_radky", "hladina"):   # bez bezici aplikace nejsou data Krakenu
             for k, v in (("@kapalina", 31.4), ("@pumpa", 1720), ("@pumpa_vykon", 45),
                          ("@ventilatory", 650), ("@ventilatory_vykon", 30)):
                 if k not in data:

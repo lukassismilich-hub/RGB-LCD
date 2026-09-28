@@ -17,6 +17,9 @@
 #   "hodiny_datum"  - digitalni hodiny se sekundovym prstencem, cas na radku (datum volitelne)
 #   "hodiny_pod_sebou" - totez, hodiny nad minutami
 #   "obrazek"       - obrazek / logo ze slozky obrazky/
+# Ctvercove (navrhy z Claude Design, vyuzivaji cely displej):
+#   "dlazdice" (ctyri dlazdice), "cpu_detail", "chlazeni_radky", "hodiny_stav", "graf_plny",
+#   "sit_disky", "gpu_sloupce", "velke_cislo", "hladina" (kruhova), "graf_dokola" (kruhovy)
 #
 # Barvy: kazda barevna cast ma dve barvy <cast>_od a <cast>_do (prechod).
 # Stejne barvy = jednobarevne. Prechod se pocita pres odstin (HSV),
@@ -48,7 +51,11 @@ TYPES = {"dva_bary": "Dva bary", "oblouk": "Oblouk (1 hodnota)", "budik": "Budí
          "ctyri_hodnoty": "Čtyři hodnoty", "chlazeni": "Chlazení (kapalina, pumpa, ventilátory)",
          "graf_dva": "Graf dvou hodnot", "hodiny_analog": "Ručičkové hodiny",
          "hodiny_datum": "Digitální hodiny s prstencem", "hodiny_pod_sebou": "Digitální hodiny s prstencem – pod sebou",
-         "obrazek": "Obrázek / logo"}
+         "obrazek": "Obrázek / logo",
+         "dlazdice": "Čtyři dlaždice", "cpu_detail": "CPU detail (hodnota, 3 údaje, graf)",
+         "chlazeni_radky": "Chlazení – řádky", "hodiny_stav": "Hodiny a stav",
+         "graf_plny": "Graf přes celou plochu", "sit_disky": "Síť a disky", "gpu_sloupce": "GPU sloupce",
+         "velke_cislo": "Jedno velké číslo", "hladina": "Hladina (kruhová)", "graf_dokola": "Graf dokola (kruhový)"}
 
 # barevne casti kazdeho typu: (klic, popisek, vychozi_od, vychozi_do)
 _TEXT = ("text", "Text (čísla a popisky)", "#ffffff", "#ffffff")
@@ -78,6 +85,26 @@ COLORS = {
     "hodiny_pod_sebou": [("hodiny", "Hodiny", "#ffffff", "#ffffff"), ("minuty", "Minuty", "#28c8ff", "#28c8ff"),
                          ("sekundy", "Sekundový prstenec", "#28c8ff", "#ff28c8"), ("datum", "Datum", "#b4b4b4", "#b4b4b4")],
     "obrazek": [("tvar", "Barva tvaru (úprava „jen tvar“)", "#ffffff", "#ffffff")],
+    "dlazdice": [("dlazdice1", "Dlaždice 1 (popisek a bar)", "#3cff3c", "#ff3b3b"),
+                 ("dlazdice2", "Dlaždice 2", "#3b82f6", "#a855f7"),
+                 ("dlazdice3", "Dlaždice 3", "#a855f7", "#ec4899"),
+                 ("dlazdice4", "Dlaždice 4", "#22d3ee", "#3b82f6"), _TEXT],
+    "cpu_detail": [("akcent", "Nadpis a graf", "#ffb020", "#ff3b3b"), _TEXT],
+    "chlazeni_radky": [("kapalina", "Kapalina (stupnice)", "#22d3ee", "#ff9f1c"),
+                       ("pumpa", "Pumpa", "#22d3ee", "#3b82f6"),
+                       ("ventilatory", "Ventilátory", "#ffb020", "#ff6b35"), _TEXT],
+    "hodiny_stav": [("hodiny", "Čas a sekundový pruh", "#3cff3c", "#22d3ee"),
+                    ("stav1", "Údaj 1 (popisek)", "#ffb020", "#ffb020"),
+                    ("stav2", "Údaj 2 (popisek)", "#7aa8ff", "#7aa8ff"),
+                    ("stav3", "Údaj 3 (popisek)", "#22d3ee", "#22d3ee"), _TEXT],
+    "graf_plny": [("graf", "Graf (dole → nahoře)", "#3cff3c", "#ffb020"), _TEXT],
+    "sit_disky": [("sit", "Síť (stahování → odesílání)", "#3cff3c", "#22d3ee"),
+                  ("disky", "Disky", "#a855f7", "#ec4899"), _TEXT],
+    "gpu_sloupce": [("nadpis", "Nadpis", "#7aa8ff", "#7aa8ff"), ("sloupce", "Sloupce (dole → nahoře)", "#3b82f6", "#a855f7"),
+                    _TEXT],
+    "velke_cislo": [("segmenty", "Nadpis a segmenty", "#3cff3c", "#ff3b3b"), _TEXT],
+    "hladina": [("voda", "Hladina (nahoře → dole)", "#22d3ee", "#1d4ed8"), _TEXT],
+    "graf_dokola": [("paprsky", "Paprsky (nízká → vysoká)", "#a855f7", "#ff3b8a"), _TEXT],
 }
 DAYS = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
 MONTHS = ["ledna", "února", "března", "dubna", "května", "června", "července", "srpna", "září",
@@ -922,18 +949,448 @@ def draw_image(scr, data, template=False, history=None):
     return img
 
 
+# ------------------------------------------ ctvercove obrazovky (navrhy z Claude Design)
+# Rozvrzeni je v souradnicich navrhu 480x480 (= 2x displej); _u() prevede na platno 720x720.
+# Obrazovky vyuzivaji cely ctverec, proto se neorezavaji na obsah (FULL_FRAME) a nemaji
+# posuvnik "Velikost textu" (pisma maji pevnou velikost podle navrhu).
+
+PANEL = (14, 16, 19)          # podklad dlazdic
+TRACK = (28, 31, 36)          # podklad baru
+OFF = (26, 29, 34)            # zhasnuty segment
+MUTED = (138, 146, 156)       # popisky
+UNIT_BY_DIV = {("MB", 1000): "GB", ("MHz", 1000): "GHz", ("KB/s", 1000): "MB/s", ("MB/s", 1000): "GB/s"}
+
+
+def _u(v):
+    return round(v * 1.5)
+
+
+def _f(weight, px):
+    """Pismo podle navrhu (px v navrhu 480x480)."""
+    return _raw_font(weight, px / 2)
+
+
+def _slot(scr, n, data, dec_key=None):
+    """Hodnota slotu n ("" / "1".."4") -> (text, podil 0..1, jednotka, cislo)."""
+    sensor = scr.get("senzor" + n)
+    div = float(scr.get("delitel" + n, 1) or 1)
+    v = value_for(sensor, data, div)
+    lo, hi = float(scr.get("min" + n, 0)), float(scr.get("max" + n, 100))
+    txt = _fmt(v, scr.get(dec_key or ("desetinna" + n), 0))
+    u = scr.get("jednotka" + n, "auto")
+    if u == "auto":
+        u = (data.get(sensor) or {}).get("unit", "")
+        u = UNIT_BY_DIV.get((u, int(div)), u if div == 1 else "")
+    return txt, _frac(v, lo, hi), u, v
+
+
+def _short_unit(u):
+    return "°" if u in DEGREE_UNITS else u
+
+
+def _shrink(d, txt, f, max_w):
+    while f.size > 8 * S and d.textlength(txt, font=f) > max_w:
+        f = ImageFont.truetype(f.path, f.size - S)
+    return f
+
+
+def _num(img, x, base, txt, f, cols, unit="", f_unit=None, anchor="l", max_w=None, gap=4, ucols=None):
+    """Cislo s jednotkou vpravo nahore (zarovnanou na horni okraj cislic). x = levy okraj,
+    stred nebo pravy okraj celku podle anchor ("l"/"m"/"r"), base = uctari v navrhu."""
+    d = ImageDraw.Draw(img)
+    x, base = _u(x), _u(base)
+    gap = _u(gap) if unit else 0
+    if max_w:
+        uw = d.textlength(unit, font=f_unit) + gap if unit else 0
+        while f.size > 8 * S and d.textlength(txt, font=f) + uw > _u(max_w):
+            f = ImageFont.truetype(f.path, f.size - S)
+            if unit:
+                f_unit = ImageFont.truetype(f_unit.path, max(6 * S, round(f_unit.size * 0.97)))
+                uw = d.textlength(unit, font=f_unit) + gap
+    tw = d.textlength(txt, font=f)
+    total = tw + (d.textlength(unit, font=f_unit) + gap if unit else 0)
+    x0 = x if anchor == "l" else x - total / 2 if anchor == "m" else x - total
+    _text(img, (x0, base), txt, f, cols, "ls")
+    if unit:
+        top = d.textbbox((x0, base), "0", font=f, anchor="ls")[1]
+        ub = d.textbbox((0, 0), unit, font=f_unit, anchor="ls")
+        _text(img, (x0 + tw + gap, top - ub[1]), unit, f_unit, ucols or cols, "ls")
+    return x0 + total
+
+
+def _label(img, x, base, text, weight, px, col, anchor="ls", max_w=None):
+    d = ImageDraw.Draw(img)
+    f = _f(weight, px)
+    if max_w:
+        f = _shrink(d, text, f, _u(max_w))
+    _text(img, (_u(x), _u(base)), text, f, (col, col), anchor)
+
+
+def _rbar(img, x, y, w, h, frac, cols, track=TRACK):
+    """Zakulaceny bar s prechodem (souradnice navrhu)."""
+    x, y, w, h = _u(x), _u(y), _u(w), _u(h)
+    d = ImageDraw.Draw(img)
+    r = h // 2
+    d.rounded_rectangle((x, y, x + w, y + h), r, fill=track)
+    if frac > 0:
+        fw = max(h, int(w * frac))
+        mask = Image.new("L", img.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle((x, y, x + fw, y + h), r, fill=255)
+        _paint(img, mask, _hgrad(w, h + 1, *cols), (x, y))
+
+
+def _segbar(img, x, y, w, h, n, lit, cols, gap=4, radius=4):
+    d = ImageDraw.Draw(img)
+    sw = (w - gap * (n - 1)) / n
+    for i in range(n):
+        x0 = x + i * (sw + gap)
+        col = mix(*cols, i / max(1, n - 1)) if i < lit else OFF
+        d.rounded_rectangle((_u(x0), _u(y), _u(x0 + sw), _u(y + h)), _u(radius), fill=col)
+
+
+def _panel(img, x, y, w, h, r):
+    ImageDraw.Draw(img).rounded_rectangle((_u(x), _u(y), _u(x + w), _u(y + h)), _u(r), fill=PANEL)
+
+
+def _hist(scr, key, data_hist, div_key="delitel"):
+    div = float(scr.get(div_key, 1) or 1)
+    return [v / div for v in (data_hist or {}).get(scr.get(key), [])]
+
+
+def _area_chart(img, x, y, w, h, vals, lo, hi, cols, line_w=5, line_col=None, dot=None):
+    """Plocha grafu pres oblast (souradnice navrhu): plocha od barvy 'do' nahore k 'od' dole
+    (sila 140 -> 12), cara v prechodu od -> do (nebo line_col)."""
+    if len(vals) < 2:
+        return None
+    X0, Y0, Wd, Hd = _u(x), _u(y), _u(w), _u(h)
+    n = len(vals)
+    pad = _u(line_w)
+    right = Wd - (_u(dot) + _u(line_w) if dot else 0)          # tecka na konci se vejde na displej
+    pts = [(X0 + right * i / (n - 1), Y0 + Hd - pad - (Hd - 2 * pad) * _frac(v, lo, hi)) for i, v in enumerate(vals)]
+    area = Image.new("L", img.size, 0)
+    ImageDraw.Draw(area).polygon(pts + [(pts[-1][0], Y0 + Hd), (X0, Y0 + Hd)], fill=255)
+    fade = Image.new("L", img.size, 0)
+    fd = ImageDraw.Draw(fade)
+    for yy in range(Y0, Y0 + Hd + 1):
+        fd.line((X0, yy, X0 + Wd, yy), fill=round(140 - 128 * (yy - Y0) / max(1, Hd)))
+    _paint(img, ImageChops.multiply(area, fade), _vgrad(Wd, Hd + 1, cols[0], cols[1]), (X0, Y0))
+    line = Image.new("L", img.size, 0)
+    ImageDraw.Draw(line).line(pts, fill=255, width=_u(line_w), joint="curve")
+    fill = Image.new("RGB", (Wd + 1, Hd + 1), line_col) if line_col else _hgrad(Wd + 1, Hd + 1, *cols)
+    _paint(img, line, fill, (X0, Y0))
+    if dot:
+        ex, ey = pts[-1]
+        r = _u(dot)
+        ImageDraw.Draw(img).ellipse((ex - r, ey - r, ex + r, ey + r), fill=WHITE)
+    return pts
+
+
+# 1 ------------------------------------------------------------ ctyri dlazdice
+def draw_tiles(scr, data, template=False, history=None):
+    img = _canvas()
+    tcols = colors(scr, "text")
+    for n, (x, y) in zip("1234", ((8, 8), (244, 8), (8, 244), (244, 244))):
+        _panel(img, x, y, 228, 228, 22)
+        cols = colors(scr, "dlazdice" + n)
+        _label(img, x + 22, y + 43, scr.get("nadpis" + n, ""), "ExtraBold", 22, cols[0], max_w=184)
+        txt, frac, unit, _v = _slot(scr, n, data)
+        _num(img, x + 22, y + 154, txt, _f("ExtraBold", 96 if len(txt) <= 3 else 72), tcols,
+             unit, _f("Bold", 30), max_w=184, gap=2)
+        _rbar(img, x + 22, y + 192, 184, 12, frac, cols)
+    return img
+
+
+# 2 ------------------------------------------------------------ CPU detail
+def draw_cpu_detail(scr, data, template=False, history=None):
+    img = _canvas()
+    tcols = colors(scr, "text")
+    ak = colors(scr, "akcent")
+    _label(img, 28, 53, scr.get("nadpis", ""), "ExtraBold", 30, ak[0], max_w=290)
+    _label(img, 28, 79, scr.get("podnadpis", ""), "SemiBold", 18, MUTED, max_w=290)
+    txt, _fr, unit, _v = _slot(scr, "", data)
+    _num(img, 18, 240, txt, _f("ExtraBold", 200), tcols, _short_unit(unit),
+         _f("Bold", 56 if unit in DEGREE_UNITS else 36), max_w=300, gap=2)
+    for i, n in enumerate("123"):
+        if not scr.get("senzor" + n) and not scr.get("popisek" + n):
+            continue
+        t, _f2, _u2, _v2 = _slot(scr, n, data)
+        base = 68 + i * 77.5
+        _label(img, 330, base, t, "ExtraBold", 40, WHITE, max_w=130)
+        _label(img, 330, base + 22, scr.get("popisek" + n, ""), "SemiBold", 16, MUTED, max_w=140)
+    d = ImageDraw.Draw(img)
+    for yy in (345, 390, 435):
+        d.line((0, _u(yy), W, _u(yy)), fill=TRACK, width=_u(2))
+    vals = _hist(scr, "senzor", history)
+    _area_chart(img, 0, 300, 480, 180, vals, float(scr.get("min", 0)), float(scr.get("max", 100)), ak)
+    _label(img, 452, 462, _span_text(scr), "Bold", 16, MUTED, "rs")
+    return img
+
+
+def _span_text(scr):
+    secs = int(scr.get("delka_s", 120))
+    return f"{secs // 60} min" if secs >= 60 else f"{secs} s"
+
+
+# 3 ------------------------------------------------------------ chlazeni v radcich
+def draw_cooling_rows(scr, data, template=False, history=None):
+    img = _canvas()
+    tcols = colors(scr, "text")
+    kc, kp, kv = colors(scr, "kapalina"), colors(scr, "pumpa"), colors(scr, "ventilatory")
+    g = lambda k: value_for(k, data)
+    lq, pd, pr, fd, fr = g("@kapalina"), g("@pumpa_vykon"), g("@pumpa"), g("@ventilatory_vykon"), g("@ventilatory")
+    lo, hi = float(scr.get("min", 20)), float(scr.get("max", 60))
+    _label(img, 28, 51, "KAPALINA", "ExtraBold", 24, kc[0])
+    _num(img, 22, 179, _fmt(lq, 1), _f("ExtraBold", 150), tcols, "°C", _f("Bold", 44), max_w=430, gap=2)
+    _segbar(img, 28, 222, 424, 18, 20, round(_frac(lq, lo, hi) * 20), kc)
+    _label(img, 28, 263, f"{lo:g} °C", "SemiBold", 15, MUTED)
+    _label(img, 452, 263, "59 °C = 100 %", "Bold", 15, (255, 107, 107), "rs")
+    for top, lbl, duty, rpm, cols in ((292, "PUMPA", pd, pr, kp), (384, "VENTILÁTORY", fd, fr, kv)):
+        base = top + 38
+        _label(img, 28, base, lbl, "ExtraBold", 22, cols[0])
+        _num(img, 452, base, f"{_fmt(duty, 0)} %", _f("ExtraBold", 44), tcols, anchor="r")
+        d = ImageDraw.Draw(img)
+        vw = d.textlength(f"{_fmt(duty, 0)} %", font=_f("ExtraBold", 44))
+        if rpm is not None:
+            _text(img, (_u(452) - vw - _u(12), _u(base)), f"{rpm:.0f} ot/min", _f("SemiBold", 18), (MUTED, MUTED), "rs")
+        _rbar(img, 28, top + 54, 424, 14, _frac(duty, 0, 100), cols)
+    return img
+
+
+# 4 ------------------------------------------------------------ hodiny a stav
+def draw_clock_status(scr, data, template=False, history=None):
+    now = datetime.now()
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    hc = colors(scr, "hodiny")
+    txt = f"{now.hour:02d}:{now.minute:02d}"
+    f = _shrink(d, txt, _f("ExtraBold", 170), _u(440))
+    _text(img, (W // 2, _u(182)), txt, f, hc, "ms")
+    _rbar(img, 28, 232, 424, 8, now.second / 59, hc)
+    if scr.get("datum", True):
+        _label(img, 240, 291, f"{DAYS[now.weekday()]} {now.day}. {MONTHS[now.month - 1]}", "SemiBold", 30,
+               (207, 214, 222), "ms", max_w=440)
+    tcols = colors(scr, "text")
+    for n, x in zip("123", (28, 172, 316)):
+        _panel(img, x, 340, 136, 112, 18)
+        c = colors(scr, "stav" + n)[0]
+        _label(img, x + 16, 371, scr.get("nadpis" + n, ""), "ExtraBold", 16, c, max_w=104)
+        t, _fr, unit, _v = _slot(scr, n, data)
+        su = _short_unit(unit)
+        _num(img, x + 16, 429, t + (su if su == "°" else ""), _f("ExtraBold", 50), tcols,
+             "" if su == "°" else su, _f("Bold", 20), max_w=104, gap=2)
+    return img
+
+
+# 5 ------------------------------------------------------------ graf pres celou plochu
+def draw_graph_full(scr, data, template=False, history=None):
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    gc = colors(scr, "graf")
+    lo, hi = float(scr.get("min", 0)), float(scr.get("max", 100))
+    for yy in (224, 320, 416):                               # carkovane linky
+        for xx in range(0, 480, 14):
+            d.line((_u(xx), _u(yy), _u(xx + 6), _u(yy)), fill=(35, 38, 44), width=_u(2))
+    vals = _hist(scr, "senzor", history)
+    _area_chart(img, 0, 160, 480, 320, vals, lo, hi, gc, line_col=gc[1], dot=9)
+    _label(img, 28, 51, scr.get("nadpis", ""), "ExtraBold", 26, gc[0], max_w=260)
+    txt, _fr, unit, _v = _slot(scr, "", data)
+    _num(img, 22, 155, txt, _f("ExtraBold", 120), tcols, unit, _f("Bold", 40), max_w=270, gap=2)
+    if len(vals) >= 2:
+        su = _short_unit(unit)
+        dec = scr.get("desetinna", 0)
+        for base, word, v in ((51, "max ", max(vals)), (82, "min ", min(vals))):
+            s = f"{_fmt(v, dec)}{su}"
+            f = _f("Bold", 22)
+            _text(img, (_u(452), _u(base)), s, f, tcols, "rs")
+            _text(img, (_u(452) - d.textlength(s, font=f), _u(base)), word, _f("SemiBold", 22), (MUTED, MUTED), "rs")
+    _label(img, 452, 107, "posledních " + _span_text(scr), "Bold", 16, MUTED, "rs")
+    return img
+
+
+# 6 ------------------------------------------------------------ sit a disky
+def _arrow(d, cx, cy, down, col):
+    k = 40 / 24                                             # ikona 24x24 zvetsena na 40
+    def p(x, y):
+        return (_u(cx - 20 + x * k), _u(cy - 20 + y * k))
+    w = _u(3 * k)
+    pts = [(12, 4), (12, 20)] if down else [(12, 20), (12, 4)]
+    head = [(5, 13), (12, 20), (19, 13)] if down else [(5, 11), (12, 4), (19, 11)]
+    d.line([p(*pts[0]), p(*pts[1])], fill=col, width=w)
+    d.line([p(*q) for q in head], fill=col, width=w, joint="curve")
+    for q in (pts[0], head[0], head[2]):
+        x, y = p(*q)
+        d.ellipse((x - w / 2, y - w / 2, x + w / 2, y + w / 2), fill=col)
+
+
+def draw_net_disks(scr, data, template=False, history=None):
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    sc, dc = colors(scr, "sit"), colors(scr, "disky")
+    _label(img, 28, 43, "SÍŤ", "ExtraBold", 22, sc[0])
+    dec = scr.get("desetinna", 1)
+    for key, cy, down, col in (("senzor_dolu", 88, True, sc[0]), ("senzor_nahoru", 166, False, sc[1])):
+        v = value_for(scr.get(key), data)
+        _arrow(d, 42, cy, down, col)
+        end = _num(img, 72, cy + 21, _fmt(v, dec), _f("ExtraBold", 60), tcols, max_w=230)
+        _text(img, (end + _u(10), _u(cy + 21)), "MB/s", _f("Bold", 20), (MUTED, MUTED), "ls")
+        vals = (history or {}).get(scr.get(key), [])[-60:]
+        if len(vals) >= 2:
+            top = max(max(vals), 0.1)
+            x0, y0, w, h = _u(318), _u(cy - 28), _u(134), _u(56)
+            pts = [(x0 + w * i / (len(vals) - 1), y0 + h - h * min(1.0, v2 / top)) for i, v2 in enumerate(vals)]
+            d.line(pts, fill=col, width=_u(4), joint="curve")
+    d.line((_u(28), _u(225), _u(452), _u(225)), fill=TRACK, width=_u(2))
+    _label(img, 28, 265, "DISKY", "ExtraBold", 22, dc[0])
+    for n, top in (("1", 290), ("2", 378)):
+        letter = (scr.get("disk" + n) or "").strip()
+        if not letter:
+            continue
+        free = value_for(f"@disk {letter} volno", data)
+        used = value_for(f"@disk {letter} obsazeno", data)
+        temp = value_for(f"Teplota disku ({letter})", data)
+        _label(img, 28, top + 39, letter, "ExtraBold", 40, WHITE)
+        _rbar(img, 102, top + 2, 350, 14, _frac(used, 0, 100), dc)
+        info = f"{_fmt(free, 0)} GB volno" + ("" if temp is None else f" · {temp:.0f} °C")
+        _label(img, 102, top + 41, info, "SemiBold", 18, MUTED, max_w=350)
+    return img
+
+
+# 7 ------------------------------------------------------------ GPU sloupce
+def _gpu_name(scr, data):
+    import re
+    if scr.get("podnadpis"):
+        return scr["podnadpis"]
+    dev = (data.get(scr.get("senzor1")) or {}).get("sensor", "")
+    m = re.search(r"((?:GeForce\s+)?(?:RTX|GTX|RX|Arc)\s*[A-Z]?\d{3,4}\w*(?:\s+(?:Ti|Super|XT|XTX))?)", dev)
+    return m.group(1) if m else ""
+
+
+def draw_gpu_columns(scr, data, template=False, history=None):
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    tcols = colors(scr, "text")
+    cols = colors(scr, "sloupce")
+    _label(img, 28, 53, scr.get("nadpis", "GPU"), "ExtraBold", 30, colors(scr, "nadpis")[0], max_w=90)
+    _label(img, 120, 52, _gpu_name(scr, data), "SemiBold", 18, MUTED, max_w=332)
+    for i, n in enumerate("1234"):
+        x = 28 + i * 110
+        X0, Y0, X1, Y1 = _u(x), _u(84), _u(x + 94), _u(354)
+        d.rounded_rectangle((X0, Y0, X1, Y1), _u(16), fill=(18, 20, 24))
+        t, frac, unit, _v = _slot(scr, n, data)
+        if frac > 0:
+            fh = max(_u(32), int((Y1 - Y0) * frac))
+            mask = Image.new("L", img.size, 0)
+            ImageDraw.Draw(mask).rounded_rectangle((X0, Y1 - fh, X1, Y1), _u(16), fill=255)
+            _paint(img, mask, _vgrad(X1 - X0 + 1, Y1 - Y0 + 1, cols[0], cols[1]), (X0, Y0))
+        su = _short_unit(unit)
+        t = t + ("°" if su == "°" else " %" if su == "%" else "")
+        _label(img, x + 47, 390, t, "ExtraBold", 30, tcols[0], "ms", max_w=104)
+        _label(img, x + 47, 418, scr.get("nadpis" + n, ""), "Bold", 15, MUTED, "ms", max_w=104)
+    return img
+
+
+# 8 ------------------------------------------------------------ jedno velke cislo
+def draw_big_number(scr, data, template=False, history=None):
+    img = _canvas()
+    tcols = colors(scr, "text")
+    cols = colors(scr, "segmenty")
+    _label(img, 32, 61, scr.get("nadpis", ""), "ExtraBold", 34, cols[0], max_w=260)
+    _label(img, 448, 57, scr.get("popisek", ""), "Bold", 20, MUTED, "rs", max_w=180)
+    txt, frac, unit, _v = _slot(scr, "", data)
+    _num(img, 14, 310, txt, _f("ExtraBold", 300), tcols, unit, _f("Bold", 60), max_w=452, gap=10)
+    _segbar(img, 32, 392, 416, 48, 24, round(frac * 24), cols)
+    lo, hi = float(scr.get("min", 0)), float(scr.get("max", 100))
+    _label(img, 32, 462, f"{lo:g}", "Bold", 15, MUTED)
+    _label(img, 448, 462, f"{hi:g}", "Bold", 15, MUTED, "rs")
+    return img
+
+
+# 11 ----------------------------------------------------------- kapalina jako hladina
+def draw_level(scr, data, template=False, history=None):
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    cols = colors(scr, "voda")
+    c = W // 2
+    R = _u(206)
+    d.ellipse((c - R, c - R, c + R, c + R), fill=(7, 11, 14))
+    txt, frac, unit, v = _slot(scr, "", data)
+    level = 480 - (34 + 412 * frac)
+    vessel = Image.new("L", img.size, 0)
+    ImageDraw.Draw(vessel).ellipse((c - R, c - R, c + R, c + R), fill=255)
+    for amp, ph, alpha, grad in ((12, 1.8, 90, False), (9, 0.0, 255, True)):
+        pts = [(_u(x), _u(level + amp * math.sin(x / 38 + ph))) for x in range(0, 481, 6)]
+        wave = Image.new("L", img.size, 0)
+        ImageDraw.Draw(wave).polygon(pts + [(W, W), (0, W)], fill=alpha)
+        fill = _vgrad(W, W, cols[1], cols[0]) if grad else Image.new("RGB", (W, W), cols[0])
+        _paint(img, ImageChops.multiply(wave, vessel), fill)
+    Ro = _u(220)
+    d.ellipse((c - Ro, c - Ro, c + Ro, c + Ro), outline=(22, 37, 45), width=_u(12))
+    _label(img, 240, 119, scr.get("nadpis", ""), "ExtraBold", 24, (191, 239, 255), "ms", max_w=300)
+    _num(img, 240, 248, txt, _f("ExtraBold", 130), colors(scr, "text"), _short_unit(unit),
+         _f("Bold", 40), anchor="m", max_w=380, gap=2)
+    if scr.get("senzor") == "@kapalina":
+        pd, pr = value_for("@pumpa_vykon", data), value_for("@pumpa", data)
+        if pd is not None:
+            line = f"pumpa {pd:.0f} %" + ("" if pr is None else f" · {pr:.0f} ot/min")
+            _label(img, 240, 337, line, "Bold", 22, (230, 251, 255), "ms", max_w=340)
+    return img
+
+
+# 12 ----------------------------------------------------------- graf dokola
+def draw_radial(scr, data, template=False, history=None):
+    img = _canvas()
+    d = ImageDraw.Draw(img)
+    cols = colors(scr, "paprsky")
+    lo, hi = float(scr.get("min", 0)), float(scr.get("max", 100))
+    c = W // 2
+    r0 = _u(128)
+    d.ellipse((c - r0, c - r0, c + r0, c + r0), outline=(21, 24, 28), width=_u(2))
+    vals = _hist(scr, "senzor", history)
+    n = 60
+    if vals:                                                   # prevzorkovat na 60 paprsku (nejnovejsi nahore vlevo od 12)
+        step = max(1, len(vals) / n)
+        vals = [vals[min(len(vals) - 1, int(i * step))] for i in range(min(n, len(vals)))]
+        if len(vals) < n:
+            vals = [None] * (n - len(vals)) + vals
+    else:
+        vals = [None] * n
+    w = _u(10)
+    for i, v in enumerate(vals):
+        fr = 0.06 if v is None else max(0.06, _frac(v, lo, hi))
+        a = math.radians(i * 6 - 90)
+        r1, r2 = _u(140), _u(140 + 80 * fr)
+        x1, y1, x2, y2 = c + r1 * math.cos(a), c + r1 * math.sin(a), c + r2 * math.cos(a), c + r2 * math.sin(a)
+        col = OFF if v is None else WHITE if i == n - 1 else mix(*cols, fr)
+        d.line((x1, y1, x2, y2), fill=col, width=w)
+        for x, y in ((x1, y1), (x2, y2)):
+            d.ellipse((x - w / 2, y - w / 2, x + w / 2, y + w / 2), fill=col)
+    _label(img, 240, 175, scr.get("nadpis", ""), "ExtraBold", 18, cols[0], "ms", max_w=200)
+    txt, _fr, unit, _v = _slot(scr, "", data)
+    _num(img, 240, 262, txt, _f("ExtraBold", 96), colors(scr, "text"), _short_unit(unit), _f("Bold", 34),
+         anchor="m", max_w=220, gap=2)
+    _label(img, 240, 290, "posledních " + _span_text(scr) + " dokola", "SemiBold", 15, MUTED, "ms", max_w=220)
+    return img
+
+
 DRAW = {"dva_bary": draw_two_bars, "oblouk": draw_arc, "budik": draw_gauge,
         "dva_kruhy": draw_rings, "graf": draw_graph, "hodiny": draw_time,
         "dva_oblouky": draw_two_arcs, "segmenty": draw_segments, "ctyri_hodnoty": draw_four,
         "chlazeni": draw_cooling, "graf_dva": draw_graph_two, "hodiny_analog": draw_analog,
-        "hodiny_datum": draw_clock_date, "hodiny_pod_sebou": draw_clock_date, "obrazek": draw_image}
+        "hodiny_datum": draw_clock_date, "hodiny_pod_sebou": draw_clock_date, "obrazek": draw_image,
+        "dlazdice": draw_tiles, "cpu_detail": draw_cpu_detail, "chlazeni_radky": draw_cooling_rows,
+        "hodiny_stav": draw_clock_status, "graf_plny": draw_graph_full, "sit_disky": draw_net_disks,
+        "gpu_sloupce": draw_gpu_columns, "velke_cislo": draw_big_number, "hladina": draw_level,
+        "graf_dokola": draw_radial}
 
 
 # ------------------------------------------------------- orez a zvetseni
 
 _boxes = {}
 _TEMPLATE_CHARS = (None, "0", "3", "6", "8", "9")   # None = nejsirsi cislice
-FULL_FRAME = ("obrazek",)                          # bez orezu na obsah
+FULL_FRAME = ("obrazek", "dlazdice", "cpu_detail", "chlazeni_radky", "hodiny_stav", "graf_plny",
+              "sit_disky", "gpu_sloupce", "velke_cislo", "hladina", "graf_dokola")   # bez orezu na obsah
 
 
 def _content_box(scr, data):
@@ -1005,17 +1462,22 @@ def auto_screen(name, item, seen_max=None):
 def used_sensors(screens):
     out = set()
     for s in screens:
-        for k in ("senzor", "senzor1", "senzor2", "senzor3", "senzor4"):
-            if s.get(k):
-                out.add(s[k])
+        for k, v in s.items():
+            if k.startswith("senzor") and isinstance(v, str) and v:
+                out.add(v)
     return out
+
+
+# klice senzoru, ke kterym obrazovka potrebuje historii (graf)
+HISTORY_KEYS = {"graf": ("senzor",), "graf_dva": ("senzor1", "senzor2"), "cpu_detail": ("senzor",),
+                "graf_plny": ("senzor",), "graf_dokola": ("senzor",), "sit_disky": ("senzor_dolu", "senzor_nahoru")}
 
 
 def history_spans(screens):
     """{senzor: delka historie v s} pro obrazovky s grafem."""
     out = {}
     for s in screens:
-        keys = {"graf": ("senzor",), "graf_dva": ("senzor1", "senzor2")}.get(s.get("typ"), ())
+        keys = HISTORY_KEYS.get(s.get("typ"), ())
         for k in keys:
             if s.get(k):
                 out[s[k]] = max(out.get(s[k], 0), float(s.get("delka_s", 120)))

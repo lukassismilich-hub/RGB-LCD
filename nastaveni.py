@@ -14,6 +14,7 @@ from PIL import ImageTk
 
 import config
 import hwinfo
+import kraken_prvky
 import screens
 import vzhled as V
 
@@ -80,9 +81,11 @@ NEW_SCREEN = {
                 "desetinna": 1},
     "graf_dokola": {"typ": "graf_dokola", "nadpis": "ZÁTĚŽ CPU", "senzor": "Celkové vytížení CPU",
                     "min": 0, "max": 100, "delka_s": 60},
+    # volne rozvrzeni (editor_kraken.py) - zacina sablonou ctyr dlazdic
+    "volne": {"typ": "volne", "nazev": "", "prvky": kraken_prvky.templates()["Čtyři dlaždice"]},
 }
 SQUARE = ("dlazdice", "cpu_detail", "chlazeni_radky", "hodiny_stav", "graf_plny", "sit_disky", "gpu_sloupce",
-          "velke_cislo", "hladina", "graf_dokola")
+          "velke_cislo", "hladina", "graf_dokola", "volne")
 CLOCKS = ("hodiny", "hodiny_analog", "obrazek") + SQUARE   # bez posuvniku velikosti textu
 
 # (klic, popisek, druh pole) pro editor obrazovky
@@ -163,6 +166,7 @@ FIELDS.update({
     "graf_dokola": [("nadpis", "Nadpis", "text"), ("senzor", "Senzor", "sensor"), ("min", "Minimum", "num"),
                     ("max", "Maximum", "num"), ("desetinna", "Desetinná místa", "int"),
                     ("delka_s", "Délka historie (s)", "int")],
+    "volne": [("nazev", "Název (jen pro seznam)", "text")],
 })
 
 
@@ -230,6 +234,7 @@ class App(tk.Tk):
         self.sel = 0
         self._preview_img = None
         self._building = False
+        self._keditor = None                      # otevreny editor volneho rozvrzeni (editor_kraken.py)
 
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
@@ -419,6 +424,7 @@ class App(tk.Tk):
         self.lst = V.listbox(f, width=30, height=18)
         self.lst.grid(row=1, column=0, sticky="nsew", padx=8)
         self.lst.bind("<<ListboxSelect>>", lambda e: self._select(self._cur_index()))
+        self.lst.bind("<Double-Button-1>", lambda e: self.open_kraken_editor(self._cur_index()))
 
         b = ttk.Frame(f)
         b.grid(row=2, column=0, sticky="ew", padx=12, pady=12)
@@ -442,6 +448,8 @@ class App(tk.Tk):
             name = s.get("nadpis") or s.get("senzor", "")
         elif s["typ"] == "obrazek":
             name = os.path.splitext(os.path.basename(s.get("soubor", "")))[0]
+        elif s["typ"] == "volne":
+            name = s.get("nazev") or f"{len(s.get('prvky', []))} prvků"
         else:
             name = ""
         return f" {mark}  {TYPES[s['typ']]}: {name}".rstrip(": ")
@@ -745,7 +753,17 @@ class App(tk.Tk):
         row = 0
         V.card_title(self.ed, TYPES[s["typ"]]).grid(row=row, column=0, columnspan=2, sticky="w", pady=(2, 10))
         row += 1
-        sizes = [("velikost_obsahu", "Velikost obsahu", 0.6, 1.0, 0.01)]
+        if s["typ"] == "volne":                           # poloha prvku = body displeje, bez zmenseni
+            ttk.Button(self.ed, text="Otevřít editor rozvržení", style="Accent.TButton",
+                       command=lambda: self.open_kraken_editor(self.sel)).grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=(0, 6))
+            row += 1
+            ttk.Label(self.ed, style="Small.TLabel", justify="left", wraplength=250,
+                      text=f"{len(s.get('prvky', []))} prvků. Editor otevřeš i dvojklikem v seznamu. "
+                           "Prvky se posouvají myší, začít můžeš šablonou.").grid(
+                row=row, column=0, columnspan=2, sticky="w")
+            row += 1
+        sizes = [("velikost_obsahu", "Velikost obsahu", 0.6, 1.0, 0.01)] if s["typ"] != "volne" else []
         if s["typ"] not in CLOCKS:
             sizes.append(("velikost_textu", "Velikost textu", 0.7, 1.4, 0.05))
         for key, text, lo, hi, res in sizes:
@@ -989,11 +1007,28 @@ class App(tk.Tk):
                 hist[name] = [(lo + (hi - lo) * (0.45 + 0.25 * math.sin(i / 7 + ph))) * div
                               for i in range(90)]
                 sample = True
-        if scr.get("typ") in ("chlazeni", "chlazeni_radky", "hladina"):   # bez bezici aplikace nejsou data Krakenu
+        if scr.get("typ") == "volne":                      # prvky volneho rozvrzeni
+            for q in scr.get("prvky", []):
+                name = q.get("senzor")
+                if not name or name in kraken_prvky.TIME_SENSORS or name.startswith("@pumpa") \
+                        or name.startswith("@ventil") or name == config.LIQUID:
+                    continue
+                try:
+                    lo, hi = float(q.get("min", 0)), float(q.get("max", 100))
+                    div = float(q.get("delitel", 1)) or 1
+                except (TypeError, ValueError):
+                    continue
+                if name not in data:
+                    data[name] = {"value": (lo + (hi - lo) * 0.6) * div, "unit": ""}
+                    sample = True
+                if q.get("typ") in kraken_prvky.HISTORY_TYPES and len(hist.get(name, [])) < 2:
+                    hist[name] = [(lo + (hi - lo) * (0.45 + 0.25 * math.sin(i / 7))) * div for i in range(90)]
+                    sample = True
+        if scr.get("typ") in ("chlazeni", "chlazeni_radky", "hladina", "volne"):   # bez bezici aplikace nejsou data Krakenu
             for k, v in (("@kapalina", 31.4), ("@pumpa", 1720), ("@pumpa_vykon", 45),
                          ("@ventilatory", 650), ("@ventilatory_vykon", 30)):
                 if k not in data:
-                    data[k] = {"value": v, "unit": ""}
+                    data[k] = {"value": v, "unit": "°C" if k == config.LIQUID else ""}
                     sample = True
         return scr, data, hist, sample
 
@@ -1006,7 +1041,29 @@ class App(tk.Tk):
         self.leds.refresh()
         self._update_sidebar()
         self._update_dirty()
+        if self._keditor is not None:
+            try:
+                self._keditor.refresh()
+            except tk.TclError:
+                self._keditor = None
         self.after(1000, self._tick)
+
+    # ------------------------------------------------ editor volneho rozvrzeni
+    def open_kraken_editor(self, i=None):
+        i = self.sel if i is None else i
+        if not (0 <= i < len(self.cfg["obrazovky"])) or self.cfg["obrazovky"][i].get("typ") != "volne":
+            return
+        scr = self.cfg["obrazovky"][i]
+        if self._keditor is not None:
+            try:
+                if self._keditor.scr is scr:
+                    self._keditor.lift()
+                    return
+                self._keditor.close()
+            except tk.TclError:
+                pass
+        from editor_kraken import KrakenEditor
+        self._keditor = KrakenEditor(self, scr)
 
     # ---------------------------------------------------------- ulozeni
     def save(self):

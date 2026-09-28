@@ -20,6 +20,7 @@
 # Ctvercove (navrhy z Claude Design, vyuzivaji cely displej):
 #   "dlazdice" (ctyri dlazdice), "cpu_detail", "chlazeni_radky", "hodiny_stav", "graf_plny",
 #   "sit_disky", "gpu_sloupce", "velke_cislo", "hladina" (kruhova), "graf_dokola" (kruhovy)
+# Volne rozvrzeni: "volne" - prvky s polohou a velikosti v scr["prvky"] (kraken_prvky.py, editor_kraken.py)
 #
 # Barvy: kazda barevna cast ma dve barvy <cast>_od a <cast>_do (prechod).
 # Stejne barvy = jednobarevne. Prechod se pocita pres odstin (HSV),
@@ -55,7 +56,8 @@ TYPES = {"dva_bary": "Dva bary", "oblouk": "Oblouk (1 hodnota)", "budik": "Budí
          "dlazdice": "Čtyři dlaždice", "cpu_detail": "CPU detail (hodnota, 3 údaje, graf)",
          "chlazeni_radky": "Chlazení – řádky", "hodiny_stav": "Hodiny a stav",
          "graf_plny": "Graf přes celou plochu", "sit_disky": "Síť a disky", "gpu_sloupce": "GPU sloupce",
-         "velke_cislo": "Jedno velké číslo", "hladina": "Hladina (kruhová)", "graf_dokola": "Graf dokola (kruhový)"}
+         "velke_cislo": "Jedno velké číslo", "hladina": "Hladina (kruhová)", "graf_dokola": "Graf dokola (kruhový)",
+         "volne": "Volné rozvržení (editor)"}
 
 # barevne casti kazdeho typu: (klic, popisek, vychozi_od, vychozi_do)
 _TEXT = ("text", "Text (čísla a popisky)", "#ffffff", "#ffffff")
@@ -1374,6 +1376,12 @@ def draw_radial(scr, data, template=False, history=None):
     return img
 
 
+def draw_free(scr, data, template=False, history=None):
+    """Volne rozvrzeni: prvky z kraken_prvky.py (import az tady - kraken_prvky pouziva tento modul)."""
+    import kraken_prvky
+    return kraken_prvky.render(scr.get("prvky", []), data, history)
+
+
 DRAW = {"dva_bary": draw_two_bars, "oblouk": draw_arc, "budik": draw_gauge,
         "dva_kruhy": draw_rings, "graf": draw_graph, "hodiny": draw_time,
         "dva_oblouky": draw_two_arcs, "segmenty": draw_segments, "ctyri_hodnoty": draw_four,
@@ -1382,7 +1390,7 @@ DRAW = {"dva_bary": draw_two_bars, "oblouk": draw_arc, "budik": draw_gauge,
         "dlazdice": draw_tiles, "cpu_detail": draw_cpu_detail, "chlazeni_radky": draw_cooling_rows,
         "hodiny_stav": draw_clock_status, "graf_plny": draw_graph_full, "sit_disky": draw_net_disks,
         "gpu_sloupce": draw_gpu_columns, "velke_cislo": draw_big_number, "hladina": draw_level,
-        "graf_dokola": draw_radial}
+        "graf_dokola": draw_radial, "volne": draw_free}
 
 
 # ------------------------------------------------------- orez a zvetseni
@@ -1390,7 +1398,7 @@ DRAW = {"dva_bary": draw_two_bars, "oblouk": draw_arc, "budik": draw_gauge,
 _boxes = {}
 _TEMPLATE_CHARS = (None, "0", "3", "6", "8", "9")   # None = nejsirsi cislice
 FULL_FRAME = ("obrazek", "dlazdice", "cpu_detail", "chlazeni_radky", "hodiny_stav", "graf_plny",
-              "sit_disky", "gpu_sloupce", "velke_cislo", "hladina", "graf_dokola")   # bez orezu na obsah
+              "sit_disky", "gpu_sloupce", "velke_cislo", "hladina", "graf_dokola", "volne")   # bez orezu na obsah
 
 
 def _content_box(scr, data):
@@ -1465,6 +1473,9 @@ def used_sensors(screens):
         for k, v in s.items():
             if k.startswith("senzor") and isinstance(v, str) and v:
                 out.add(v)
+        for p in s.get("prvky", []) if s.get("typ") == "volne" else []:
+            if p.get("senzor"):
+                out.add(p["senzor"])
     return out
 
 
@@ -1481,6 +1492,10 @@ def history_spans(screens):
         for k in keys:
             if s.get(k):
                 out[s[k]] = max(out.get(s[k], 0), float(s.get("delka_s", 120)))
+        if s.get("typ") == "volne":
+            import kraken_prvky
+            for name, span in kraken_prvky.history_sensors(s.get("prvky", [])).items():
+                out[name] = max(out.get(name, 0), span)
     return out
 
 

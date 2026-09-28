@@ -3,8 +3,8 @@
 #
 # Efekty pocita aplikace (led_efekty.py) a posila barvy kazde LED primo:
 #   - NZXT: kanaly led1 a led2 = po jednom F140 (8 LED), rezim "super-fixed" (barva po LED)
-#   - Gigabyte: ARGB hlavicka D_LED1 (0x58) - 3 ventilatory paralelne, kazdy 16 LED (sviti stejne);
-#     D_LED2 (0x59) volna. Primy rezim: registr 0x32 = maska vypnutych vestavenych efektu
+#   - Gigabyte: ARGB hlavicka D_LED1 (0x58) - 2 ventilatory paralelne, kazdy 16 LED (sviti stejne);
+#     D_LED2 (0x59) - 1 ventilator, 16 LED. Primy rezim: registr 0x32 = maska vypnutych vestavenych efektu
 #     (D_LED1 0x01, D_LED2 0x02), barvy po LED paketem [0xCC, hlavicka, offset 2 B, pocet bajtu,
 #     az 19 LED], poradi bajtu z kalibrace (GRB). Protokol podle OpenRGB.
 #   - ostatni zony desky (male LED, 12V RGB) = jen jedna barva / efekt cipu pres liquidctl
@@ -79,9 +79,9 @@ def default_config():
         "nzxt": {"led1": {"nazev": "F140 (1)", "barvy": list(RAINBOW)},
                  "led2": {"nazev": "F140 (2)", "barvy": list(RAINBOW)}},
         "argb": {
-            "D_LED1": {"nazev": "ventilátory na desce (3× paralelně)", "pocet_led": 16, "pouzito": True,
+            "D_LED1": {"nazev": "2 ventilátory paralelně", "pocet_led": 16, "pouzito": True,
                        "barvy": rainbow(16)},
-            "D_LED2": {"nazev": "nepřipojeno", "pocet_led": 16, "pouzito": False, "barvy": rainbow(16)},
+            "D_LED2": {"nazev": "1 ventilátor", "pocet_led": 16, "pouzito": True, "barvy": rainbow(16)},
         },
         "fusion": zones,
     }

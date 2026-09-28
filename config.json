@@ -1107,7 +1107,7 @@
     },
     "argb": {
       "D_LED1": {
-        "nazev": "ventilátory na desce (3× paralelně)",
+        "nazev": "2 ventilátory paralelně",
         "pocet_led": 16,
         "rezim": "fixed",
         "barvy": [
@@ -1133,7 +1133,7 @@
         "obraceny_smer": false
       },
       "D_LED2": {
-        "nazev": "nepřipojeno",
+        "nazev": "1 ventilátor",
         "pocet_led": 16,
         "rezim": "off",
         "barvy": [

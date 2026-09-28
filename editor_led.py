@@ -226,12 +226,15 @@ class LedEditor:
                   "čelo PC ▸")]
         if not same.get():
             rings.append(("F140 (2)", self.lcfg["nzxt"]["led2"], led.LEDS_PER_FAN, "čelo PC ▸"))
-        h = self.lcfg["argb"]["D_LED1"]
-        rings.append(("Ventilátory na desce", h, max(1, min(led.ARGB_MAX_LEDS, int(h.get("pocet_led", 16)))),
-                      None))
-        for col, (title, ch, n, front) in enumerate(rings):
+        for name in led.ARGB_HEADERS:                      # kazda zapojena ARGB hlavicka desky zvlast
+            h = self.lcfg["argb"].get(name, {})
+            if h.get("pouzito", name == "D_LED1"):
+                rings.append((f"Deska – {name}", h, max(1, min(led.ARGB_MAX_LEDS, int(h.get("pocet_led", 16)))),
+                              None))
+        for i, (title, ch, n, front) in enumerate(rings):   # po dvou do radku, at karta nezuzi levy sloupec
+            row, col = 3 + i // 2, i % 2
             fr = ttk.Frame(f)
-            fr.grid(row=3, column=col, sticky="nw", padx=(16 if col == 0 else 4, 4), pady=(6, 16))
+            fr.grid(row=row, column=col, sticky="nw", padx=(16 if col == 0 else 4, 4), pady=(6, 16))
             ttk.Label(fr, text=title, style="Bold.TLabel").pack(anchor="w")
             self._ring(fr, ch, n, front)
 
@@ -363,11 +366,12 @@ class LedEditor:
             frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2))
             items = [(k, v) for k, v in frame.items()]
             n_items = len(items)
+            cell = PREVIEW_W / max(1, n_items)                  # 3-4 ventilatory vedle sebe
             for idx, (key, cols) in enumerate(items):
-                cx = 75 + idx * ((PREVIEW_W - 150) / max(1, n_items - 1)) if n_items > 1 else PREVIEW_W / 2
+                cx = cell * (idx + 0.5)
                 cy = PREVIEW_H / 2
                 n = len(cols)
-                R = 50
+                R = min(50, cell / 2 - 20)
                 dot = 7 if n <= 8 else 5
                 c.create_rectangle(cx - R - 18, cy - R - 18, cx + R + 18, cy + R + 18, outline="#262b33",
                                    fill="#111418")
@@ -378,7 +382,7 @@ class LedEditor:
                     # LED sviti vic, nez stejna hodnota na monitoru -> pro nahled zesvetlit (gama)
                     r, g, b = (round(255 * (v / 255) ** 0.5) for v in rgb)
                     c.create_oval(x - dot, y - dot, x + dot, y + dot, fill=f"#{r:02x}{g:02x}{b:02x}", outline="")
-                label = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "deska (3×)",
+                label = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "D_LED1",
                          "D_LED2": "D_LED2"}.get(key, key)
                 c.create_text(cx, cy, text=label, fill=V.MUTED, font=("Segoe UI", 8))
         self.preview.after(PREVIEW_MS, self._animate)

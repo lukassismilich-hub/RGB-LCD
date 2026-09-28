@@ -124,6 +124,7 @@ def main():
     leds = LedWorker()                   # LED ventilatoru a desky, taky vlastni vlakno
     leds.start()
     leds.update(cfg["led"])
+    ukonceni.on_power(suspend=leds.blackout, resume=leds.resume)   # spanek: LED zhasnout
 
     try:
         while not STOP.is_set():
@@ -198,8 +199,9 @@ def main():
         try:
             hand_over(kraken, cooling, cfg["chlazeni"], "aplikace konci - ZALOHA")
             kraken.close()
-            alpha.stop(1.5)                  # az po predani chlazeni - to ma prednost
-            leds.stop(0.5)
+            # az po predani chlazeni - to ma prednost; pri vypnuti PC LED zhasnout
+            leds.stop(0.5, off=ukonceni.SHUTDOWN.is_set())
+            alpha.stop(1.5)
         finally:
             ukonceni.DONE.set()
 

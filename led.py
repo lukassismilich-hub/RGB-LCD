@@ -259,6 +259,11 @@ class Session:
                     pass
 
 
+def _still(lcfg, typ):
+    """Staticky stav vsech ventilatoru: "vlastni" = vlastni barvy LED, "vypnuto" = zhasnuto."""
+    return dict(lcfg, stejne_pro_vse=True, efekt={"typ": typ})
+
+
 class LedWorker(threading.Thread):
     def __init__(self):
         super().__init__(name="led", daemon=True)
@@ -267,6 +272,10 @@ class LedWorker(threading.Thread):
         self._data = {}
         self._quit = threading.Event()
         self._wake = threading.Event()
+        self._off_req = threading.Event()    # uspani: zhasnout a do probuzeni nic neposilat
+        self._off_done = threading.Event()
+        self._resume = threading.Event()
+        self._shutdown = False               # konci Windows: LED zhasnout (ne klidny stav)
         self.state = {"stav": "čeká"}
 
     def update(self, lcfg, data=None):
@@ -276,7 +285,24 @@ class LedWorker(threading.Thread):
                 self._data = data
         self._wake.set()
 
-    def stop(self, timeout=1.0):
+    def blackout(self, timeout=1.5):
+        """PC se uspava: zhasnout LED. Deska drzi hlavicku ARGB pod napetim i ve spanku
+        a ve vypnutem PC, takze by na ventilatorech zustal zamrzly posledni snimek."""
+        if not self.is_alive():
+            return
+        self._off_done.clear()
+        self._resume.clear()
+        self._off_req.set()
+        self._wake.set()
+        self._off_done.wait(timeout)
+
+    def resume(self):
+        self._resume.set()
+        self._wake.set()
+
+    def stop(self, timeout=1.0, off=False):
+        """off=True (vypnuti PC, odhlaseni): LED zhasnout; jinak klidny stav (vlastni barvy)."""
+        self._shutdown = off
         self._quit.set()
         self._wake.set()
         self.join(timeout)
@@ -304,6 +330,23 @@ class LedWorker(threading.Thread):
                     self._set_state({"stav": "vypnuto"})
                 self._wake.wait(1.0)
                 self._wake.clear()
+                continue
+            if self._off_req.is_set():
+                self._off_req.clear()
+                if session:
+                    try:
+                        session.send(render(engine, _still(lcfg, "vypnuto"), 0.0), force=True)
+                    except Exception:
+                        pass
+                    session.close()
+                    session = None
+                self._off_done.set()
+                log.info("LED: PC se uspava - LED zhasnute.")
+                # do probuzeni nic neposilat; kdyby se uspani nepovedlo, po 2 min pokracovat
+                deadline = time.time() + 120
+                while not (self._quit.is_set() or self._resume.is_set()) and time.time() < deadline:
+                    self._quit.wait(1.0)
+                last_wall = time.time()
                 continue
             now_wall, now = time.time(), time.monotonic()
             resumed = now_wall - last_wall > RESUME_GAP_S
@@ -341,11 +384,12 @@ class LedWorker(threading.Thread):
             else:
                 self._wake.wait(1.0)
                 self._wake.clear()
-        # konec aplikace: klidny staticky stav (vlastni barvy LED s nastavenym jasem)
+        # konec aplikace: klidny staticky stav (vlastni barvy LED s nastavenym jasem);
+        # pri vypnuti PC zhasnout - deska drzi ARGB pod napetim i ve vypnutem PC
         if session:
             try:
-                calm = dict(lcfg, stejne_pro_vse=True, efekt={"typ": "vlastni"})
-                session.send(render(engine, calm, 0.0), force=True)
+                session.send(render(engine, _still(lcfg, "vypnuto" if self._shutdown else "vlastni"), 0.0),
+                             force=True)
             except Exception:
                 pass
             session.close()

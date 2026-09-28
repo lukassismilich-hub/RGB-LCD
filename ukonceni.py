@@ -8,6 +8,7 @@
 #                                    a vypnuti v handleru konzole nedostane
 #   - ukoncit.bat                 -> skryte okno (WM_CLOSE) - bez konzole (autostart)
 #                                    jinak aplikaci nejde bezpecne ukoncit
+#   - uspani / probuzeni PC       -> skryte okno (WM_POWERBROADCAST) -> on_power() (LED zhasnout)
 #
 # Spusteni "py ukonceni.py --ukoncit" ukonci bezici aplikaci a pocka na zalohu.
 #
@@ -23,18 +24,40 @@ log = logging.getLogger("rgb_lcd")
 
 STOP = threading.Event()     # pozadavek na ukonceni
 DONE = threading.Event()     # zaloha chlazeni je hotova, proces muze skoncit
+SHUTDOWN = threading.Event() # konci Windows (vypnuti PC, odhlaseni) - ne jen aplikace
 WAIT_S = 4.5
 
 _CTRL_EVENTS = {1: "Ctrl+Break", 2: "zavreni okna", 5: "odhlaseni", 6: "vypnuti systemu"}
 WM_CLOSE = 0x0010
 WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
+WM_POWERBROADCAST = 0x0218
+PBT_APMSUSPEND = 0x0004
+PBT_APMRESUMESUSPEND = 0x0007
+PBT_APMRESUMEAUTOMATIC = 0x0012
 MSGFLT_ALLOW = 1
 ERROR_ALREADY_EXISTS = 183
 WINDOW_CLASS = "RGB_LCD_ukonceni"
 MUTEX_NAME = "Local\\RGB_LCD_dashboard"
 
 _keep = []                   # ctypes callbacky a handle musi zustat v pameti
+_power_hooks = {"suspend": [], "resume": []}
+
+
+def on_power(suspend=None, resume=None):
+    """Funkce volane pri uspani a probuzeni PC (z vlakna skryteho okna, maji byt kratke)."""
+    if suspend:
+        _power_hooks["suspend"].append(suspend)
+    if resume:
+        _power_hooks["resume"].append(resume)
+
+
+def _run_hooks(kind):
+    for hook in _power_hooks[kind]:
+        try:
+            hook()
+        except Exception as e:
+            log.warning("Uspani/probuzeni: %s", e)
 
 
 def single_instance():
@@ -114,8 +137,16 @@ def _window_thread(ready):
             return 1                                  # vypnuti neblokujeme
         if msg == WM_ENDSESSION:
             if wparam:
+                SHUTDOWN.set()
                 request_stop("odhlaseni nebo vypnuti systemu")
             return 0
+        if msg == WM_POWERBROADCAST:
+            if wparam == PBT_APMSUSPEND:
+                log.info("PC se uspava.")
+                _run_hooks("suspend")
+            elif wparam in (PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC):
+                _run_hooks("resume")
+            return 1
         return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
     wndproc = WNDPROC(proc)

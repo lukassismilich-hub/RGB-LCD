@@ -1172,7 +1172,7 @@
         "#00ff00"
       ],
       "rychlost": 5,
-      "opacny_smer": true,
+      "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
       "max": 90

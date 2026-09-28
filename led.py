@@ -72,6 +72,9 @@ def default_config():
         "jas_deska": 100,
         "stejne_pro_vse": True,                    # jeden efekt pro vsechny ventilatory
         "vlna": False,                             # efekt posunuty mezi ventilatory
+        "vlna_smer": "dozadu",                     # "dozadu" = od predku skrine dozadu, "dopredu"
+        "vlna_f140_spolu": True,                   # F140 ve vlne jako jeden ventilator
+        "f140_vpredu": "led1",                     # ktery F140 je bliz predku skrine (led1 / led2)
         "efekt": copy.deepcopy(fx.DEFAULT_EFFECT),
         "efekt_f140": copy.deepcopy(fx.DEFAULT_EFFECT),
         "efekt_deska": copy.deepcopy(fx.DEFAULT_EFFECT),
@@ -103,6 +106,33 @@ def targets(lcfg):
             n = max(1, min(ARGB_MAX_LEDS, int(h.get("pocet_led", 16))))
             out.append((name, n, "deska", h.get("barvy", rainbow(n))))
     return out
+
+
+# rozmisteni ve skrini zepredu dozadu: D_LED1 vpredu, 2x F140 uprostred, D_LED2 vzadu
+CASE_ORDER = ("D_LED1", "F140", "D_LED2")
+
+
+def wave_offsets(lcfg, keys):
+    """{klic: posun faze 0..1} pro vlnu podle rozmisteni ve skrini a smeru vlny.
+    Vlna jde od ventilatoru s vetsim posunem k mensimu (ten je ve fazi napred)."""
+    order = []
+    front = "f140_1" if lcfg.get("f140_vpredu", "led1") == "led1" else "f140_2"
+    for slot in CASE_ORDER:
+        if slot == "F140":
+            order += [k for k in (front, "f140_2" if front == "f140_1" else "f140_1") if k in keys]
+        elif slot in keys:
+            order.append(slot)
+    order += [k for k in keys if k not in order]
+    pos, n = {}, 0
+    for k in order:
+        if k.startswith("f140_") and lcfg.get("vlna_f140_spolu", True) and any(
+                p.startswith("f140_") for p in pos):
+            pos[k] = next(v for p, v in pos.items() if p.startswith("f140_"))    # F140 jako jeden
+            continue
+        pos[k] = n
+        n += 1
+    back = lcfg.get("vlna_smer", "dozadu") == "dozadu"
+    return {k: ((n - 1 - v) if back else v) / max(1, n) for k, v in pos.items()}, order
 
 
 def effect_for(lcfg, group):
@@ -143,10 +173,12 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
     """{klic: [[r, g, b] x pocet LED]} s jasem - pro vlakno i nahled v nastaveni.
     orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat."""
     tg = targets(lcfg)
+    wave = bool(lcfg.get("vlna"))
+    offsets = wave_offsets(lcfg, [k for k, *_ in tg])[0] if wave else {}
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
         eff = effect_for(lcfg, group)
-        cols = engine.frame(eff, t, key, n, idx, len(tg), bool(lcfg.get("vlna")), custom, data, dt)
+        cols = engine.frame(eff, t, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0))
         if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
             cols = _orient(cols, *orientation(lcfg, key))
         k = float(lcfg.get("jas", 80)) * float(lcfg.get(f"jas_{group}", 100)) / 100.0

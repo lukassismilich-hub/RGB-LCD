@@ -5,8 +5,8 @@
 # Diky tomu je jas pod kontrolou a efekty jsou stejne a synchronni na vsech ventilatorech.
 # Ciste vypocty bez hardwaru - pouziva je vlakno LED (led.py) i zivy nahled v nastaveni.
 #
-# Ventilator ("cil") = (klic, pocet LED, skupina): F140 maji 8 LED, 3 ventilatory na desce
-# jsou paralelne na jedne hlavicce a sviti stejne (16 LED).
+# Ventilator ("cil") = (klic, pocet LED, skupina): F140 maji 8 LED, ventilatory na desce 16 LED.
+# Vlna: kazdy ventilator dostane posun faze (led.wave_offsets podle rozmisteni ve skrini).
 
 import colorsys
 import math
@@ -36,6 +36,14 @@ EFFECTS = {
     "tep": ("tep srdce", 1, True, False),
     "stroboskop": ("stroboskop", 1, True, False),
     "policie": ("policie", 2, True, False),
+    "divadlo": ("běžící světla", 2, True, True),
+    "odraz": ("odraz (ping-pong)", 2, True, False),
+    "duhove_dychani": ("duhové dýchání", 0, True, False),
+    "stridani": ("střídání barev", 3, True, False),
+    "blesky": ("bouřka / blesky", 2, True, False),
+    "ohnostroj": ("ohňostroj", 0, True, False),
+    "konfety": ("konfety", 0, True, False),
+    "staticky_prechod": ("přechod 3 barev (stojí)", 3, False, False),
     "teplota": ("podle teploty", 3, False, False),
     "vypnuto": ("vypnuto", 0, False, False),
 }
@@ -103,14 +111,19 @@ class Engine:
         self.rng = random.Random(seed)
         self.state = {}
 
-    def frame(self, eff, t, key, n, fan_idx=0, fan_count=1, wave=False, custom=None, data=None, dt=1 / FPS):
-        """Barvy (r, g, b) 0-255 jako float pro n LED jednoho ventilatoru v case t."""
+    def frame(self, eff, t, key, n, fan_idx=0, fan_count=1, wave=False, custom=None, data=None, dt=1 / FPS,
+              offset=None):
+        """Barvy (r, g, b) 0-255 jako float pro n LED jednoho ventilatoru v case t.
+        offset = posun faze pri vlne (0..1); jinak fan_idx / fan_count, kdyz je wave."""
         typ = eff.get("typ", "vypnuto")
         cols = [hex_rgb(c) for c in eff.get("barvy", [])] or [(255, 255, 255)]
         speed = max(1, min(10, int(eff.get("rychlost", 4))))
         rate = 0.08 * speed                       # otacky za sekundu (1 -> 0,08, 10 -> 0,8)
         direction = -1 if eff.get("opacny_smer") else 1
-        offset = fan_idx / max(1, fan_count) if wave else 0.0
+        if offset is None:
+            offset = fan_idx / max(1, fan_count) if wave else 0.0
+        if EFFECTS.get(typ, (0, 0, False, False))[3]:
+            offset *= direction                   # vlna jde stejnym smerem i pri opacnem otaceni
         black = (0.0, 0.0, 0.0)
 
         if typ == "barva":
@@ -235,6 +248,78 @@ class Engine:
             for i in range(n):
                 mine = (i < n / 2) == (side == 0)
                 out.append((cols[0] if side == 0 else c2) if on and mine else black)
+            return out
+        if typ == "divadlo":                      # kazda treti LED sviti a posouva se
+            step = int(math.floor(t * speed * 1.5 + offset * 3))
+            bg = _scale(cols[1], 0.1) if len(cols) > 1 else black
+            return [cols[0] if (i * direction - step) % 3 == 0 else bg for i in range(n)]
+        if typ == "odraz":                        # svetlo s ocasem jezdi tam a zpet po pulce kruhu
+            bg = _scale(cols[1], 0.08) if len(cols) > 1 else black
+            x = (t * rate * 1.2 + offset) % 1.0
+            tri = 1 - abs(2 * x - 1)              # 0 -> 1 -> 0
+            half = n / 2
+            pos = tri * (half - 1)
+            out = []
+            for i in range(n):
+                d = min(abs(i - pos), abs((n - 1 - i) - pos))      # zrcadlove na obou pulkach
+                k = max(0.0, 1 - d / 2.2) ** 2
+                out.append(tuple(max(bg[j], cols[0][j] * k) for j in range(3)))
+            return out
+        if typ == "duhove_dychani":
+            period = 6.0 / speed * 2
+            x = t / period + offset
+            k = (1 - math.cos((x % 1.0) * 2 * math.pi)) / 2
+            return [_hsv(int(x) * 0.13 + x * 0.02, k)] * n
+        if typ == "stridani":                     # ostre prepinani barev
+            idx = int(math.floor(t * speed * 0.25 + offset * len(cols))) % len(cols)
+            return [cols[idx]] * n
+        if typ == "blesky":
+            st = self.state.setdefault(("blesky", key), [0.0, 0.0])      # jas zablesku, cas dalsiho
+            bg = _scale(cols[1], 0.12) if len(cols) > 1 else black
+            st[0] *= 0.02 ** dt                   # rychle hasne
+            if self.rng.random() < dt * speed * 0.12:
+                st[0] = 1.0
+                st[1] = t + self.rng.uniform(0.08, 0.2)           # casto dvojity zablesk
+            elif st[1] and t >= st[1]:
+                st[0], st[1] = max(st[0], 0.8), 0.0
+            k = st[0]
+            return [tuple(max(bg[j], cols[0][j] * k * (0.7 + 0.3 * ((i * 7 + int(t * 30)) % 5) / 4))
+                          for j in range(3)) for i in range(n)]
+        if typ == "ohnostroj":                    # vybuchy nahodne barvy se siri od jedne LED
+            bursts = self.state.setdefault(("ohnostroj", key), [])
+            if self.rng.random() < dt * speed * 0.35:
+                bursts.append([self.rng.randrange(n), 0.0, self.rng.random()])
+            out = [black] * n
+            for b in bursts:
+                b[1] += dt * (0.4 + speed * 0.08)
+            bursts[:] = [b for b in bursts if b[1] < 1.2]
+            for center, age, hue in bursts:
+                radius = age * n * 0.45
+                fade = max(0.0, 1 - age / 1.2)
+                c = _hsv(hue)
+                for i in range(n):
+                    d = min((i - center) % n, (center - i) % n)
+                    k = max(0.0, 1 - abs(d - radius) / 1.5) * fade
+                    if k > 0:
+                        out[i] = tuple(max(out[i][j], c[j] * k) for j in range(3))
+            return out
+        if typ == "konfety":                      # kazda LED plynule prechazi na nahodnou barvu
+            st = self.state.setdefault(("konfety", key), [])
+            if len(st) != n:
+                st[:] = [[_hsv(self.rng.random()), _hsv(self.rng.random())] for _ in range(n)]
+            a = min(1.0, dt * speed * 0.6)
+            for s_ in st:
+                s_[0] = _mix(s_[0], s_[1], a)
+                if self.rng.random() < dt * speed * 0.08:
+                    s_[1] = _hsv(self.rng.random())
+            return [s_[0] for s_ in st]
+        if typ == "staticky_prechod":
+            k = len(cols)
+            out = []
+            for i in range(n):
+                x = i / n * k
+                a = int(x) % k
+                out.append(_mix(cols[a], cols[(a + 1) % k], x - int(x)))
             return out
         if typ == "teplota":
             v = None

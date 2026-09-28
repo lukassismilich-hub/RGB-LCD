@@ -116,8 +116,12 @@ class LedEditor:
         wf = ttk.Frame(f)
         wf.grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 6))
         ttk.Label(wf, text="Mezi ventilátory", style="Muted.TLabel").pack(side="left", padx=(0, 10))
-        V.segmented(wf, wave, [(False, "Synchronně"), (True, "Vlna (posunutě)")],
-                    command=lambda: self.lcfg.__setitem__("vlna", wave.get())).pack(side="left")
+        def on_wave():
+            self.lcfg["vlna"] = wave.get()
+            self._build_effects()                               # volby vlny jen pri vlne
+        V.segmented(wf, wave, [(False, "Synchronně"), (True, "Vlna (posunutě)")], command=on_wave).pack(side="left")
+        if wave.get():
+            self._wave_options(f)
         if same.get():
             panels = [("efekt", None)]
         else:
@@ -127,12 +131,38 @@ class LedEditor:
         for i, (key, title) in enumerate(panels):
             eff = self.lcfg.setdefault(key, dict(fx.DEFAULT_EFFECT))
             if i:
-                ttk.Separator(f).grid(row=2 + i * 2 - 1, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 12))
+                ttk.Separator(f).grid(row=3 + i * 2 - 1, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 12))
             pf = ttk.Frame(f)
-            pf.grid(row=2 + i * 2, column=0, columnspan=2, sticky="nsew", padx=20, pady=(0, 16))
+            pf.grid(row=3 + i * 2, column=0, columnspan=2, sticky="nsew", padx=20, pady=(0, 16))
             if title:
                 ttk.Label(pf, text=title, style="Bold.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 4))
             self._effect_panel(pf, eff, 3)
+
+    def _wave_options(self, f):
+        """Smer vlny ve skrini (D_LED1 vpredu, 2x F140 uprostred, D_LED2 vzadu) a chovani F140."""
+        lc = self.lcfg
+        of = ttk.Frame(f)
+        of.grid(row=2, column=0, columnspan=2, sticky="w", padx=20, pady=(4, 10))
+        ttk.Label(of, text="Směr vlny", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=3)
+        sv = tk.StringVar(value=lc.get("vlna_smer", "dozadu"))
+        V.segmented(of, sv, [("dozadu", "zepředu dozadu"), ("dopredu", "zezadu dopředu")],
+                    command=lambda: lc.__setitem__("vlna_smer", sv.get())).grid(row=0, column=1, sticky="w", pady=3)
+        together = tk.BooleanVar(value=lc.get("vlna_f140_spolu", True))
+        ttk.Label(of, text="F140", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=3)
+        V.segmented(of, together, [(True, "jako jeden (oba stejně)"), (False, "postupně")],
+                    command=lambda: lc.__setitem__("vlna_f140_spolu", together.get())).grid(
+            row=1, column=1, sticky="w", pady=3)
+        front = tk.StringVar(value=lc.get("f140_vpredu", "led1"))
+        ttk.Label(of, text="Blíž předku", style="Muted.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 10),
+                                                                     pady=3)
+        V.segmented(of, front, [("led1", "F140 (1)"), ("led2", "F140 (2)")],
+                    command=lambda: lc.__setitem__("f140_vpredu", front.get())).grid(row=2, column=1, sticky="w",
+                                                                                     pady=3)
+        ttk.Label(of, style="Small.TLabel", wraplength=440, justify="left",
+                  text="Ve skříni: D_LED1 vpředu, 2× F140 uprostřed, D_LED2 vzadu. Který F140 je vpředu, poznáš "
+                       "s efektem „blikání“ a F140 postupně: vlna musí jít plynule jedním směrem – když F140 "
+                       "bliknou obráceně, přepni „Blíž předku“.").grid(row=3, column=0, columnspan=2, sticky="w",
+                                                                         pady=(4, 0))
 
     def _effect_panel(self, f, eff, chip_cols=3):
         typ = eff.get("typ", "duha_toceni")
@@ -169,7 +199,8 @@ class LedEditor:
             labels = {"kometa": ["kometa", "pozadí"], "trpyt": ["záblesky", "pozadí"],
                       "prechod": ["barva 1", "barva 2"], "teplota": ["studená", "střední", "horká"],
                       "dvojita_kometa": ["kometa 1", "kometa 2"], "policie": ["první", "druhá"],
-                      "tep": ["barva"], "stroboskop": ["barva"]}.get(
+                      "tep": ["barva"], "stroboskop": ["barva"], "divadlo": ["světla", "pozadí"],
+                      "odraz": ["světlo", "pozadí"], "blesky": ["blesk", "pozadí"]}.get(
                 typ, [f"barva {i + 1}" for i in range(ncolors)])
             cols = eff.setdefault("barvy", list(fx.DEFAULT_EFFECT["barvy"]))
             while len(cols) < ncolors:
@@ -417,12 +448,16 @@ class LedEditor:
         else:
             # vcetne natoceni - LED v poradi, jak je aplikace posila (LED 1 vpravo, po smeru hodin)
             frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2))
-            items = [(k, v) for k, v in frame.items()]
+            order = led.wave_offsets(lc, list(frame))[1]          # jako ve skrini: vlevo predek, vpravo zadek
+            items = [(k, frame[k]) for k in order]
             n_items = len(items)
             cell = PREVIEW_W / max(1, n_items)                  # 3-4 ventilatory vedle sebe
+            c.create_text(4, PREVIEW_H - 2, text="◂ předek skříně", fill=V.DIM, anchor="sw", font=("Segoe UI", 8))
+            c.create_text(PREVIEW_W - 4, PREVIEW_H - 2, text="zadek skříně ▸", fill=V.DIM, anchor="se",
+                          font=("Segoe UI", 8))
             for idx, (key, cols) in enumerate(items):
                 cx = cell * (idx + 0.5)
-                cy = PREVIEW_H / 2
+                cy = PREVIEW_H / 2 - 6
                 n = len(cols)
                 R = min(50, cell / 2 - 20)
                 dot = 7 if n <= 8 else 5

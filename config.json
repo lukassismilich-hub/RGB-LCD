@@ -1063,7 +1063,7 @@
         "nazev": "zóna 1",
         "rezim": "off",
         "barva": "#ffffff",
-        "rychlost": "normal"
+        "rychlost": "fastest"
       },
       "led2": {
         "nazev": "zóna 2",
@@ -1170,8 +1170,8 @@
     "jas": 100,
     "jas_f140": 100,
     "jas_deska": 100,
-    "stejne_pro_vse": true,
-    "vlna": false,
+    "stejne_pro_vse": false,
+    "vlna": true,
     "efekt": {
       "typ": "paleta",
       "barvy": [
@@ -1179,7 +1179,7 @@
         "#ff0000",
         "#00ff00"
       ],
-      "rychlost": 1,
+      "rychlost": 5,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,

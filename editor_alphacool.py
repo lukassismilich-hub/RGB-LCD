@@ -161,8 +161,11 @@ class AlphaEditor:
                                     style="H2.TLabel")
         self.canvas_box.pack(anchor="w", pady=(0, 10))
         W, H = self._cw * self.scale, self._ch * self.scale
-        self.canvas = tk.Canvas(box, width=W, height=H, bg="black", highlightthickness=6,
-                                highlightbackground="#0c0e11", highlightcolor="#0c0e11", cursor="crosshair")
+        # ramecek jako okolni Frame: okraj platna (highlightthickness) by prekryl krajni body nahledu
+        bezel = tk.Frame(box, bg="#0c0e11", padx=6, pady=6)
+        bezel.pack()
+        self.canvas = tk.Canvas(bezel, width=W, height=H, bg="black", highlightthickness=0, bd=0,
+                                cursor="crosshair")
         self.canvas.pack()
         self._bg = self.canvas.create_image(0, 0, anchor="nw")
         self.canvas.bind("<Button-1>", self._on_press)

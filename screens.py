@@ -906,7 +906,7 @@ def _load_image(name, mode, cols):
 
 
 def draw_image(scr, data, template=False, history=None):
-    """Obrazek / logo uprostred, cely v kruhu displeje; velikost ridi "Velikost obsahu"."""
+    """Obrazek / logo uprostred pres cely ctvercovy displej; velikost ridi "Velikost obsahu"."""
     img = _canvas()
     try:
         pic = _load_image(scr.get("soubor", ""), scr.get("uprava", IMAGE_MODES[0]), colors(scr, "tvar"))
@@ -916,7 +916,7 @@ def draw_image(scr, data, template=False, history=None):
                   width=3 * S)
         _text(img, (W // 2, W // 2), "chybí obrázek", _font("ExtraBold", 18), (GREY, GREY), "mm")
         return img
-    k = W * 0.96 / math.hypot(pic.width, pic.height)        # cely obrazek (i rohy) v kruhu displeje
+    k = W / max(pic.width, pic.height)                       # displej je ctvercovy -> delsi strana = sirka
     pic = pic.resize((max(1, round(pic.width * k)), max(1, round(pic.height * k))), Image.LANCZOS)
     img.paste(pic, ((W - pic.width) // 2, (W - pic.height) // 2))
     return img
@@ -939,7 +939,7 @@ FULL_FRAME = ("obrazek",)                          # bez orezu na obsah
 def _content_box(scr, data):
     """Vyrez = sjednoceni obsahu pro nejsirsi i nejvyssi (oble) cislice."""
     global _TCHAR
-    if scr.get("typ") in FULL_FRAME:                  # obsah uz je rozvrzeny na cely kruh
+    if scr.get("typ") in FULL_FRAME:                  # obsah uz je rozvrzeny na cely displej
         return (0, 0, W, W)
     key = json.dumps(scr, sort_keys=True, ensure_ascii=False) + f"|{_TS}"
     if key not in _boxes:

@@ -10,7 +10,7 @@ import time
 import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
 
-from PIL import Image, ImageDraw, ImageTk
+from PIL import ImageTk
 
 import config
 import hwinfo
@@ -806,7 +806,7 @@ class App(tk.Tk):
         pv = V.card(f)
         pv.pack(fill="x")
         V.card_title(pv, "Náhled").pack(anchor="w", padx=16, pady=(14, 8))
-        self.preview = tk.Label(pv, bg=V.CARD, width=264, height=264, bd=0)
+        self.preview = tk.Label(pv, bg="#000000", bd=0, highlightthickness=1, highlightbackground=V.LINE)
         self.preview.pack(padx=16)
         self.src_lbl = ttk.Label(pv, style="Small.TLabel", justify="center")
         self.src_lbl.pack(pady=(6, 14))
@@ -856,26 +856,6 @@ class App(tk.Tk):
         ttk.Checkbutton(g, text="Přidávat nové senzory z HWiNFO", variable=av,
                         command=on_auto).grid(row=7, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 14))
 
-    def _round_preview(self, img):
-        """Kulaty displej: obrazek oriznuty do kruhu, kolem jemny ramecek."""
-        S, R = 264, 120
-        out = Image.new("RGB", (S, S), V.CARD)
-        big = Image.new("L", (S * 4, S * 4), 0)
-        d = ImageDraw.Draw(big)
-        c = S * 2
-        d.ellipse((c - (R + 5) * 4, c - (R + 5) * 4, c + (R + 5) * 4, c + (R + 5) * 4), fill=255)
-        ring = big.resize((S, S), Image.LANCZOS)
-        out.paste(V.LINE, (0, 0), ring)
-        big = Image.new("L", (S * 4, S * 4), 0)
-        ImageDraw.Draw(big).ellipse((c - (R + 4) * 4, c - (R + 4) * 4, c + (R + 4) * 4, c + (R + 4) * 4), fill=255)
-        out.paste("#000000", (0, 0), big.resize((S, S), Image.LANCZOS))
-        big = Image.new("L", (S * 4, S * 4), 0)
-        ImageDraw.Draw(big).ellipse((c - R * 4, c - R * 4, c + R * 4, c + R * 4), fill=255)
-        o = (S - img.width) // 2
-        out.paste(img.convert("RGB"), (o, o), big.resize((S, S), Image.LANCZOS).crop((o, o, o + img.width,
-                                                                                         o + img.height)))
-        return out
-
     def _update_preview(self):
         if not self.cfg["obrazovky"]:
             return
@@ -889,8 +869,8 @@ class App(tk.Tk):
             return
         base = "Data z běžící aplikace" if self.running else "Data přímo z HWiNFO (aplikace neběží)"
         self.src_lbl.config(text=base + ("\nchybějící hodnoty = ukázkové" if sample else ""))
-        self._preview_img = ImageTk.PhotoImage(self._round_preview(img))
-        self.preview.config(image=self._preview_img, width=264, height=264)
+        self._preview_img = ImageTk.PhotoImage(img)          # ctvercovy LCD 240 x 240, 1:1
+        self.preview.config(image=self._preview_img)
 
     def _preview_data(self, scr):
         """Data pro nahled; chybejici senzory (napr. kapalina bez bezici aplikace)

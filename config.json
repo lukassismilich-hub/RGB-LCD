@@ -1249,15 +1249,15 @@
     "jas_f140": 100,
     "jas_deska": 100,
     "stejne_pro_vse": true,
-    "vlna": false,
+    "vlna": true,
     "efekt": {
-      "typ": "paleta",
+      "typ": "duhove_dychani",
       "barvy": [
         "#00ff00",
         "#0000ff",
         "#ff0000"
       ],
-      "rychlost": 2,
+      "rychlost": 1,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
@@ -1290,7 +1290,7 @@
       "max": 90
     },
     "vlna_smer": "dozadu",
-    "vlna_f140_spolu": false,
+    "vlna_f140_spolu": true,
     "f140_vpredu": "led2"
   }
 }

@@ -1024,7 +1024,8 @@
         ],
         "rychlost": "slowest",
         "obraceny_smer": false,
-        "nazev": "F140 (1)"
+        "nazev": "F140 (1)",
+        "posun": 0
       },
       "led2": {
         "rezim": "super-fixed",

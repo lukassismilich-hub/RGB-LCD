@@ -116,13 +116,39 @@ def is_animated(lcfg):
     return any(effect_for(lcfg, g).get("typ") in fx.ANIMATED for g in groups)
 
 
-def render(engine, lcfg, t, data=None, dt=1 / fx.FPS):
-    """{klic: [[r, g, b] x pocet LED]} s jasem - pro vlakno i nahled v nastaveni."""
+def orientation(lcfg, key):
+    """(posun LED 1, obracene poradi) ventilatoru - aby se efekt na vsech tocil stejne,
+    i kdyz ma kazdy ventilator LED 1 jinde nebo LED cislovane opacnym smerem."""
+    if key.startswith("f140_"):
+        ch = lcfg.get("nzxt", {}).get("led" + key[-1], {})
+    else:
+        ch = lcfg.get("argb", {}).get(key, {})
+    try:
+        shift = int(ch.get("posun", 0))
+    except (TypeError, ValueError):
+        shift = 0
+    return shift, bool(ch.get("obracene", False))
+
+
+def _orient(cols, shift, reverse):
+    """Fyzicka LED k dostane barvu z pozice (posun +/- k) efektu."""
+    n = len(cols)
+    if not n or (shift % n == 0 and not reverse):
+        return cols
+    sign = -1 if reverse else 1
+    return [cols[(shift + sign * k) % n] for k in range(n)]
+
+
+def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
+    """{klic: [[r, g, b] x pocet LED]} s jasem - pro vlakno i nahled v nastaveni.
+    orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat."""
     tg = targets(lcfg)
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
-        cols = engine.frame(effect_for(lcfg, group), t, key, n, idx, len(tg), bool(lcfg.get("vlna")),
-                            custom, data, dt)
+        eff = effect_for(lcfg, group)
+        cols = engine.frame(eff, t, key, n, idx, len(tg), bool(lcfg.get("vlna")), custom, data, dt)
+        if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
+            cols = _orient(cols, *orientation(lcfg, key))
         k = float(lcfg.get("jas", 80)) * float(lcfg.get(f"jas_{group}", 100)) / 100.0
         out[key] = fx.apply_brightness(cols, k)
     return out

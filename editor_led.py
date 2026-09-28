@@ -2,6 +2,7 @@
 #   - jas vsech ventilatoru + vyrovnani F140 / ventilatory na desce
 #   - efekt pro vsechny ventilatory (nebo zvlast F140 a deska), rychlost, smer, barvy, vlna
 #   - vlastni barvy LED (kruh 8 / 16 LED) - pro efekt "vlastni barvy LED" a klidny stav po ukonceni
+#   - natoceni ventilatoru (posun LED 1, obraceny smer) - aby se efekt na vsech tocil stejne
 #   - zivy animovany nahled (stejny vypocet jako ve vlakne LED)
 #   - sbalene: ARGB hlavicky (pocet LED, D_LED2) a ostatni zony desky
 # Zmeny se na ventilatorech projevi po Ulozit.
@@ -57,6 +58,9 @@ class LedEditor:
         ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu. "
                                                  "Na ventilátorech se změna projeví po Uložit.",
                   wraplength=PREVIEW_W).pack(anchor="w", padx=16, pady=(4, 14))
+        self.sync = V.card(right)                          # natoceni hned pod nahledem
+        self.sync.pack(fill="x", pady=(16, 0))
+        self._build_sync()
         self.custom = V.card(right)
         self.custom.pack(fill="x", pady=(16, 0))
         self._build_custom()
@@ -109,9 +113,11 @@ class LedEditor:
         V.segmented(head, same, [(True, "Stejný pro všechny"), (False, "Zvlášť F140 a deska")],
                     command=on_same).grid(row=0, column=1)
         wave = tk.BooleanVar(value=self.lcfg.get("vlna", False))
-        ttk.Checkbutton(f, text="Vlna přes všechny ventilátory (efekt se mezi nimi posouvá)", variable=wave,
-                        command=lambda: self.lcfg.__setitem__("vlna", wave.get())).grid(
-            row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 6))
+        wf = ttk.Frame(f)
+        wf.grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 6))
+        ttk.Label(wf, text="Mezi ventilátory", style="Muted.TLabel").pack(side="left", padx=(0, 10))
+        V.segmented(wf, wave, [(False, "Synchronně"), (True, "Vlna (posunutě)")],
+                    command=lambda: self.lcfg.__setitem__("vlna", wave.get())).pack(side="left")
         if same.get():
             panels = [("efekt", None)]
         else:
@@ -283,6 +289,51 @@ class LedEditor:
             ch["barvy"][i] = col
             self._build_custom()
 
+    def _set_used(self, h, used):
+        h["pouzito"] = used
+        self._build_custom()                                # kruhy barev a natoceni podle zapojenych hlavicek
+        self._build_sync()
+
+    # ------------------------------------------------ natoceni (synchronizace)
+    def _build_sync(self):
+        """Posun LED 1 a smer cislovani kazdeho ventilatoru - aby se efekt na vsech tocil stejne."""
+        f = self.sync
+        for w in f.winfo_children():
+            w.destroy()
+        V.card_title(f, "Natočení ventilátorů").grid(row=0, column=0, columnspan=4, sticky="w", padx=16,
+                                                      pady=(14, 0))
+        ttk.Label(f, style="Small.TLabel", wraplength=PREVIEW_W, justify="left",
+                  text="Když se efekt na skutečných ventilátorech točí posunutě nebo opačně: zvol efekt "
+                       "„kometa“, pomalou rychlost a Synchronně, ulož a posouvej LED 1 / obracej směr, "
+                       "dokud nejsou hlavy komet na všech ventilátorech na stejném místě a neběží stejným "
+                       "směrem. Náhled ukazuje, jak má efekt vypadat.").grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=16, pady=(2, 6))
+        names = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2"}
+        for r, (key, n, _g, _c) in enumerate(led.targets(self.lcfg), start=2):
+            if key.startswith("f140_"):
+                ch = self.lcfg["nzxt"].setdefault("led" + key[-1], {})
+            else:
+                ch = self.lcfg["argb"].setdefault(key, {})
+            last = r == 1 + len(led.targets(self.lcfg))
+            pad = (2, 14 if last else 2)
+            ttk.Label(f, text=names.get(key, key), style="Muted.TLabel").grid(row=r, column=0, sticky="w",
+                                                                              padx=(16, 12), pady=pad)
+            ttk.Label(f, text="posun LED", style="Small.TLabel").grid(row=r, column=1, sticky="e", pady=pad)
+            sv = tk.StringVar(value=str(int(ch.get("posun", 0)) % n))
+            ttk.Spinbox(f, textvariable=sv, from_=0, to=n - 1, width=4, wrap=True).grid(
+                row=r, column=2, padx=(6, 12), pady=pad)
+
+            def on_shift(*a, ch=ch, sv=sv, n=n):
+                try:
+                    ch["posun"] = int(sv.get()) % n
+                except ValueError:
+                    pass
+            sv.trace_add("write", on_shift)
+            rv = tk.BooleanVar(value=bool(ch.get("obracene", False)))
+            ttk.Checkbutton(f, text="obrácený směr", variable=rv,
+                            command=lambda ch=ch, rv=rv: ch.__setitem__("obracene", rv.get())).grid(
+                row=r, column=3, sticky="w", padx=(0, 16), pady=pad)
+
     # -------------------------------------------------------------- hardware
     def _build_hw(self):
         f = self.hw
@@ -297,7 +348,7 @@ class LedEditor:
             h = self.lcfg["argb"].setdefault(name, {"pocet_led": 16, "pouzito": False})
             used = tk.BooleanVar(value=h.get("pouzito", name == "D_LED1"))
             ttk.Checkbutton(af, text=f"{name} – {h.get('nazev', '')}", variable=used,
-                            command=lambda h=h, used=used: h.__setitem__("pouzito", used.get())).grid(
+                            command=lambda h=h, used=used: self._set_used(h, used.get())).grid(
                 row=r, column=0, sticky="w", padx=4, pady=2)
             ttk.Label(af, text="počet LED", style="Muted.TLabel").grid(row=r, column=1, padx=(10, 4))
             pv = tk.StringVar(value=str(h.get("pocet_led", 16)))
@@ -363,7 +414,7 @@ class LedEditor:
         if not lc.get("zapnuto", True):
             c.create_text(PREVIEW_W / 2, PREVIEW_H / 2, text="Řízení LED vypnuto", fill=V.MUTED)
         else:
-            frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2))
+            frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2), orient=False)
             items = [(k, v) for k, v in frame.items()]
             n_items = len(items)
             cell = PREVIEW_W / max(1, n_items)                  # 3-4 ventilatory vedle sebe

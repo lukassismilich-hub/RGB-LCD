@@ -306,7 +306,7 @@ class LedEditor:
                   text="Když se efekt na skutečných ventilátorech točí posunutě nebo opačně: zvol efekt "
                        "„kometa“, pomalou rychlost a Synchronně, ulož a posouvej LED 1 / obracej směr, "
                        "dokud nejsou hlavy komet na všech ventilátorech na stejném místě a neběží stejným "
-                       "směrem. Náhled ukazuje, jak má efekt vypadat.").grid(
+                       "směrem. Náhled natočení zohledňuje (LED 1 vpravo, číslování po směru hodin).").grid(
             row=1, column=0, columnspan=4, sticky="w", padx=16, pady=(2, 6))
         names = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2"}
         for r, (key, n, _g, _c) in enumerate(led.targets(self.lcfg), start=2):
@@ -414,7 +414,8 @@ class LedEditor:
         if not lc.get("zapnuto", True):
             c.create_text(PREVIEW_W / 2, PREVIEW_H / 2, text="Řízení LED vypnuto", fill=V.MUTED)
         else:
-            frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2), orient=False)
+            # vcetne natoceni - LED v poradi, jak je aplikace posila (LED 1 vpravo, po smeru hodin)
+            frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2))
             items = [(k, v) for k, v in frame.items()]
             n_items = len(items)
             cell = PREVIEW_W / max(1, n_items)                  # 3-4 ventilatory vedle sebe

@@ -1025,7 +1025,8 @@
         "rychlost": "slowest",
         "obraceny_smer": false,
         "nazev": "F140 (1)",
-        "posun": 0
+        "posun": 0,
+        "obracene": false
       },
       "led2": {
         "rezim": "super-fixed",
@@ -1045,7 +1046,8 @@
         ],
         "rychlost": "normal",
         "obraceny_smer": false,
-        "nazev": "F140 (2)"
+        "nazev": "F140 (2)",
+        "obracene": false
       },
       "led3": {
         "nazev": "nepřipojeno",
@@ -1131,7 +1133,9 @@
         ],
         "barva": "#ffffff",
         "rychlost": "slowest",
-        "obraceny_smer": false
+        "obraceny_smer": false,
+        "posun": 0,
+        "obracene": false
       },
       "D_LED2": {
         "nazev": "1 ventilátor",

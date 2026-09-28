@@ -9,7 +9,7 @@ import copy
 import os
 import shutil
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from PIL import ImageTk
 
@@ -66,6 +66,38 @@ FIELDS = {
     "obdelnik": [("vypln", "Výplň", "choice", ["zadna", "plna", "rastr"]),
                  ("dvojity", "Dvojitý rámeček", "bool", None)] + _COL,
 }
+
+# sci-fi prvky (prvky_scifi.py); "template" = text se {senzor|dělitel|místa}, "lines" = víc řádků
+_R = [("senzor", "Senzor", "sensor", None), ("min", "Minimum", "num", None), ("max", "Maximum", "num", None),
+      ("delitel", "Dělitel", "num", None)]
+_TXT = [("jednotka", "Jednotka (text)", "text", None), ("popisek", "Popisek", "text", None)]
+FIELDS.update({
+    "seg": [("cas", "Zobrazit čas místo hodnoty", "bool", None),
+            ("format_casu", "Formát času", "choice", ["%H:%M", "%H:%M:%S"]),
+            ("senzor", "Senzor", "sensor", None), ("delitel", "Dělitel", "num", None),
+            ("desetinna_mista", "Desetinná místa", "int", None)] + _TXT
+           + [("zarovnani", "Zarovnání", "choice", ALIGN), ("barva", "Barva", "color", None)],
+    "radek": [("sablona", "Text se {senzor|dělitel|místa}", "template", None),
+              ("zarovnani", "Zarovnání", "choice", ALIGN)] + _FONT + _COL,
+    "term": [("radky", "Řádky: POPISEK = {senzor}jednotka", "lines", None),
+             ("radek_px", "Výška řádku (px)", "int", None), ("kurzor", "Blikající kurzor", "bool", None)] + _FONT,
+    "pasek": [("popisek", "Popisek", "text", None), ("sablona", "Hodnoty vpravo", "template", None)]
+             + _R + _FONT,
+    "duhovka": list(_R),
+    "esper": [("sablona", "Štítek vlevo nahoře", "template", None), ("roh", "Text v rohu", "text", None)]
+             + _R + [("delka_s", "Délka (s)", "int", None)],
+    "teren": _R + [("delka_s", "Délka (s)", "int", None)],
+    "blok": _R + [("desetinna_mista", "Desetinná místa", "int", None)] + _TXT,
+    "radar": _R + [("delka_s", "Délka historie (s)", "int", None)],
+    "lcars_ram": [("popisek", "Popisek v horní liště", "text", None), ("kody", "Kódy v levém pásu", "text", None),
+                  ("pas", "Šířka levého pásu", "int", None), ("pas_nahore", "Výška horní lišty", "int", None)],
+    "lcars_hodnota": [("popisek", "Popisek štítku", "text", None), ("sirka_stitku", "Šířka štítku", "int", None),
+                      ("senzor", "Senzor", "sensor", None), ("delitel", "Dělitel", "num", None),
+                      ("desetinna_mista", "Desetinná místa", "int", None), ("jednotka", "Jednotka (text)", "text", None),
+                      ("min", "Minimum (bloky)", "num", None), ("max", "Maximum (bloky)", "num", None),
+                      ("bloky", "Počet bloků (od výšky 24 px)", "int", None)],
+    "warp": list(_R),
+})
 
 
 class AlphaEditor:
@@ -188,7 +220,15 @@ class AlphaEditor:
         for t, name in prvky.TYPES.items():
             m.add_command(label=name, command=lambda t=t: self.add(t))
         add["menu"] = m
-        add.grid(row=0, column=1, padx=(12, 0))
+        add.grid(row=0, column=2, padx=(8, 0))
+        tpl = ttk.Menubutton(head, text="Hotové obrazovky")
+        tm = tk.Menu(tpl, tearoff=0)
+        for name in prvky._scifi.templates():
+            tm.add_command(label=name, command=lambda n=name: self.load_template(n))
+        tm.add_separator()
+        tm.add_command(label="Vrátit předchozí rozvržení", command=self.restore_layout)
+        tpl["menu"] = tm
+        tpl.grid(row=0, column=1, padx=(12, 0))
         self.lst = V.listbox(lf, height=12, width=32)
         self.lst.grid(row=1, column=0, sticky="nsew", padx=(8, 0))
         sb = ttk.Scrollbar(lf, orient="vertical", command=self.lst.yview)
@@ -205,6 +245,34 @@ class AlphaEditor:
             ttk.Button(btns, text=text, command=cmd, style=style, width=3 if len(text) == 1 else None).grid(
                 row=0, column=c, padx=2, sticky="ew")
             btns.columnconfigure(c, weight=1 if len(text) > 1 else 0)
+
+    # ------------------------------------------------- hotove obrazovky
+    def load_template(self, name):
+        """Nahradi rozvrzeni na sirku hotovou obrazovkou; puvodni se uschova do "prvky_zaloha"."""
+        if prvky.portrait(self.acfg):
+            messagebox.showinfo("Hotové obrazovky", "Hotové obrazovky jsou na šířku (240 × 128).\n"
+                                "Přepni otočení displeje na 0° nebo 180°.", parent=self.canvas)
+            return
+        if not messagebox.askyesno("Hotové obrazovky", f"Nahradit současné rozvržení obrazovkou\n„{name}“?\n\n"
+                                   "Současné se uschová – vrátíš ho položkou „Vrátit předchozí rozvržení“.\n"
+                                   "Na displeji se projeví po Uložit.", parent=self.canvas):
+            return
+        tpls = prvky._scifi.templates()
+        current = self.acfg.get("prvky", [])
+        if current not in tpls.values():          # prochazeni hotovych obrazovek nesmi prepsat vlastni rozvrzeni
+            self.acfg["prvky_zaloha"] = copy.deepcopy(current)
+        self.acfg["prvky"] = copy.deepcopy(tpls[name])
+        self.sel = None
+        self._changed(rebuild=True)
+
+    def restore_layout(self):
+        """Prohodi soucasne a uschovane rozvrzeni (jde tedy i zpet)."""
+        if prvky.portrait(self.acfg) or not self.acfg.get("prvky_zaloha"):
+            messagebox.showinfo("Hotové obrazovky", "Žádné uschované rozvržení na šířku není.", parent=self.canvas)
+            return
+        self.acfg["prvky"], self.acfg["prvky_zaloha"] = self.acfg["prvky_zaloha"], self.acfg.get("prvky", [])
+        self.sel = None
+        self._changed(rebuild=True)
 
     # ---------------------------------------------------------- seznam
     def _list_index(self):
@@ -402,9 +470,16 @@ class AlphaEditor:
             self._form_vars[k] = v
         row = 2
         for key, text, kind, opts in FIELDS.get(p["typ"], []):
+            wide = kind in ("template", "lines")               # sablony pod popiskem pres celou sirku
             ttk.Label(self.props, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="nw",
+                                                                       columnspan=2 if wide else 1,
                                                                        padx=(16, 8), pady=3)
-            self._field(row, p, key, kind, opts).grid(row=row, column=1, sticky="w", padx=(0, 16), pady=3)
+            if wide:
+                row += 1
+                self._field(row, p, key, kind, opts).grid(row=row, column=0, columnspan=2, sticky="ew",
+                                                          padx=16, pady=(0, 6))
+            else:
+                self._field(row, p, key, kind, opts).grid(row=row, column=1, sticky="w", padx=(0, 16), pady=3)
             row += 1
         ttk.Frame(self.props, height=10).grid(row=row, column=0)
 
@@ -451,6 +526,8 @@ class AlphaEditor:
                 self._changed(geometry_only=True)
             lb.bind("<<ListboxSelect>>", on)
             return fr
+        if kind in ("template", "lines"):
+            return self._template_field(p, key, kind, names[1:])
         if kind == "bool":
             v = tk.BooleanVar(value=bool(p.get(key)))
             self._form_vars[key] = v
@@ -473,6 +550,44 @@ class AlphaEditor:
             w = ttk.Entry(f, textvariable=v, width=8 if kind in ("int", "num") else 20)
         v.trace_add("write", lambda *a: self._set(key, v.get(), kind))
         return w
+
+    def _template_field(self, p, key, kind, sensors):
+        """Text se zastupnymi symboly {senzor|delitel|mista}; pod nim nabidka "vlozit senzor".
+        kind "lines" = vice radku (terminal: POPISEK = sablona)."""
+        fr = ttk.Frame(self.props)
+        if kind == "lines":
+            w = tk.Text(fr, width=40, height=7, wrap="none", bg=V.FIELD, fg=V.TEXT, insertbackground=V.TEXT,
+                        relief="flat", highlightthickness=1, highlightbackground=V.LINE, highlightcolor=V.ACCENT,
+                        font=("Consolas", 9))
+            w.insert("1.0", str(p.get(key, "")))
+
+            def on(_e=None):
+                p[key] = w.get("1.0", "end-1c")
+                self._changed(geometry_only=True)
+            w.bind("<KeyRelease>", on)
+            insert = lambda s: (w.insert("insert", s), on())
+        else:
+            v = tk.StringVar(value=str(p.get(key, "")))
+            self._form_vars[key] = v
+            w = ttk.Entry(fr, textvariable=v, width=40)
+            v.trace_add("write", lambda *a: self._set(key, v.get(), "text"))
+            insert = lambda s: w.insert("insert", s)
+        w.pack(anchor="w", fill="x")
+        row = ttk.Frame(fr)
+        row.pack(anchor="w", pady=(4, 0))
+        ttk.Label(row, text="Vložit senzor:", style="Small.TLabel").pack(side="left")
+        sv = tk.StringVar()
+        cb = ttk.Combobox(row, textvariable=sv, values=sensors, width=26, state="readonly")
+        cb.pack(side="left", padx=4)
+
+        def ins(_e=None):
+            if sv.get():
+                insert("{" + sv.get() + "}")
+                sv.set("")
+        cb.bind("<<ComboboxSelected>>", ins)
+        ttk.Label(fr, style="Small.TLabel", text="{senzor|dělitel|desetinná místa}, např. {Takt jader|1000|1}GHz").pack(
+            anchor="w", pady=(2, 0))
+        return fr
 
     def _file_field(self, p, key):
         """Obrazek: nabidka ze slozky obrazky/, Vybrat... (zkopiruje do obrazky/), puvodni velikost."""

@@ -23,7 +23,7 @@ def graph_sensors(acfg):
     """{senzor: delka_s} pro vsechny grafy na displeji (hlavni smycka pro ne drzi historii)."""
     out = {}
     for p in prvky.items(acfg):
-        if p.get("typ") == "graf" and p.get("senzor"):
+        if (p.get("typ") == "graf" or p.get("typ") in prvky.HISTORY_TYPES) and p.get("senzor"):
             out[p["senzor"]] = max(out.get(p["senzor"], 0), float(p.get("delka_s", 120)))
     return out
 

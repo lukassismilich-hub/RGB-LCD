@@ -19,6 +19,7 @@
 #   obrazek   PNG/BMP/JPG ze slozky obrazky/ -> 1 bit (prah nebo rastr), pruhlednost z alfa kanalu
 #   cara      vodorovna / svisla
 #   obdelnik  ramecek, plny nebo rastr (napr. pruh pod hodiny)
+# Sci-fi prvky (segmentove cislo, terminal, LCARS, radar, ...) a hotove obrazovky: prvky_scifi.py
 
 import glob
 import math
@@ -629,6 +630,8 @@ def render(acfg, data, history=None, now=None):
         try:
             if p.get("typ") == "graf":
                 draw_graph(img, d, p, data, now, history)
+            elif p.get("typ") in HISTORY_TYPES:
+                DRAW[p["typ"]](img, d, p, data, now, history)
             else:
                 DRAW.get(p.get("typ"), draw_rect)(img, d, p, data, now)
         except Exception:
@@ -768,9 +771,21 @@ def default_layout(rows=None, graph=None):
 
 def label(p):
     """Popis prvku pro seznam v editoru."""
+    if p.get("typ") in _scifi.DRAW:
+        return _scifi.label(p)
     t = TYPES.get(p.get("typ"), p.get("typ", "?"))
     extra = (p.get("popisek") or p.get("senzor") or p.get("format") or p.get("nazev") or p.get("soubor")
              or p.get("styl") or "")
     if p.get("typ") == "bar":
         extra = f"{p.get('styl', 'plny')}: {p.get('senzor', '')}"
     return f"{t}: {extra}".rstrip(": ")
+
+
+# ------------------------------------------------ sci-fi prvky a hotove obrazovky (prvky_scifi.py)
+# Import az na konci: prvky_scifi pouziva funkce tohoto modulu.
+import prvky_scifi as _scifi  # noqa: E402
+
+DRAW.update(_scifi.DRAW)
+NEW.update(_scifi.NEW)
+TYPES.update(_scifi.TYPES)
+HISTORY_TYPES = _scifi.HISTORY_TYPES                 # prvky, ktere kresli historii hodnoty (krome grafu)

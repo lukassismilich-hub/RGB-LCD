@@ -54,7 +54,7 @@
       "typ": "hodiny_pod_sebou",
       "datum": false,
       "zapnuto": true,
-      "velikost_obsahu": 0.92,
+      "velikost_obsahu": 1.0,
       "velikost_textu": 1.4,
       "hodiny_od": "#00ff00",
       "hodiny_do": "#ff0000",
@@ -1156,7 +1156,8 @@
         ],
         "barva": "#ffffff",
         "rychlost": "normal",
-        "obraceny_smer": false
+        "obraceny_smer": false,
+        "pouzito": true
       }
     },
     "jas": 100,

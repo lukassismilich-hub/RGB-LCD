@@ -2,7 +2,7 @@
 #
 # Nahled displeje zvetseny 3x: klik = vyber prvku, tazeni = posun, tazeni ctverecku
 # v pravem dolnim rohu = zmena velikosti, sipky = posun o 1 bod (Shift = 5),
-# Ctrl+sipky = zmena velikosti, Delete = smazat. Vpravo seznam prvku (poradi = poradi
+# Ctrl+sipky = zmena velikosti, Delete = smazat. Pod nahledem seznam prvku (poradi = poradi
 # kresleni, dole v seznamu = navrchu) a vlastnosti vybraneho prvku.
 
 import copy
@@ -15,6 +15,7 @@ from PIL import ImageTk
 
 import mono
 import prvky
+import vzhled as V
 
 SCALE = 3
 HANDLE = 4                     # polovina ctverecku pro zmenu velikosti (v bodech platna)
@@ -78,16 +79,15 @@ class AlphaEditor:
 
         parent.columnconfigure(0, weight=0)
         parent.columnconfigure(1, weight=1)
-        left = ttk.Frame(parent)
-        left.grid(row=0, column=0, sticky="nw", padx=8, pady=8)
-        right = ttk.Frame(parent)
-        right.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
+        top = V.card(parent)
+        top.grid(row=0, column=0, columnspan=2, sticky="ew")
+        top.columnconfigure(1, weight=1)
 
-        self._build_display(left)
-        self._build_canvas(left)
-        self._build_list(right)
-        self.props = ttk.LabelFrame(right, text="Vlastnosti prvku")
-        self.props.grid(row=2, column=0, sticky="new", pady=(8, 0))
+        self._build_canvas(top)
+        self._build_display(top)
+        self._build_list(parent)
+        self.props = V.card(parent)
+        self.props.grid(row=1, column=1, sticky="nsew", padx=(16, 0), pady=(16, 0))
         self.props.columnconfigure(1, weight=1)
         self.refresh()
         self._refresh_list()
@@ -115,28 +115,29 @@ class AlphaEditor:
         return prvky.canvas_size(self.acfg)[1]
 
     def _build_display(self, f):
-        disp = ttk.LabelFrame(f, text="Displej")
-        disp.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        for col, (key, text) in enumerate((("zapnuto", "Zobrazovat na displeji"),
-                                           ("podsviceni", "Podsvícení"),
-                                           ("inverze", "Inverze (negativ)"))):
+        disp = ttk.Frame(f)
+        disp.grid(row=0, column=1, sticky="nsew", padx=(8, 20), pady=16)
+        V.card_title(disp, "Displej").pack(anchor="w", pady=(0, 8))
+        for key, text in (("zapnuto", "Zobrazovat na displeji"), ("podsviceni", "Podsvícení"),
+                          ("inverze", "Inverze (negativ)")):
             v = tk.BooleanVar(value=self.acfg.get(key, key != "inverze"))
 
             def on(k=key, v=v):
                 self.acfg[k] = v.get()
                 self.refresh()
-            ttk.Checkbutton(disp, text=text, variable=v, command=on).grid(
-                row=0, column=col, sticky="w", padx=(6, 16), pady=(4, 2))
-        rf = ttk.Frame(disp)
-        rf.grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 2))
-        ttk.Label(rf, text="Otočení displeje").pack(side="left")
+            ttk.Checkbutton(disp, text=text, variable=v, command=on).pack(anchor="w")
+        ttk.Label(disp, text="Otočení displeje", style="Small.TLabel").pack(anchor="w", pady=(12, 4))
         names = list(prvky.ROTATIONS.values())
         rv = tk.StringVar(value=prvky.ROTATIONS[prvky.rotation(self.acfg)])
-        ttk.Combobox(rf, textvariable=rv, values=names, state="readonly", width=32).pack(side="left", padx=6)
+        ttk.Combobox(disp, textvariable=rv, values=names, state="readonly", width=24).pack(anchor="w", fill="x")
         rv.trace_add("write", lambda *a: self._set_rotation(
             next(k for k, v in prvky.ROTATIONS.items() if v == rv.get())))
-        self.status = ttk.Label(disp, font=("Segoe UI", 10, "bold"))
-        self.status.grid(row=2, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 6))
+        self.status = ttk.Label(disp, font=V.FONT_B, wraplength=200, justify="left")
+        self.status.pack(anchor="w", pady=(14, 0))
+        ttk.Label(disp, style="Small.TLabel", justify="left", wraplength=200, text=(
+            "Klik = výběr prvku, tažení = posun, tažení oranžového čtverečku = velikost. "
+            "Šipky = posun o 1 bod (Shift = 5), Ctrl+šipky = velikost, Delete = smazat. "
+            "Prvky se kreslí v pořadí seznamu – níž v seznamu = navrchu.")).pack(anchor="w", pady=(12, 0))
 
     def _set_rotation(self, rot):
         """Na sirku a na vysku maji kazde sve rozvrzeni; na vysku se poprve vytvori vychozi."""
@@ -151,16 +152,18 @@ class AlphaEditor:
 
     def _resize_canvas(self):
         self.canvas.config(width=self._cw * self.scale, height=self._ch * self.scale)
-        self.canvas_box.config(text=f"Rozvržení {self._cw}×{self._ch} (zvětšeno {self.scale}×)")
+        self.canvas_box.config(text=f"Rozvržení {self._cw} × {self._ch} (zvětšeno {self.scale}×)")
 
     def _build_canvas(self, f):
-        box = ttk.LabelFrame(f, text=f"Rozvržení {self._cw}×{self._ch} (zvětšeno {self.scale}×)")
-        box.grid(row=1, column=0, sticky="w")
-        self.canvas_box = box
+        box = ttk.Frame(f)
+        box.grid(row=0, column=0, sticky="nw", padx=20, pady=16)
+        self.canvas_box = ttk.Label(box, text=f"Rozvržení {self._cw} × {self._ch} (zvětšeno {self.scale}×)",
+                                    style="H2.TLabel")
+        self.canvas_box.pack(anchor="w", pady=(0, 10))
         W, H = self._cw * self.scale, self._ch * self.scale
-        self.canvas = tk.Canvas(box, width=W, height=H, bg="black", highlightthickness=1,
-                                highlightbackground="#888", cursor="crosshair")
-        self.canvas.pack(padx=6, pady=6)
+        self.canvas = tk.Canvas(box, width=W, height=H, bg="black", highlightthickness=6,
+                                highlightbackground="#0c0e11", highlightcolor="#0c0e11", cursor="crosshair")
+        self.canvas.pack()
         self._bg = self.canvas.create_image(0, 0, anchor="nw")
         self.canvas.bind("<Button-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
@@ -168,35 +171,37 @@ class AlphaEditor:
         for key in ("Left", "Right", "Up", "Down"):
             self.canvas.bind(f"<{key}>", lambda e, k=key: self._on_key(k, e))
         self.canvas.bind("<Delete>", lambda e: self.remove())
-        ttk.Label(f, foreground="#666", justify="left", text=(
-            "Klik = výběr prvku, tažení = posun, tažení oranžového čtverečku = velikost.\n"
-            "Šipky = posun o 1 bod (Shift = 5), Ctrl+šipky = velikost, Delete = smazat.\n"
-            "Prvky se kreslí v pořadí seznamu – níž v seznamu = navrchu.")).grid(
-            row=2, column=0, sticky="w", pady=(6, 0))
 
-    def _build_list(self, f):
-        f.columnconfigure(0, weight=1)
-        lf = ttk.LabelFrame(f, text="Prvky (pořadí kreslení)")
-        lf.grid(row=0, column=0, sticky="nsew")
+    def _build_list(self, parent):
+        lf = V.card(parent)
+        lf.grid(row=1, column=0, sticky="nsew", pady=(16, 0))
         lf.columnconfigure(0, weight=1)
-        self.lst = tk.Listbox(lf, height=11, exportselection=False, font=("Segoe UI", 10))
-        self.lst.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
-        sb = ttk.Scrollbar(lf, orient="vertical", command=self.lst.yview)
-        sb.grid(row=0, column=1, sticky="ns", pady=4)
-        self.lst.config(yscrollcommand=sb.set)
-        self.lst.bind("<<ListboxSelect>>", lambda e: self._select(self._list_index()))
-        btns = ttk.Frame(f)
-        btns.grid(row=1, column=0, sticky="ew", pady=(4, 0))
-        add = ttk.Menubutton(btns, text="Přidat ▾")
+        head = ttk.Frame(lf)
+        head.grid(row=0, column=0, columnspan=2, sticky="ew", padx=(16, 12), pady=(14, 8))
+        head.columnconfigure(0, weight=1)
+        V.card_title(head, "Prvky (pořadí kreslení)").grid(row=0, column=0, sticky="w")
+        add = ttk.Menubutton(head, text="+ Přidat")
         m = tk.Menu(add, tearoff=0)
         for t, name in prvky.TYPES.items():
             m.add_command(label=name, command=lambda t=t: self.add(t))
         add["menu"] = m
-        add.grid(row=0, column=0, padx=2, sticky="ew")
-        for c, (text, cmd) in enumerate((("Duplikovat", self.duplicate), ("Odebrat", self.remove),
-                                         ("▲", lambda: self.move(-1)), ("▼", lambda: self.move(1)),
-                                         ("Skrýt / ukázat", self.toggle))):
-            ttk.Button(btns, text=text, command=cmd, width=len(text) + 2).grid(row=0, column=c + 1, padx=2)
+        add.grid(row=0, column=1, padx=(12, 0))
+        self.lst = V.listbox(lf, height=12, width=32)
+        self.lst.grid(row=1, column=0, sticky="nsew", padx=(8, 0))
+        sb = ttk.Scrollbar(lf, orient="vertical", command=self.lst.yview)
+        sb.grid(row=1, column=1, sticky="ns", padx=(0, 4))
+        self.lst.config(yscrollcommand=sb.set)
+        self.lst.bind("<<ListboxSelect>>", lambda e: self._select(self._list_index()))
+        btns = ttk.Frame(lf)
+        btns.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=12)
+        for c, (text, cmd, style) in enumerate((("▲", lambda: self.move(-1), "TButton"),
+                                                ("▼", lambda: self.move(1), "TButton"),
+                                                ("Duplikovat", self.duplicate, "TButton"),
+                                                ("Skrýt / ukázat", self.toggle, "TButton"),
+                                                ("Odebrat", self.remove, "Danger.TButton"))):
+            ttk.Button(btns, text=text, command=cmd, style=style, width=3 if len(text) == 1 else None).grid(
+                row=0, column=c, padx=2, sticky="ew")
+            btns.columnconfigure(c, weight=1 if len(text) > 1 else 0)
 
     # ---------------------------------------------------------- seznam
     def _list_index(self):
@@ -327,7 +332,7 @@ class AlphaEditor:
         try:
             img = mono.render(self.acfg, self.app.data, self.app.hist)
         except Exception as e:
-            self.status.config(text=f"Chyba náhledu: {e}", foreground="#c33")
+            self.status.config(text=f"Chyba náhledu: {e}", foreground=V.ERR)
             return
         self._img = ImageTk.PhotoImage(mono.preview(img, self.scale))
         self.canvas.itemconfig(self._bg, image=self._img)
@@ -336,13 +341,13 @@ class AlphaEditor:
 
     def _update_status(self):
         st = (self.app.astate or {}).get("stav")
-        texts = {"pripojen": ("Displej připojen – zobrazuje se.", "#2a7"),
-                 "nenalezen": ("Displej nenalezen (připojený? ovladač WinUSB přes Zadig?)", "#c33"),
-                 "chyba": ("Displej nejde otevřít – podrobnosti v rgb_lcd.log", "#c33"),
-                 "vypnuto": ("Zobrazování vypnuto.", "#666")}
-        text, color = texts.get(st, ("Stav displeje uvidíš, až poběží aplikace.", "#666"))
+        texts = {"pripojen": ("● Displej připojen – zobrazuje se.", V.OK),
+                 "nenalezen": ("Displej nenalezen (připojený? ovladač WinUSB přes Zadig?)", V.ERR),
+                 "chyba": ("Displej nejde otevřít – podrobnosti v rgb_lcd.log", V.ERR),
+                 "vypnuto": ("Zobrazování vypnuto.", V.MUTED)}
+        text, color = texts.get(st, ("Stav displeje uvidíš, až poběží aplikace.", V.MUTED))
         if not self.app.running:
-            text, color = "Aplikace neběží – náhled z dat HWiNFO.", "#666"
+            text, color = "Aplikace neběží – náhled z dat HWiNFO.", V.MUTED
         self.status.config(text=text, foreground=color)
 
     def _changed(self, rebuild=False, geometry_only=False):
@@ -376,26 +381,29 @@ class AlphaEditor:
             w.destroy()
         self._form_vars = {}
         if self.sel is None or self.sel >= len(self.items):
-            ttk.Label(self.props, foreground="#666",
+            V.card_title(self.props, "Vlastnosti prvku").grid(row=0, column=0, sticky="w", padx=16, pady=(14, 6))
+            ttk.Label(self.props, style="Muted.TLabel",
                       text="Vyber prvek v náhledu nebo v seznamu,\nnebo přidej nový tlačítkem Přidat.").grid(
-                padx=6, pady=6, sticky="w")
+                row=1, column=0, padx=16, pady=(0, 14), sticky="w")
             return
         p = self.items[self.sel]
-        ttk.Label(self.props, text=prvky.TYPES.get(p["typ"], p["typ"]), font=("Segoe UI", 10, "bold")).grid(
-            row=0, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 6))
+        V.card_title(self.props, prvky.TYPES.get(p["typ"], p["typ"])).grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 8))
         geo = ttk.Frame(self.props)
-        geo.grid(row=1, column=0, columnspan=2, sticky="w", padx=6)
+        geo.grid(row=1, column=0, columnspan=2, sticky="w", padx=16, pady=(0, 8))
         for c, (k, t) in enumerate((("x", "X"), ("y", "Y"), ("w", "Šířka"), ("h", "Výška"))):
-            ttk.Label(geo, text=t).grid(row=0, column=c * 2, padx=(0 if c == 0 else 8, 2))
+            ttk.Label(geo, text=t, style="Muted.TLabel").grid(row=0, column=c * 2, padx=(0 if c == 0 else 12, 4))
             v = tk.StringVar(value=str(p[k]))
-            ttk.Spinbox(geo, textvariable=v, from_=-240, to=480, width=5).grid(row=0, column=c * 2 + 1)
+            ttk.Spinbox(geo, textvariable=v, from_=-240, to=480, width=5, font=V.MONO).grid(row=0, column=c * 2 + 1)
             v.trace_add("write", lambda *a, k=k, v=v: self._set(k, v.get(), "int"))
             self._form_vars[k] = v
         row = 2
         for key, text, kind, opts in FIELDS.get(p["typ"], []):
-            ttk.Label(self.props, text=text).grid(row=row, column=0, sticky="nw", padx=6, pady=2)
-            self._field(row, p, key, kind, opts).grid(row=row, column=1, sticky="w", padx=4, pady=2)
+            ttk.Label(self.props, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="nw",
+                                                                       padx=(16, 8), pady=3)
+            self._field(row, p, key, kind, opts).grid(row=row, column=1, sticky="w", padx=(0, 16), pady=3)
             row += 1
+        ttk.Frame(self.props, height=10).grid(row=row, column=0)
 
     def _set(self, key, raw, kind):
         if self._syncing or self.sel is None:
@@ -424,7 +432,7 @@ class AlphaEditor:
             return self._file_field(p, key)
         if kind == "sensors":
             fr = ttk.Frame(f)
-            lb = tk.Listbox(fr, selectmode="multiple", height=6, exportselection=False, width=30)
+            lb = V.listbox(fr, selectmode="multiple", height=6, width=30, bg=V.FIELD)
             sb = ttk.Scrollbar(fr, orient="vertical", command=lb.yview)
             lb.config(yscrollcommand=sb.set)
             lb.pack(side="left")

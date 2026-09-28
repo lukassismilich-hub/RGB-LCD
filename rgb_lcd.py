@@ -27,6 +27,7 @@ from ukonceni import STOP, pause
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(BASE, "stav.json")      # aktualni data pro okno nastaveni
+STATE_EVERY_S = 1.0                          # okno nastaveni cte stav.json 1x za sekundu
 
 log = logging.getLogger("rgb_lcd")
 
@@ -87,16 +88,52 @@ def update_history(history, cfg, data):
     return {k: [v for _, v in dq] for k, dq in history.items()}
 
 
-def write_state(data, cooling_state, hist, alpha_state, led_state):
+def write_state(data, cooling_state, hist, alpha_state, led_state, code, problems):
     try:
         tmp = STATE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"cas": time.time(), "data": data, "chlazeni": cooling_state,
-                       "historie": hist, "alphacool": alpha_state, "led": led_state}, f,
-                      ensure_ascii=False)
+            json.dump({"cas": time.time(), "kod": code, "data": data, "chlazeni": cooling_state,
+                       "historie": hist, "alphacool": alpha_state, "led": led_state,
+                       "obrazovky_chyby": problems}, f, ensure_ascii=False)
         os.replace(tmp, STATE)
     except OSError:
         pass
+
+
+def render_screen(cfg, data, hist, seen_max, rot, bad):
+    """Vykreslit aktualni obrazovku rotace. Chybna obrazovka (napr. typ, ktery tahle verze
+    neumi) se preskoci a zapise do logu jen jednou - chyba vykresleni nesmi sahat na chlazeni
+    ani spojeni s Krakenem. Vrati obrazek, nebo None (nejde vykreslit nic)."""
+    try:
+        lst = screens.build_list(cfg, data, seen_max)
+    except Exception as e:
+        if "seznam" not in bad:
+            bad["seznam"] = f"seznam obrazovek: {e}"
+            log.error("Seznam obrazovek nejde sestavit (%s).", e)
+        lst = [{"typ": "hodiny"}]
+    now = time.monotonic()
+    if now >= rot["next"]:
+        rot["idx"] = (rot["idx"] + 1) % len(lst) if rot["started"] else 0
+        rot["next"] = now + float(cfg["rotace_s"])
+        rot["started"] = True
+    for _ in range(len(lst)):
+        rot["idx"] %= len(lst)
+        scr = lst[rot["idx"]]
+        key = json.dumps(scr, sort_keys=True, ensure_ascii=False)
+        try:
+            return screens.render(scr, data, cfg["velikost_obsahu"], cfg["gama_grafiky"],
+                                  cfg.get("velikost_textu", 1.0), hist)
+        except Exception as e:
+            if scr.get("typ") not in screens.DRAW:
+                e = "tahle verze aplikace typ nezná - restartuj aplikaci"
+            if key not in bad:
+                bad[key] = f"{screens.TYPES.get(scr.get('typ'), scr.get('typ'))}: {e}"
+                log.error("Obrazovku %s nejde vykreslit (%s) - preskakuji ji.", scr.get("typ"), e)
+            rot["idx"] += 1                      # zkusit dalsi obrazovku v rotaci
+    try:                                         # nejde vykreslit nic: aspon hodiny
+        return screens.render({"typ": "hodiny"}, data, 0.92, cfg.get("gama_grafiky", 0.65))
+    except Exception:
+        return None
 
 
 def main():
@@ -114,10 +151,11 @@ def main():
     cooling = Cooling()
     history = {}
     seen_max = {}
-    idx = 0
-    next_switch = 0.0
+    rot = {"idx": 0, "next": 0.0, "started": False}     # rotace obrazovek
+    bad_screens = {}                                   # obrazovky, ktere nejde vykreslit (klic -> chyba)
     last_bytes = None
-    current_key = None
+    last_state = 0.0
+    code = config.code_stamp()                         # verze kodu - okno nastaveni pozna starou verzi
     warned_hwinfo = False
     alpha = AlphacoolWorker()            # vlastni vlakno - chlazeni nezdrzuje
     alpha.start()
@@ -145,6 +183,7 @@ def main():
                     if cfg.get("chlazeni") != old_cool:
                         cooling.reset()
                     screens.clear_cache()
+                    bad_screens.clear()
                     last_bytes = None
                     if cfg["jas"] != old_jas:
                         kraken.set_brightness(cfg["jas"])
@@ -155,28 +194,22 @@ def main():
                 hist = update_history(history, cfg, data)
                 alpha.update(cfg["alphacool"], data, hist, cfg["obnova_s"])
                 leds.update(cfg["led"], data)
-                write_state(data, cooling.state, hist, alpha.state, leds.state)
+                if time.monotonic() - last_state >= STATE_EVERY_S:
+                    write_state(data, cooling.state, hist, alpha.state, leds.state, code,
+                                sorted(bad_screens.values()))
+                    last_state = time.monotonic()
                 if not any(not k.startswith("@") for k in data) and not warned_hwinfo:
                     log.warning("Z HWiNFO nejsou data - bezi HWiNFO se zapnutym Gadget reportingem?")
                     warned_hwinfo = True
                 for name, item in data.items():
                     seen_max[name] = max(seen_max.get(name, item["value"]), item["value"])
 
-                lst = screens.build_list(cfg, data, seen_max)
-                now = time.monotonic()
-                if now >= next_switch:
-                    idx = (idx + 1) % len(lst) if current_key is not None else 0
-                    next_switch = now + float(cfg["rotace_s"])
-                idx %= len(lst)
-                scr = lst[idx]
-                current_key = json.dumps(scr, sort_keys=True)
-
-                img = screens.render(scr, data, cfg["velikost_obsahu"], cfg["gama_grafiky"],
-                                     cfg.get("velikost_textu", 1.0), hist)
-                b = img.tobytes()
-                if b != last_bytes:              # posilame jen zmeny
-                    kraken.show(img)
-                    last_bytes = b
+                img = render_screen(cfg, data, hist, seen_max, rot, bad_screens)
+                if img is not None:
+                    b = img.tobytes()
+                    if b != last_bytes:          # posilame jen zmeny
+                        kraken.show(img)
+                        last_bytes = b
 
             except KeyboardInterrupt:
                 raise

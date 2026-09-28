@@ -481,12 +481,14 @@ class LedEditor:
         s = st.get("stav")
         if not self.app.running:
             text, color = "Aplikace neběží – LED se nastaví po jejím spuštění.", V.MUTED
+        elif s in ("běží", "nastaveno") and st.get("chyby"):
+            text, color = "● LED běží jen zčásti – " + "; ".join(st["chyby"]) + " (zkouší znovu po 30 s)", V.WARN
         elif s in ("běží", "nastaveno"):
             text, color = "● LED běží", V.OK
         elif s == "chyba":
             text, color = "Chyba: " + "; ".join(st.get("chyby", [])), V.ERR
         elif s == "vypnuto":
-            text, color = "Řízení LED vypnuto – LED zůstávají, jak jsou.", V.MUTED
+            text, color = "Řízení LED vypnuto – ventilátory mají vlastní barvy LED.", V.MUTED
         else:
             text, color = "Stav LED uvidíš, až poběží aplikace (nová verze).", V.MUTED
         self.status.config(text=text, foreground=color)

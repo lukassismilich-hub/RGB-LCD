@@ -170,16 +170,22 @@ FIELDS.update({
 })
 
 
+# z posledniho stav.json: verze kodu bezici aplikace a obrazovky, ktere nejde vykreslit
+STATE_EXTRA = {"kod": None, "chyby": []}
+
+
 def load_data():
     """Aktualni hodnoty: ze stav.json (pise ho bezici aplikace), jinak primo z HWiNFO."""
     try:
         with open(STATE, encoding="utf-8") as f:
             st = json.load(f)
         if time.time() - st.get("cas", 0) < 10:
+            STATE_EXTRA.update(kod=st.get("kod"), chyby=st.get("obrazovky_chyby", []))
             return (st["data"], True, st.get("chlazeni", {}), st.get("historie", {}),
                     st.get("alphacool", {}), st.get("led", {}))
     except (OSError, ValueError, KeyError):
         pass
+    STATE_EXTRA.update(kod=None, chyby=[])
     import systemdata
     data = hwinfo.read_full()
     data.update(systemdata.read())
@@ -316,12 +322,19 @@ class App(tk.Tk):
             lbl = tk.Label(box, text="", bg="#181c21", fg=V.TEXT, font=V.SMALL, anchor="w")
             lbl.grid(row=r, column=1, columnspan=2, sticky="w", pady=(10 if r == 0 else 2, 2))
             self._side[key] = (dot, lbl)
-        tk.Frame(box, bg="#262b33", height=1).grid(row=2, column=0, columnspan=3, sticky="ew", padx=12, pady=8)
-        for r, (key, text, color) in enumerate((("cpu", "CPU", V.TEXT), ("liquid", "Kapalina", V.ACCENT)), start=3):
+        # stara verze kodu na pozadi / obrazovky, ktere nejde vykreslit / vysledek restartu
+        self._side_warn = tk.Label(box, text="", bg="#181c21", fg=V.WARN, font=V.SMALL, anchor="w",
+                                   justify="left", wraplength=168)
+        self._side_warn.grid(row=2, column=0, columnspan=3, sticky="w", padx=12, pady=(4, 0))
+        self._restart_btn = ttk.Button(box, text="Restartovat aplikaci", command=self.restart_app)
+        self._restart_btn.grid(row=3, column=0, columnspan=3, sticky="ew", padx=12, pady=(6, 0))
+        self._restart = None                  # bezici restart; po dokonceni {"text": vysledek, "do": cas}
+        tk.Frame(box, bg="#262b33", height=1).grid(row=4, column=0, columnspan=3, sticky="ew", padx=12, pady=8)
+        for r, (key, text, color) in enumerate((("cpu", "CPU", V.TEXT), ("liquid", "Kapalina", V.ACCENT)), start=5):
             tk.Label(box, text=text, bg="#181c21", fg=V.MUTED, font=V.SMALL).grid(
-                row=r, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 10 if r == 4 else 2))
+                row=r, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 10 if r == 6 else 2))
             val = tk.Label(box, text="–", bg="#181c21", fg=color, font=("Consolas", 10))
-            val.grid(row=r, column=2, sticky="e", padx=12, pady=(0, 10 if r == 4 else 2))
+            val.grid(row=r, column=2, sticky="e", padx=12, pady=(0, 10 if r == 6 else 2))
             self._side[key] = val
 
     def _paint_nav(self, i, hover=False):
@@ -346,10 +359,32 @@ class App(tk.Tk):
         self.h_title.config(text=title)
         self.h_sub.config(text=sub)
 
+    def _outdated(self):
+        """Bezi aplikace se starsi verzi kodu, nez je na disku? (stara verze "kod" nezapisuje)"""
+        if not self.running:
+            return False
+        kod = STATE_EXTRA.get("kod")
+        return kod is None or config.code_stamp() > kod + 1
+
     def _update_sidebar(self):
         dot, lbl = self._side["app"]
-        dot.config(fg=V.OK if self.running else V.WARN)
-        lbl.config(text="Aplikace běží" if self.running else "Aplikace neběží")
+        old = self._outdated()
+        dot.config(fg=V.WARN if old or not self.running else V.OK)
+        lbl.config(text="Běží stará verze" if old else
+                   ("Aplikace běží" if self.running else "Aplikace neběží"))
+        warn = []
+        if self._restart is not None:
+            warn.append(self._restart.get("text", "Restartuji aplikaci…"))
+        elif old:
+            warn.append("Kód se od spuštění změnil – restartuj aplikaci.")
+        if STATE_EXTRA.get("chyby"):
+            warn.append("Nejde vykreslit (přeskočeno): " + "; ".join(STATE_EXTRA["chyby"]))
+        self._side_warn.config(text="\n".join(warn))
+        busy = self._restart is not None and "text" not in self._restart
+        self._restart_btn.config(text="Restartovat aplikaci" if self.running else "Spustit aplikaci",
+                                 state="disabled" if busy else "normal")
+        if self._restart is not None and "text" in self._restart and time.time() > self._restart.get("do", 0):
+            self._restart = None
         dot, lbl = self._side["hwinfo"]
         hw = any(not k.startswith("@") for k in self.data)
         dot.config(fg=V.OK if hw else V.ERR)
@@ -376,9 +411,11 @@ class App(tk.Tk):
         self.h_sub.grid(row=1, column=0, sticky="w")
         self.status = tk.Label(h, text="", bg=V.BG, fg=V.WARN, font=V.SMALL)
         self.status.grid(row=0, column=1, rowspan=2, padx=12)
-        ttk.Button(h, text="Vrátit uložené", command=self.revert).grid(row=0, column=2, rowspan=2, padx=4)
+        ttk.Button(h, text="Obnovit zálohu…", command=self.restore_backup).grid(row=0, column=2, rowspan=2,
+                                                                                padx=4)
+        ttk.Button(h, text="Vrátit uložené", command=self.revert).grid(row=0, column=3, rowspan=2, padx=4)
         ttk.Button(h, text="Uložit   Ctrl+S", style="Accent.TButton", command=self.save).grid(
-            row=0, column=3, rowspan=2, padx=(4, 0))
+            row=0, column=4, rowspan=2, padx=(4, 0))
         self._status_msg = None
 
     def _update_dirty(self):
@@ -726,7 +763,10 @@ class App(tk.Tk):
                                     foreground=V.MUTED)
             return
         st = self.cstate
-        if st.get("rezim") == "cpu" and st.get("zaloha"):
+        if st.get("rezim") == "cpu" and st.get("zaloha") and st.get("duvod") == "zamrzla":
+            head, color = ("ZÁLOHA: teplota CPU z HWiNFO se 20 s nemění (HWiNFO zamrzlo?) – "
+                           "řídí Kraken podle kapaliny", V.ERR)
+        elif st.get("rezim") == "cpu" and st.get("zaloha"):
             head, color = "ZÁLOHA: chybí teplota CPU z HWiNFO – řídí Kraken podle kapaliny", V.ERR
         elif st.get("rezim") == "cpu":
             head, color = f"Řízeno podle CPU {st.get('teplota', 0):.1f} °C (průměr)", V.OK
@@ -1064,6 +1104,56 @@ class App(tk.Tk):
                 pass
         from editor_kraken import KrakenEditor
         self._keditor = KrakenEditor(self, scr)
+
+    # ---------------------------------------------------- restart aplikace
+    def restart_app(self):
+        """Bezpecne ukoncit aplikaci na pozadi (jako ukoncit.bat) a spustit ji znovu
+        naplanovanou ulohou RGB-LCD (jako spustit_na_pozadi.bat) - s pravy spravce bez UAC."""
+        if self._restart is not None and "text" not in self._restart:
+            return
+        if self.running and not messagebox.askyesno(
+                "Restart aplikace", "Aplikace se bezpečně ukončí (chlazení na chvíli převezme Kraken "
+                "podle křivek kapaliny) a spustí se znovu. Pokračovat?", parent=self):
+            return
+        if self.cfg != self.saved and messagebox.askyesno(
+                "Neuložené změny", "Uložit změny před restartem?", parent=self):
+            self.save()
+        job = self._restart = {}
+
+        def work():
+            import subprocess
+            import ukonceni
+            try:
+                if ukonceni.close_running(timeout=20) is False:
+                    job["text"] = "Aplikace neodpovídá – podívej se do rgb_lcd.log."
+                    return
+                schtasks = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "schtasks.exe")
+                r = subprocess.run([schtasks, "/run", "/tn", "RGB-LCD"], capture_output=True,
+                                   creationflags=0x08000000)                 # bez okna konzole
+                job["text"] = ("Aplikace spuštěna znovu – za pár sekund naskočí." if r.returncode == 0 else
+                               "Naplánovaná úloha RGB-LCD neexistuje – spusť autostart_zapnout.bat.")
+            except Exception as e:
+                job["text"] = f"Restart se nepovedl: {e}"
+            finally:
+                job["do"] = time.time() + 15          # hlaseni nechat 15 s
+        import threading
+        threading.Thread(target=work, name="restart", daemon=True).start()
+        self._update_sidebar()
+
+    def restore_backup(self):
+        t = config.backup_time()
+        if t is None:
+            messagebox.showinfo("Záloha nastavení", "Záloha zatím není – vznikne při příštím uložení.", parent=self)
+            return
+        when = time.strftime("%d. %m. %Y %H:%M:%S", time.localtime(t))
+        if not messagebox.askyesno(
+                "Obnovit zálohu", f"Obnovit nastavení uložené před posledním uložením (záloha z {when})?\n\n"
+                "Současné nastavení se tím samo stane zálohou, takže obnovu jde vrátit stejným tlačítkem.",
+                parent=self):
+            return
+        config.restore_backup()
+        self.destroy()
+        App().mainloop()
 
     # ---------------------------------------------------------- ulozeni
     def save(self):

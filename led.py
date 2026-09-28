@@ -245,35 +245,92 @@ def _init(dev, tries=3):
 
 
 class Session:
-    """Otevrena spojeni s obema radici a posilani snimku."""
+    """Otevrena spojeni s radici a posilani snimku. Kazdy radic zvlast: kdyz jeden chybi
+    nebo selze, druhy jede dal a chybejici se zkusi pripojit znovu (retry_missing)."""
+
+    NAMES = {"nzxt": "NZXT RGB Controller (F140)", "fusion": "Gigabyte RGB Fusion (ventilátory na desce)"}
 
     def __init__(self, lcfg):
-        self.nzxt, self.fusion = _devices()
-        self.errors = []
-        self.fdev = None
+        self.nzxt = self.fusion = self.fdev = None
         self.orders = {k: (1, 0, 2) for k in ARGB_HEADERS}
-        if self.nzxt is None:
-            self.errors.append("NZXT RGB Controller nenalezen")
-        else:
-            self.nzxt.connect()
-            _init(self.nzxt)
-            self.nzxt.set_color("led3", "off", [])                     # volny kanal zhasnout
-        if self.fusion is None:
-            self.errors.append("Gigabyte RGB Fusion nenalezen")
-        else:
-            self.fusion.connect()
-            _init(self.fusion)
-            self.fdev = self.fusion.device
-            self.setup_zones(lcfg)
-            report = _argb_report(self.fdev)
-            if report:
-                self.orders = argb_order(report)
-            self.fdev.send_feature_report([0xCC, 0x32, 0x03] + [0] * 61)   # D_LED1+2 primy rezim
-            time.sleep(0.05)
+        self.errors = {}                          # radic -> chyba
         self.last = {}
+        self.retry_missing(lcfg)
+
+    def retry_missing(self, lcfg):
+        """Pripojit radice, ktere zatim nejedou. Vrati True, kdyz nejaky pribyl."""
+        if self.nzxt is not None and self.fusion is not None:
+            return False
+        try:
+            nzxt, fusion = _devices()
+        except Exception as e:
+            self.errors = {k: f"hledání řadičů: {e}" for k in self.NAMES if getattr(self, k) is None}
+            return False
+        added = False
+        if self.nzxt is None:
+            if nzxt is None:
+                self.errors["nzxt"] = "nenalezen"
+            else:
+                try:
+                    nzxt.connect()
+                    _init(nzxt)
+                    nzxt.set_color("led3", "off", [])                     # volny kanal zhasnout
+                    self.nzxt, added = nzxt, True
+                    self.errors.pop("nzxt", None)
+                except Exception as e:
+                    self._drop_dev(nzxt)
+                    self.errors["nzxt"] = str(e)
+        if self.fusion is None:
+            if fusion is None:
+                self.errors["fusion"] = "nenalezen"
+            else:
+                try:
+                    fusion.connect()
+                    _init(fusion)
+                    self.fusion, self.fdev = fusion, fusion.device
+                    self.setup_zones(lcfg)
+                    report = _argb_report(self.fdev)
+                    if report:
+                        self.orders = argb_order(report)
+                    self.fdev.send_feature_report([0xCC, 0x32, 0x03] + [0] * 61)   # D_LED1+2 primy rezim
+                    time.sleep(0.05)
+                    added = True
+                    self.errors.pop("fusion", None)
+                except Exception as e:
+                    self._drop_dev(fusion)
+                    self.fusion = self.fdev = None
+                    self.errors["fusion"] = str(e)
+        if added:
+            self.last = {}                        # novemu radici poslat cely snimek
+        return added
+
+    @staticmethod
+    def _drop_dev(d):
+        try:
+            d.disconnect()
+        except Exception:
+            pass
+
+    def _fail(self, which, e):
+        """Chyba jednoho radice: odpojit jen ten, druhy jede dal."""
+        self._drop_dev(getattr(self, which))
+        setattr(self, which, None)
+        if which == "fusion":
+            self.fdev = None
+        self.errors[which] = str(e)
+        log.warning("LED: %s – %s, zkusím znovu za %d s.", self.NAMES[which], e, RETRY_S)
+
+    @property
+    def running(self):
+        return self.nzxt is not None or self.fusion is not None
+
+    def error_text(self):
+        return [f"{self.NAMES[k]}: {v}" for k, v in sorted(self.errors.items())]
 
     def setup_zones(self, lcfg):
         """Ostatni zony desky (male LED, 12V RGB) - jedna barva / efekt cipu."""
+        if self.fusion is None:
+            return
         for name, z in sorted(lcfg.get("fusion", {}).items()):
             if name in ARGB_ZONES:
                 continue
@@ -287,25 +344,31 @@ class Session:
         self.fdev.send_feature_report([0xCC, 0x32, 0x03] + [0] * 61)       # liquidctl mohl masku zmenit
 
     def send(self, frame, force=False):
-        """Poslat jen to, co se zmenilo (force = vse)."""
+        """Poslat jen to, co se zmenilo (force = vse). Chyba jednoho radice nezastavi druhy."""
         f1, f2 = frame.get("f140_1"), frame.get("f140_2")
         if self.nzxt is not None and f1 is not None:
             if force or f1 != self.last.get("f140_1") or f2 != self.last.get("f140_2"):
-                if f1 == f2:
-                    self.nzxt.set_color("sync", "super-fixed", f1)
-                else:
-                    self.nzxt.set_color("led1", "super-fixed", f1)
-                    self.nzxt.set_color("led2", "super-fixed", f2)
+                try:
+                    if f1 == f2:
+                        self.nzxt.set_color("sync", "super-fixed", f1)
+                    else:
+                        self.nzxt.set_color("led1", "super-fixed", f1)
+                        self.nzxt.set_color("led2", "super-fixed", f2)
+                except Exception as e:
+                    self._fail("nzxt", e)
         if self.fdev is not None:
-            for name, (_zone, cmd, _bit) in ARGB_HEADERS.items():
-                cols = frame.get(name)
-                if cols is None:                                          # nepouzita hlavicka = zhasnout
-                    if force:
-                        _argb_strip(self.fdev, cmd, [[0, 0, 0]] * ARGB_MAX_LEDS, self.orders[name])
-                    continue
-                if force or cols != self.last.get(name):
-                    pad = [[0, 0, 0]] * (ARGB_MAX_LEDS - len(cols))
-                    _argb_strip(self.fdev, cmd, cols + pad, self.orders[name])
+            try:
+                for name, (_zone, cmd, _bit) in ARGB_HEADERS.items():
+                    cols = frame.get(name)
+                    if cols is None:                                      # nepouzita hlavicka = zhasnout
+                        if force:
+                            _argb_strip(self.fdev, cmd, [[0, 0, 0]] * ARGB_MAX_LEDS, self.orders[name])
+                        continue
+                    if force or cols != self.last.get(name):
+                        pad = [[0, 0, 0]] * (ARGB_MAX_LEDS - len(cols))
+                        _argb_strip(self.fdev, cmd, cols + pad, self.orders[name])
+            except Exception as e:
+                self._fail("fusion", e)
         self.last = frame
 
     def close(self):
@@ -369,6 +432,8 @@ class LedWorker(threading.Thread):
         if state.get("stav") != self.state.get("stav") or state.get("chyby") != self.state.get("chyby"):
             if state.get("stav") == "chyba":
                 log.warning("LED: %s", "; ".join(state.get("chyby", [])))
+            elif state.get("stav") == "běží" and state.get("chyby"):
+                log.warning("LED: běží jen část – %s", "; ".join(state["chyby"]))
             elif state.get("stav") == "běží":
                 log.info("LED: efekty běží.")
         self.state = state
@@ -376,14 +441,20 @@ class LedWorker(threading.Thread):
     def run(self):
         engine = fx.Engine()
         session, hw_key, t0 = None, None, time.monotonic()
-        last_wall, last_force, prev = time.time(), 0.0, time.monotonic()
+        last_wall, last_force, prev, last_retry = time.time(), 0.0, time.monotonic(), time.monotonic()
         while not self._quit.is_set():
             with self._lock:
                 lcfg, data = self._cfg, self._data
             if lcfg is None or not lcfg.get("zapnuto", True):
                 if session:
+                    # rizeni LED vypnuto: klidny stav (vlastni barvy), at nezustane zamrzly snimek
+                    try:
+                        session.send(render(engine, _still(lcfg, "vlastni"), 0.0), force=True)
+                    except Exception:
+                        pass
                     session.close()
                     session = None
+                    log.info("LED: řízení vypnuto – ventilátory mají vlastní barvy LED.")
                 if lcfg is not None:
                     self._set_state({"stav": "vypnuto"})
                 self._wake.wait(1.0)
@@ -417,11 +488,18 @@ class LedWorker(threading.Thread):
                     if resumed:
                         log.info("LED: PC se probudilo - nastavuji LED znovu.")
                     session = Session(lcfg)
-                    hw_key, last_force = key, 0.0
-                    if session.errors:
-                        raise RuntimeError("; ".join(session.errors))
+                    hw_key, last_force, last_retry = key, 0.0, now
+                    if not session.running:              # nejede ani jeden radic
+                        raise RuntimeError("; ".join(session.error_text()))
+                elif session.errors and now - last_retry > RETRY_S:
+                    last_retry = now                     # chybejici radic zkusit znovu, druhy jede dal
+                    if session.retry_missing(lcfg):
+                        hw_key, last_force = key, 0.0
                 elif key != hw_key:
-                    session.setup_zones(lcfg)
+                    try:
+                        session.setup_zones(lcfg)
+                    except Exception as e:
+                        session._fail("fusion", e)
                     hw_key, last_force = key, 0.0
                 dt, prev = now - prev, now
                 frame = render(engine, lcfg, now - t0, data, min(dt, 0.2))
@@ -429,7 +507,10 @@ class LedWorker(threading.Thread):
                 session.send(frame, force)
                 if force:
                     last_force = now
-                self._set_state({"stav": "běží"})
+                if not session.running:                  # oba radice selhaly za behu
+                    raise RuntimeError("; ".join(session.error_text()))
+                self._set_state({"stav": "běží", "chyby": session.error_text()} if session.errors
+                                else {"stav": "běží"})
             except Exception as e:
                 if session:
                     session.close()

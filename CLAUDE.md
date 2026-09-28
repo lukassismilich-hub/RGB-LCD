@@ -10,7 +10,7 @@
 Nahradit NZXT CAM vlastní aplikací v Pythonu:
 - LCD displej Krakenu s vlastními obrazovkami,
 - řízení pumpy a ventilátorů,
-- sjednocené ovládání RGB LED (zatím nehotové).
+- sjednocené ovládání RGB LED.
 Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 
 ## Hardware
@@ -27,7 +27,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - Aplikace: `C:\RGB-LCD\`
 
 ## Struktura aplikace
-- `rgb_lcd.py` – hlavní smyčka: sběr dat, rotace obrazovek, odesílání na LCD, zápis `stav.json`, log `rgb_lcd.log`
+- `rgb_lcd.py` – hlavní smyčka: sběr dat, rotace obrazovek, odesílání na LCD, zápis `stav.json` (nejvýš 1× za sekundu, obsahuje i `kod` = verze kódu a `obrazovky_chyby`), log `rgb_lcd.log`. Obrazovka, kterou nejde vykreslit (`render_screen`), se jen přeskočí a zapíše do logu – chyba vykreslení nesmí sahat na chlazení ani spojení s Krakenem (dřív ji hlavní smyčka brala jako chybu komunikace).
 - `kraken.py` – komunikace s Krakenem přes liquidctl (LCD, jas, stav, křivky, fixní výkon)
 - `hwinfo.py` – čtení senzorů z HWiNFO; stejný název u více zařízení dostane krátké rozlišení: „Teplota disku (C:)“, „Aktuální rychlost stahování (Wi-Fi 2)“
 - `systemdata.py` – hodnoty, které HWiNFO neposílá, přímo z Windows API (ctypes): `@disk C: volno/obsazeno/celkem` (GB, %), `@síť stahování/odesílání` (MB/s, součet i po adaptérech), `@síť rychlost připojení` (Mbps), `@wifi signál` (dBm), `@wifi kvalita` (%), `@wifi rychlost`
@@ -44,12 +44,12 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - `prvky_scifi.py` – sci-fi prvky Alphacoolu (načte je `prvky.py` na konci): segmentové číslo / čas (`seg`, pod 24 px obdélníkové segmenty), řádek ze šablony (`radek`), terminál s tečkami (`term`, řádky „POPISEK = šablona“), tenký pásek (`pasek`), duhovka, Esper, drátový terén, blokový sloupec, radar (detektor pohybu), LCARS rám a štítek, warp jádro. Šablona textu `{senzor|dělitel|desetinná místa}`, jednotky se píšou do textu. Historii kreslí `HISTORY_TYPES` (esper, terén, radar; sbírá ji `mono.graph_sensors`). `templates()` = 9 hotových obrazovek 240×128 (Nostromo, LV-426, detektor pohybu, taktický panel APC, Voight-Kampff, Esper, Spinner 2049, LCARS, strojovna s warp jádrem) – v editoru nabídka „Hotové obrazovky“; vlastní rozvržení se před načtením uschová do `alphacool.prvky_zaloha` (jen pokud to není hotová obrazovka), „Vrátit předchozí rozvržení“ je prohodí
 - `mono.py` – vstup pro vykreslení Alphacoolu (volá `prvky.render`), náhled v barvách modrého displeje, seznam senzorů grafů pro historii
 - `editor_alphacool.py` – editor rozvržení v okně nastavení: náhled 3×, výběr/posun/velikost myší, šipky, seznam prvků, vlastnosti vč. písma
-- `led.py` – LED všech ventilátorů ve vlastním vlákně `LedWorker`: efekty počítá aplikace (softwarově) a posílá barvy každé LED přímo – F140 přes NZXT `super-fixed` (kanály led1/led2, 8 LED), ventilátory na desce přes ARGB D_LED1 a D_LED2 (16 LED). Drží spojení otevřená, animace ~30 snímků/s (měřeno ~12 ms na snímek pro všech 5 ventilátorů), statické efekty jen při změně + obnova po 10 s. Nastaví znovu po probuzení PC (skok hodin > 20 s) a po chybě za 30 s. Při ukončení aplikace pošle klidný stav (vlastní barvy LED); při vypnutí PC / odhlášení (`ukonceni.SHUTDOWN`) a při uspání (`WM_POWERBROADCAST` → `ukonceni.on_power` → `blackout()`) LED zhasne – deska drží hlavičku ARGB pod napětím i ve spánku a vypnutém PC, jinak by na ventilátorech zůstal zamrzlý snímek; po probuzení efekty obnoví. Ostatní zóny desky (malé LED, 12V RGB) jen celá zóna přes liquidctl. `config["led"]`: `jas`, `jas_f140`, `jas_deska`, `stejne_pro_vse`, `vlna`, `efekt` / `efekt_f140` / `efekt_deska`, vlastní barvy v `nzxt.led1/led2.barvy` a `argb.D_LED1.barvy`, `argb.*.pouzito`/`pocet_led`. Vestavěné efekty řadičů se nepoužívají (slabý jas, na každém řadiči jiné). Synchronizace: `vlna` False = všechny ventilátory stejná fáze; vlna podle rozmístění ve skříni (D_LED1 vpředu, 2× F140 uprostřed, D_LED2 vzadu – `led.CASE_ORDER`, `wave_offsets()`): `vlna_smer` dozadu/dopredu, `vlna_f140_spolu` (F140 jako jeden), `f140_vpredu` led1/led2; natočení každého ventilátoru `posun` (LED 1) a `obracene` v `nzxt.led1/led2` a `argb.D_LEDx` (`orientation()`/`_orient()`, neplatí pro vlastní barvy LED; náhled kreslí včetně natočení, LED 1 vpravo po směru hodin).
+- `led.py` – LED všech ventilátorů ve vlastním vlákně `LedWorker`: efekty počítá aplikace (softwarově) a posílá barvy každé LED přímo – F140 přes NZXT `super-fixed` (kanály led1/led2, 8 LED), ventilátory na desce přes ARGB D_LED1 a D_LED2 (16 LED). Drží spojení otevřená, animace ~30 snímků/s (měřeno ~12 ms na snímek pro všech 5 ventilátorů), statické efekty jen při změně + obnova po 10 s. Nastaví znovu po probuzení PC (skok hodin > 20 s) a po chybě za 30 s. Při ukončení aplikace pošle klidný stav (vlastní barvy LED); při vypnutí PC / odhlášení (`ukonceni.SHUTDOWN`) a při uspání (`WM_POWERBROADCAST` → `ukonceni.on_power` → `blackout()`) LED zhasne – deska drží hlavičku ARGB pod napětím i ve spánku a vypnutém PC, jinak by na ventilátorech zůstal zamrzlý snímek; po probuzení efekty obnoví. Každý řadič zvlášť (`Session.retry_missing`, `_fail`): když NZXT nebo Gigabyte chybí či selže, druhý jede dál a chybějící se zkouší znovu po 30 s. Vypnutí „Řídit LED z aplikace“ pošle klidný stav (vlastní barvy LED), ne zamrzlý snímek. Ostatní zóny desky (malé LED, 12V RGB) jen celá zóna přes liquidctl. `config["led"]`: `jas`, `jas_f140`, `jas_deska`, `stejne_pro_vse`, `vlna`, `efekt` / `efekt_f140` / `efekt_deska`, vlastní barvy v `nzxt.led1/led2.barvy` a `argb.D_LED1.barvy`, `argb.*.pouzito`/`pocet_led`. Vestavěné efekty řadičů se nepoužívají (slabý jas, na každém řadiči jiné). Synchronizace: `vlna` False = všechny ventilátory stejná fáze; vlna podle rozmístění ve skříni (D_LED1 vpředu, 2× F140 uprostřed, D_LED2 vzadu – `led.CASE_ORDER`, `wave_offsets()`): `vlna_smer` dozadu/dopredu, `vlna_f140_spolu` (F140 jako jeden), `f140_vpredu` led1/led2; natočení každého ventilátoru `posun` (LED 1) a `obracene` v `nzxt.led1/led2` a `argb.D_LEDx` (`orientation()`/`_orient()`, neplatí pro vlastní barvy LED; náhled kreslí včetně natočení, LED 1 vpravo po směru hodin).
 - `led_efekty.py` – výpočet efektů bez hardwaru (vlákno LED i živý náhled): jedna barva, vlastní barvy LED, duha – točení/přelévání, dýchání, kometa, přechod 2 barev, třpyt, oheň, blikání, paleta a výseče – točení, dvojitá kometa, stírání barev, polární záře, plazma, duhový třpyt, tep srdce, stroboskop, policie, běžící světla, odraz (ping-pong), duhové dýchání, střídání barev, bouřka / blesky, ohňostroj, konfety, přechod 3 barev (stojí), podle teploty (senzor, vyhlazení 2 s); jas kvadraticky (vnímaný)
 - `editor_led.py` – stránka LED: jas + vyrovnání skupin, efekt (společný / zvlášť F140 a deska, vlna), vlastní barvy (kruh 8 / 16 LED), živý animovaný náhled, sbalené nastavení hardwaru (ARGB hlavičky, další zóny desky)
-- `config.py` – výchozí nastavení, načítání/ukládání, migrace starého formátu
+- `config.py` – výchozí nastavení, načítání/ukládání, migrace starého formátu. Každé uložení nejdřív odloží předchozí platné nastavení do `config.zaloha.json` (tlačítko „Obnovit zálohu…“ v okně – obnova jde vrátit). Poškozený `config.json` se nenačte: použije se záloha (jinak výchozí nastavení) a poškozený soubor se zkopíruje do `config.poskozeny.json`. `code_stamp()` = čas poslední změny kódu, který běží na pozadí (bez souborů jen pro okno, `UI_ONLY`).
 - `config.json` – uživatelské nastavení (změny se načtou za běhu podle mtime, bez restartu)
-- `nastaveni.py` – okno nastavení (tkinter): postranní navigace se 4 stránkami (Kraken LCD – obrazovky, editor, živý náhled 240×240 1:1, obecné; Chlazení – dlaždice stavu, graf a body křivek; LED; Alphacool), nahoře Uložit / Vrátit uložené a hlášení neuložených změn
+- `nastaveni.py` – okno nastavení (tkinter): postranní navigace se 4 stránkami (Kraken LCD – obrazovky, editor, živý náhled 240×240 1:1, obecné; Chlazení – dlaždice stavu, graf a body křivek; LED; Alphacool), nahoře Uložit / Vrátit uložené / Obnovit zálohu a hlášení neuložených změn. Vlevo dole stav aplikace: pozná starou verzi kódu na pozadí (`kod` ve `stav.json` < `config.code_stamp()`), ukáže obrazovky, které nejde vykreslit, a tlačítko „Restartovat aplikaci“ (bezpečné ukončení jako `ukoncit.bat` + `schtasks /run` úlohy RGB-LCD jako `spustit_na_pozadi.bat`)
 - `vzhled.py` – tmavý vzhled okna nastavení podle návrhu z Claude Design (https://claude.ai/artifact/VfhrwLMbyGrLZUuKCuCYpB): barvy, písma (Segoe UI, Consolas), styly ttk na základu „clam“, pomocné prvky (karta, posuvník, přepínač v řadě, barevné tlačítko, rolovací panel `ScrollFrame`)
 - `stav.json` – živá data pro okno nastavení
 - `fonts/` – Montserrat (Light, SemiBold, Bold, ExtraBold, Black) pro Kraken; pixelová písma pro Alphacool z Google Fonts (licence OFL, `OFL-*.txt`): Silkscreen (8/16 px, jen velká písmena, CHYBÍ ě č ř ů ď ť ň), Press Start 2P (8/16/24), VT323 (16/32), Tiny5 (10); s češtinou: Departure Mono (11), Terminus TTF (12/14/16/…, i tučné; 12 = verzálky 8 px), Pixelify Sans, Jersey 10 (20), Micro 5 (11, nejmenší), Pixel Operator (16, i tučné; varianty 8 / HB 8 / Mono 8 mají háčky jen částečně, licence CC0); bez češtiny Spleen 5×8 (`.otb`, jen 8 px, BSD) – pixelová písma jsou ostrá jen v násobcích nativní velikosti; bitmapové `.otb` se v jiné velikosti vykreslí ve své
@@ -60,7 +60,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 - winusbcdc 1.7 bez zadaného VID/PID nevrátí žádná rozhraní → volat s `vid=0x1E71, pid=0x300E`.
 - Kraken 2023 se registruje pod GUID `{300e300d-7EE7-1125-0724-101503010819}`, ne pod standardním GUID, který hledá liquidctl.
 - Rozhraní displeje (Interface 0, třída USBDevice) má WinUSB nativně – Zadig není potřeba.
-- Přenos obrázku na LCD trvá 30–80 ms. Obrázek se posílá jen při změně; hodnoty se obnovují každou sekundu, obrazovky se střídají po 5 s.
+- Přenos obrázku na LCD trvá 30–80 ms. Obrázek se posílá jen při změně; hodnoty se obnovují podle „Obnova hodnot“ (nejméně 0,25 s), obrazovky se střídají podle „Rotace obrazovek“.
 - Grafika se kreslí ve 3× rozlišení (720×720), Lanczos downsampling, ořez na obsah a roztažení na celý displej.
 - Jas LCD je na 100 %, víc hardwarově nejde. Jas grafiky řeší tučnější písmo, silnější prvky a gama grafiky (výchozí 0.65).
 - HWiNFO data z registru `HKCU\Software\HWiNFO64\VSB`. Názvy senzorů jsou česky: „CPU (Tctl/Tdie)“, „Teplota GPU“, „Takt jader“ (MHz), „Takt GPU“.
@@ -75,6 +75,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
   - ventilátory: 10 % do 75 °C, 30 % při 80–85 °C, 80 % při 90 °C, 100 % od 95 °C
 - Pojistky: záložní křivky podle kapaliny se nahrají do Krakenu (ten se pak řídí sám), když:
   - teplota CPU z HWiNFO chybí déle než 5 s,
+  - teplota CPU z HWiNFO se 20 s vůbec nezmění (HWiNFO zamrzlo; běžně se mění skoro každou sekundu, nejdelší naměřená pauza 3 s – `cooling.STALE_LIMIT_S`),
   - aplikace končí – Ctrl+C, zavření okna, Ctrl+Break (handler konzole), odhlášení a vypnutí PC (skryté okno, `WM_ENDSESSION`; handler konzole tyto události nedostane, protože Python má načtenou user32.dll),
   - nastane chyba komunikace s Krakenem (před odpojením),
   - řízení je v nastavení vypnuté.
@@ -89,6 +90,6 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 3. **Ikona v systémové liště.**
 
 ## Pracovní postup
-- Před většími změnami udělej git commit. (Git zatím není nainstalovaný – do té doby záloha souborů.)
+- Před většími změnami udělej git commit.
 - Běžící aplikace drží USB zařízení – před testy přes liquidctl ji ukonči.
 - Po změnách ověř syntaxi (`py -m py_compile`) a zkontroluj `rgb_lcd.log`.

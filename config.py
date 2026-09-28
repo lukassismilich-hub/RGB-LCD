@@ -1,13 +1,23 @@
 # config.py - nacteni, prevod ze stare verze a ulozeni nastaveni (config.json)
 
+import glob
 import json
+import logging
 import os
+import shutil
 
 import led
 import prvky
 
+log = logging.getLogger("rgb_lcd")
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 PATH = os.path.join(BASE, "config.json")
+BACKUP = os.path.join(BASE, "config.zaloha.json")        # nastaveni pred poslednim ulozenim
+BROKEN = os.path.join(BASE, "config.poskozeny.json")     # kopie poskozeneho souboru (pro kontrolu)
+# soubory jen pro okno nastaveni a nastroje - jejich zmena bezici aplikaci na pozadi nemeni
+UI_ONLY = {"nastaveni.py", "vzhled.py", "editor_alphacool.py", "editor_kraken.py", "editor_led.py",
+           "obrazky_vytvorit.py", "obrazky_z_predloh.py", "ikona_vytvorit.py", "test_lcd.py"}
 
 LIQUID = "@kapalina"       # teplota kapaliny primo z Krakenu
 # nejkratsi obnova hodnot: nejpomalejsi cyklus (vykresleni ~55 ms + priprava 11 ms
@@ -94,12 +104,32 @@ def _migrate(old):
     return cfg
 
 
+def _read(path):
+    with open(path, encoding="utf-8") as f:
+        cfg = json.load(f)
+    if not isinstance(cfg, dict):
+        raise ValueError("nastaveni neni objekt JSON")
+    return cfg
+
+
 def load():
     try:
-        with open(PATH, encoding="utf-8") as f:
-            cfg = json.load(f)
+        cfg = _read(PATH)
     except FileNotFoundError:
         cfg = {}
+    except (ValueError, OSError) as e:
+        # poskozeny config.json: pouzit zalohu (nastaveni pred poslednim ulozenim), jinak vychozi
+        try:
+            shutil.copy2(PATH, BROKEN)
+        except OSError:
+            pass
+        try:
+            cfg = _read(BACKUP)
+            log.error("config.json je poskozeny (%s) - pouzivam zalohu config.zaloha.json "
+                      "(poskozeny soubor je v config.poskozeny.json).", e)
+        except (ValueError, OSError):
+            cfg = {}
+            log.error("config.json je poskozeny (%s) a zaloha chybi - pouzivam vychozi nastaveni.", e)
     if "obrazovky" not in cfg:
         cfg = _migrate(cfg)
         save(cfg)
@@ -132,10 +162,39 @@ def load():
 
 
 def save(cfg):
+    """Ulozit nastaveni; predchozi (platne) nastaveni se napred odlozi do config.zaloha.json."""
+    try:
+        _read(PATH)                                      # zalohovat jen platny soubor
+        shutil.copy2(PATH, BACKUP + ".tmp")
+        os.replace(BACKUP + ".tmp", BACKUP)
+    except (ValueError, OSError):
+        pass
     tmp = PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     os.replace(tmp, PATH)
+
+
+def backup_time():
+    """Cas zalohy (os.path.getmtime) nebo None, kdyz platna zaloha neni."""
+    try:
+        _read(BACKUP)
+        return os.path.getmtime(BACKUP)
+    except (ValueError, OSError):
+        return None
+
+
+def restore_backup():
+    """Obnovit nastaveni ze zalohy; soucasne se tim samo stane zalohou (jde to vratit)."""
+    save(_read(BACKUP))
+
+
+def code_stamp():
+    """Cas posledni zmeny kodu, ktery bezi na pozadi (bez souboru jen pro okno nastaveni).
+    Bezici aplikace si ho zapise do stav.json - okno nastaveni pozna starou verzi."""
+    stamps = [os.path.getmtime(p) for p in glob.glob(os.path.join(BASE, "*.py"))
+              if os.path.basename(p) not in UI_ONLY]
+    return max(stamps) if stamps else 0.0
 
 
 def mtime():

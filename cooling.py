@@ -5,6 +5,8 @@
 #   (prumer za N sekund, aby ventilatory neskakaly) a nastavi pevny vykon.
 #   Pojistky:
 #     - kdyz teplota CPU chybi dele nez 5 s, nahraji se zalozni krivky podle kapaliny
+#     - totez, kdyz se teplota CPU 20 s vubec nezmeni (HWiNFO zamrzlo; normalne se meni
+#       skoro kazdou sekundu, nejdelsi namerena pauza 3 s)
 #     - pri ukonceni aplikace (Ctrl+C, zavreni okna, odhlaseni, vypnuti PC) a pri chybe
 #       komunikace se taky nahraji zalozni krivky podle kapaliny
 #     - vypnute rizeni = krivky podle kapaliny (nikdy nezustane posledni pevny vykon)
@@ -17,6 +19,7 @@ from collections import deque
 log = logging.getLogger("rgb_lcd")
 
 MISSING_LIMIT_S = 5
+STALE_LIMIT_S = 20     # teplota CPU beze zmeny -> HWiNFO nejspis zamrzlo
 RESEND_S = 30          # i beze zmeny obcas zopakovat (napr. po probuzeni)
 MIN_STEP = 2           # zmena vykonu v %, od ktere se posila
 
@@ -46,6 +49,8 @@ class Cooling:
         self.sent = {}           # kanal -> posledni vykon
         self.sent_at = 0.0
         self.last_seen = time.monotonic()
+        self.last_value = None   # posledni teplota CPU a kdy se naposledy zmenila
+        self.changed_at = time.monotonic()
         self.fallback_active = False
         self.liquid_loaded = False
         self.state = {}
@@ -67,11 +72,20 @@ class Cooling:
 
         now = time.monotonic()
         item = data.get(cool.get("senzor_cpu", ""))
-        if item is None:
-            if now - self.last_seen > MISSING_LIMIT_S and not self.fallback_active:
-                self.apply_liquid(kraken, cool, "chybi teplota CPU z HWiNFO - ZALOHA")
+        stale = False
+        if item is not None:
+            if item["value"] != self.last_value:
+                self.last_value, self.changed_at = item["value"], now
+            elif now - self.changed_at > STALE_LIMIT_S:
+                stale = True                     # hodnota stoji -> brat jako chybejici
+        if item is None or stale:
+            if (stale or now - self.last_seen > MISSING_LIMIT_S) and not self.fallback_active:
+                reason = (f"teplota CPU z HWiNFO se {STALE_LIMIT_S} s nezmenila (HWiNFO zamrzlo?) - ZALOHA"
+                          if stale else "chybi teplota CPU z HWiNFO - ZALOHA")
+                self.apply_liquid(kraken, cool, reason)
                 self.fallback_active = True
-            self.state = {"rezim": "cpu", "zaloha": self.fallback_active}
+            self.state = {"rezim": "cpu", "zaloha": self.fallback_active,
+                          "duvod": "zamrzla" if stale else "chybi"}
             return
 
         self.last_seen = now

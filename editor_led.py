@@ -122,16 +122,17 @@ class LedEditor:
             panels = [("efekt", None)]
         else:
             panels = [("efekt_f140", "F140"), ("efekt_deska", "Ventilátory na desce")]
-        for col, (key, title) in enumerate(panels):
-            f.columnconfigure(col, weight=1, uniform="fx")
+        f.columnconfigure(0, weight=1)
+        # zvlast: panely pod sebou pres celou sirku (vedle sebe se pravy nevesel a orizl se)
+        for i, (key, title) in enumerate(panels):
             eff = self.lcfg.setdefault(key, dict(fx.DEFAULT_EFFECT))
+            if i:
+                ttk.Separator(f).grid(row=2 + i * 2 - 1, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 12))
             pf = ttk.Frame(f)
-            one = len(panels) == 1
-            pf.grid(row=2, column=col, columnspan=2 if one else 1, sticky="nsew",
-                    padx=(20 if col == 0 else 8, 20 if one or col == 1 else 8), pady=(0, 16))
+            pf.grid(row=2 + i * 2, column=0, columnspan=2, sticky="nsew", padx=20, pady=(0, 16))
             if title:
                 ttk.Label(pf, text=title, style="Bold.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 4))
-            self._effect_panel(pf, eff, 3 if one else 2)
+            self._effect_panel(pf, eff, 3)
 
     def _effect_panel(self, f, eff, chip_cols=3):
         typ = eff.get("typ", "duha_toceni")

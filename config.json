@@ -1162,14 +1162,16 @@
         "barva": "#ffffff",
         "rychlost": "normal",
         "obraceny_smer": false,
-        "pouzito": true
+        "pouzito": true,
+        "obracene": false,
+        "posun": 0
       }
     },
     "jas": 100,
     "jas_f140": 100,
     "jas_deska": 100,
     "stejne_pro_vse": true,
-    "vlna": true,
+    "vlna": false,
     "efekt": {
       "typ": "paleta",
       "barvy": [
@@ -1177,7 +1179,7 @@
         "#ff0000",
         "#00ff00"
       ],
-      "rychlost": 5,
+      "rychlost": 1,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
@@ -1203,7 +1205,7 @@
         "#0060ff",
         "#00ff40"
       ],
-      "rychlost": 4,
+      "rychlost": 6,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 40,

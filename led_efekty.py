@@ -43,14 +43,59 @@ EFFECTS = {
     "blesky": ("bouřka / blesky", 2, True, False),
     "ohnostroj": ("ohňostroj", 0, True, False),
     "konfety": ("konfety", 0, True, False),
-    "staticky_prechod": ("přechod 3 barev (stojí)", 3, False, False),
+    "staticky_prechod": ("stojící přechod", 3, False, False),
     "teplota": ("podle teploty", 3, False, False),
+    "majak": ("maják", 2, True, True),
+    "vlneni": ("vlnění barev", 3, True, True),
+    "dychajici_paleta": ("paleta s dýcháním", 3, True, True),
+    "kapky": ("kapky", 4, True, False),
+    "plamen": ("plamen zespodu", 0, True, False),
+    "vodopad": ("vodopád", 3, True, True),
+    "hladina": ("hladina (senzor)", 3, False, False),
+    "pretahovana": ("přetahovaná", 2, True, False),
     "vypnuto": ("vypnuto", 0, False, False),
 }
-ANIMATED = {k for k, v in EFFECTS.items() if v[2]} | {"teplota"}
+ANIMATED = {k for k, v in EFFECTS.items() if v[2]} | {"teplota", "hladina"}
+SENSOR_EFFECTS = ("teplota", "hladina")          # barva / hladina podle senzoru (senzor, min, max)
+
+# efekty s paletou: volitelny pocet barev "pocet_barev" (min, max); vychozi = pocet v EFFECTS
+PALETTE = {"dychani": (1, 8), "paleta": (2, 8), "vysece": (2, 8), "stirani": (2, 8), "polarni_zare": (2, 8),
+           "stridani": (2, 8), "staticky_prechod": (2, 8), "teplota": (2, 8), "vlneni": (2, 8),
+           "dychajici_paleta": (2, 8), "kapky": (1, 8), "vodopad": (2, 8), "hladina": (1, 8)}
+MAX_COLORS = 8
+# barvy pro dalsi pozice palety (kdyz uzivatel pocet barev zvysi)
+DEFAULT_PALETTE = ["#ff0000", "#0060ff", "#00ff40", "#ffb000", "#b000ff", "#00e5ff", "#ff0080", "#ffffff"]
+# efekty, ktere vyuzivaji polohu LED na kruhu (nahore / dole); "otoceni" = 0 / 90 / 180 / 270 stupnu
+VERTICAL = ("plamen", "vodopad", "hladina", "pretahovana")
 
 DEFAULT_EFFECT = {"typ": "duha_toceni", "barvy": ["#ff0000", "#0060ff", "#00ff40"], "rychlost": 4,
                   "opacny_smer": False, "senzor": "CPU (Tctl/Tdie)", "min": 40, "max": 90}
+
+
+def color_count(eff):
+    """Pocet barev efektu s paletou (u ostatnich pevny pocet z EFFECTS)."""
+    typ = eff.get("typ", "")
+    default = EFFECTS.get(typ, ("", 0))[1]
+    if typ not in PALETTE:
+        return default
+    lo, hi = PALETTE[typ]
+    try:
+        n = int(eff.get("pocet_barev", default))
+    except (TypeError, ValueError):
+        n = default
+    return max(lo, min(hi, n))
+
+
+def palette(eff):
+    """Barvy palety jako hex (presne color_count polozek, chybejici doplni DEFAULT_PALETTE)."""
+    n = color_count(eff)
+    cols = list(eff.get("barvy", []))[:n]
+    for c in DEFAULT_PALETTE:
+        if len(cols) >= n:
+            break
+        if c not in cols:
+            cols.append(c)
+    return cols[:n]
 
 
 def hex_rgb(h):
@@ -116,7 +161,8 @@ class Engine:
         """Barvy (r, g, b) 0-255 jako float pro n LED jednoho ventilatoru v case t.
         offset = posun faze pri vlne (0..1); jinak fan_idx / fan_count, kdyz je wave."""
         typ = eff.get("typ", "vypnuto")
-        cols = [hex_rgb(c) for c in eff.get("barvy", [])] or [(255, 255, 255)]
+        src = palette(eff) if typ in PALETTE else eff.get("barvy", [])
+        cols = [hex_rgb(c) for c in src] or [(255, 255, 255)]
         speed = max(1, min(10, int(eff.get("rychlost", 4))))
         rate = 0.08 * speed                       # otacky za sekundu (1 -> 0,08, 10 -> 0,8)
         direction = -1 if eff.get("opacny_smer") else 1
@@ -321,21 +367,101 @@ class Engine:
                 a = int(x) % k
                 out.append(_mix(cols[a], cols[(a + 1) % k], x - int(x)))
             return out
-        if typ == "teplota":
-            v = None
-            item = (data or {}).get(eff.get("senzor", ""))
-            if item is not None:
-                v = item.get("value")
-            smooth = self.state.get(("teplota", key))
-            if v is not None:                     # vyhlazeni ~2 s, aby barva neskakala
-                smooth = v if smooth is None else smooth + (v - smooth) * min(1.0, dt / 2.0)
-                self.state[("teplota", key)] = smooth
-            if smooth is None:
+        if typ in SENSOR_EFFECTS:
+            fr = self._sensor_frac(eff, typ, key, data, dt)
+            if fr is None:
                 return [(40.0, 40.0, 40.0)] * n
-            lo, hi = float(eff.get("min", 40)), float(eff.get("max", 90))
-            fr = 0.0 if hi == lo else (smooth - lo) / (hi - lo)
-            return [_gradient(cols, fr)] * n
+            if typ == "teplota":
+                return [_gradient(cols, fr)] * n
+            # hladina: LED rozsvicene odspodu do vysky podle hodnoty, barva podle vysky (mekka hrana)
+            out = []
+            for i in range(n):
+                h = 1 - (_ring_y(i, n, eff) + 1) / 2              # 0 = dole, 1 = nahore
+                k = max(0.0, min(1.0, (fr - h) * n / 2 + 0.5))
+                out.append(_scale(_gradient(cols, h), 0.06 + 0.94 * k))
+            return out
+        if typ == "majak":                        # jeden siroky paprsek obiha dokola, slaba zare kolem
+            pos = ((t * rate * direction + offset) % 1.0) * n
+            bg = _scale(cols[1], 0.06) if len(cols) > 1 else black
+            width = max(1.2, n * 0.14)
+            out = []
+            for i in range(n):
+                d = min((i - pos) % n, (pos - i) % n)
+                k = max(max(0.0, 1 - d / width) ** 1.5, 0.12 * max(0.0, 1 - d / (n * 0.4)))
+                out.append(tuple(max(bg[j], cols[0][j] * k) for j in range(3)))
+            return out
+        if typ == "vlneni":                       # paleta po obvodu, pres ni bezi vlny jasu
+            ph = t * rate * direction + offset
+            out = []
+            for i in range(n):
+                u = i / n
+                k = 0.12 + 0.88 * ((1 + math.sin(2 * math.pi * (2 * u - ph))) / 2) ** 2
+                out.append(_scale(_cyclic(cols, u + ph * 0.25), k))
+            return out
+        if typ == "dychajici_paleta":             # otacejici se paleta, cela dycha
+            ph = t * rate * direction + offset
+            period = 12.0 / speed
+            k = 0.1 + 0.9 * (1 - math.cos(2 * math.pi * (t / period + offset))) / 2
+            return [_scale(_cyclic(cols, i / n + ph), k) for i in range(n)]
+        if typ == "kapky":                        # nahodne LED se rozsviti barvou z palety a pomalu hasnou
+            st = self.state.setdefault(("kapky", key), [[0.0, 0] for _ in range(n)])
+            if len(st) != n:
+                st[:] = [[0.0, 0] for _ in range(n)]
+            decay = 0.5 ** (dt * speed * 0.9)
+            for s_ in st:
+                s_[0] *= decay
+                if self.rng.random() < dt * speed * 0.09:
+                    s_[:] = [1.0, self.rng.randrange(len(cols))]
+            return [_scale(cols[s_[1] % len(cols)], s_[0] ** 1.5) for s_ in st]
+        if typ == "plamen":                       # ohen hori odspodu: dole jasne zluta, nahore temne cervena
+            st = self.state.setdefault(("plamen", key), [0.6] * n)
+            if len(st) != n:
+                st[:] = [0.6] * n
+            a = min(1.0, dt * speed * 1.8)
+            out = []
+            for i in range(n):
+                st[i] += (self.rng.uniform(0.3, 1.0) - st[i]) * a
+                h = (_ring_y(i, n, eff) + 1) / 2                 # 1 = dole, 0 = nahore
+                v = st[i] * (0.08 + 0.92 * h ** 1.3)
+                out.append(_scale(_mix((255, 25, 0), (255, 190, 40), min(1.0, v * 1.2)), min(1.0, 0.1 + v)))
+            return out
+        if typ == "vodopad":                      # barvy teknou shora dolu po obou stranach
+            ph = t * rate * direction * 1.2 - offset
+            return [_cyclic(cols, (_ring_y(i, n, eff) + 1) / 2 * 0.8 - ph) for i in range(n)]
+        if typ == "pretahovana":                  # dve barvy, hranice mezi nimi se hybe nahoru a dolu
+            c2 = cols[1] if len(cols) > 1 else black
+            x = 0.12 + 0.76 * (1 + math.sin(2 * math.pi * (t * rate * 0.6 + offset))) / 2
+            out = []
+            for i in range(n):
+                h = (_ring_y(i, n, eff) + 1) / 2                 # 0 = nahore, 1 = dole
+                out.append(_mix(cols[0], c2, max(0.0, min(1.0, (h - x) / 0.18 + 0.5))))
+            return out
         return [black] * n
+
+    def _sensor_frac(self, eff, typ, key, data, dt):
+        """Vyhlazena hodnota senzoru (~2 s, at barva neskace) jako podil min..max, None = bez dat."""
+        v = None
+        item = (data or {}).get(eff.get("senzor", ""))
+        if item is not None:
+            v = item.get("value")
+        smooth = self.state.get((typ, key))
+        if v is not None:
+            smooth = v if smooth is None else smooth + (v - smooth) * min(1.0, dt / 2.0)
+            self.state[(typ, key)] = smooth
+        if smooth is None:
+            return None
+        lo, hi = float(eff.get("min", 40)), float(eff.get("max", 90))
+        return 0.0 if hi == lo else max(0.0, min(1.0, (smooth - lo) / (hi - lo)))
+
+
+def _ring_y(i, n, eff):
+    """Svisla poloha LED i na kruhu (-1 nahore, +1 dole). LED 1 vpravo, cislovani po smeru hodin
+    (jako v nahledu); "otoceni" efektu otoci svisle efekty po 90 stupnich."""
+    try:
+        rot = math.radians(float(eff.get("otoceni", 0)))
+    except (TypeError, ValueError):
+        rot = 0.0
+    return math.sin(2 * math.pi * i / max(1, n) + rot)
 
 
 def apply_brightness(colors, percent):

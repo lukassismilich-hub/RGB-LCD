@@ -195,7 +195,9 @@ class LedEditor:
                             command=lambda: eff.__setitem__("opacny_smer", dv.get())).grid(
                 row=row, column=1, sticky="w", padx=8)
             row += 1
-        if ncolors:
+        if typ in fx.PALETTE:                               # paleta s volitelnym poctem barev (az 8)
+            row = self._palette_editor(f, eff, typ, row)
+        elif ncolors:
             labels = {"kometa": ["kometa", "pozadí"], "trpyt": ["záblesky", "pozadí"],
                       "prechod": ["barva 1", "barva 2"], "teplota": ["studená", "střední", "horká"],
                       "dvojita_kometa": ["kometa 1", "kometa 2"], "policie": ["první", "druhá"],
@@ -213,7 +215,16 @@ class LedEditor:
                 b.config(command=lambda i=i, b=b: self._pick_list(cols, i, b))
                 b.pack(side="left", padx=(0, 6), ipady=4)
             row += 1
-        if typ == "teplota":
+        if typ in fx.VERTICAL:                              # kde je u efektu "dole"
+            ttk.Label(f, text="Otočení", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+            ov = tk.IntVar(value=int(eff.get("otoceni", 0)) % 360)
+            of = ttk.Frame(f)
+            of.grid(row=row, column=1, sticky="w", padx=8, pady=4)
+            V.segmented(of, ov, [(0, "0°"), (90, "90°"), (180, "180°"), (270, "270°")],
+                        command=lambda: eff.__setitem__("otoceni", ov.get())).pack(side="left")
+            ttk.Label(of, style="Small.TLabel", text="  když „dole“ efektu není dole na ventilátoru").pack(side="left")
+            row += 1
+        if typ in fx.SENSOR_EFFECTS:
             ttk.Label(f, text="Senzor", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
             sn = tk.StringVar(value=eff.get("senzor", "CPU (Tctl/Tdie)"))
             ttk.Combobox(f, textvariable=sn, values=self.app._sensor_names(), width=26).grid(
@@ -222,7 +233,9 @@ class LedEditor:
             row += 1
             rf = ttk.Frame(f)
             rf.grid(row=row, column=1, sticky="w", padx=8, pady=4)
-            for key, text in (("min", "studená od"), ("max", "horká od")):
+            texts = (("min", "prázdná při"), ("max", "plná při")) if typ == "hladina" else \
+                (("min", "studená od"), ("max", "horká od"))
+            for key, text in texts:
                 ttk.Label(rf, text=text, style="Muted.TLabel").pack(side="left")
                 v = tk.StringVar(value=str(eff.get(key, 40 if key == "min" else 90)))
                 ttk.Entry(rf, textvariable=v, width=5, font=V.MONO).pack(side="left", padx=(4, 12))
@@ -237,6 +250,58 @@ class LedEditor:
         if typ == "vlastni":
             ttk.Label(f, style="Small.TLabel", text="Barvy jednotlivých LED nastavíš vpravo ve Vlastních barvách.").grid(
                 row=row, column=0, columnspan=2, sticky="w", pady=4)
+
+    def _palette_editor(self, f, eff, typ, row):
+        """Pocet barev (napr. 2-8) a mrizka barev po ctyrech; seznam "barvy" si pamatuje i barvy
+        nad zvoleny pocet, takze po zvyseni se vrati."""
+        lo, hi = fx.PALETTE[typ]
+        n = fx.color_count(eff)
+        cols = eff.setdefault("barvy", list(fx.DEFAULT_EFFECT["barvy"]))
+        if len(cols) < n:
+            cols.extend(fx.palette(eff)[len(cols):n])
+        ttk.Label(f, text="Počet barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+        nv = tk.IntVar(value=n)
+
+        def on_count():
+            eff["pocet_barev"] = nv.get()
+            self._build_effects()
+        V.segmented(f, nv, [(k, str(k)) for k in range(lo, hi + 1)], command=on_count).grid(
+            row=row, column=1, sticky="w", padx=8, pady=4)
+        row += 1
+        if typ == "teplota":
+            labels = ["studená"] + [str(i + 1) for i in range(1, n - 1)] + ["horká"]
+        elif typ == "hladina":
+            labels = ["dole"] + [str(i + 1) for i in range(1, n - 1)] + ["nahoře"]
+        else:
+            labels = [str(i + 1) for i in range(n)]
+        labels = labels[:n] if n > 1 else ["barva"]
+        ttk.Label(f, text="Barvy", style="Muted.TLabel").grid(row=row, column=0, sticky="nw", pady=6)
+        bf = ttk.Frame(f)
+        bf.grid(row=row, column=1, sticky="w", padx=8, pady=4)
+        for i in range(n):
+            b = V.swatch(bf, cols[i], None, text=labels[i], width=7)
+            b.config(command=lambda i=i, b=b: self._pick_list(cols, i, b))
+            b.grid(row=i // 4, column=i % 4, padx=(0, 6), pady=(0, 6), ipady=4)
+        row += 1
+        if n > 1:
+            tf = ttk.Frame(f)
+            tf.grid(row=row, column=1, sticky="w", padx=8, pady=(0, 4))
+
+            def rainbow():
+                cols[:n] = led.rainbow(n)
+                self._build_effects()
+
+            def reverse():
+                cols[:n] = cols[:n][::-1]
+                self._build_effects()
+
+            def rotate():
+                cols[:n] = cols[n - 1:n] + cols[:n - 1]
+                self._build_effects()
+            for text, cmd, w in (("Duha", rainbow, None), ("Obrátit pořadí", reverse, None), ("↻", rotate, 3)):
+                ttk.Button(tf, text=text, command=cmd, width=w).pack(side="left", padx=(0, 4))
+            row += 1
+        return row
 
     def _pick_list(self, cols, i, b):
         c = colorchooser.askcolor(color=cols[i], parent=self.fx_frame)[1]

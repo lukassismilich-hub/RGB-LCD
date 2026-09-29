@@ -387,7 +387,7 @@
         "y": 6,
         "w": 85,
         "h": 34,
-        "radky": "\nZÁT CPU = {Celkové vytížení CPU}%\nJÁD = {Průměrný počet aktivních jader|1|1}\nRAM = {Použitá fyzická paměť|1024|1}G\n",
+        "radky": "\nCPU = {Celkové vytížení CPU}%\nJÁD = {Průměrný počet aktivních jader|1|1}\nRAM = {Použitá fyzická paměť|1024|1}G\n",
         "radek_px": 11,
         "kurzor": false,
         "pismo": {
@@ -402,7 +402,7 @@
         "y": 74,
         "w": 85,
         "h": 23,
-        "radky": "ZÁT GPU = {Zatížení jádra GPU}%\nVRAM = {Přidělená paměť GPU|1000|1}G\n\n",
+        "radky": "GPU = {Zatížení jádra GPU}%\nVRAM = {Přidělená paměť GPU|1000|1}G\n\n",
         "radek_px": 11,
         "kurzor": false,
         "pismo": {

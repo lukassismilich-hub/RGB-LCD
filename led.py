@@ -8,6 +8,8 @@
 #     (D_LED1 0x01, D_LED2 0x02), barvy po LED paketem [0xCC, hlavicka, offset 2 B, pocet bajtu,
 #     az 19 LED], poradi bajtu z kalibrace (GRB). Protokol podle OpenRGB.
 #   - ostatni zony desky (male LED, 12V RGB) = jen jedna barva / efekt cipu pres liquidctl
+#   - klavesnice Logitech G815 = jedna barva cele klavesnice pres Logitech LED SDK z G HUB
+#     (klavesnice.py); funguje jen pri vypnute integrovane pameti klavesnice
 # Liquidctl sam D_LED neovladne, kdyz ma hlavicka vypnute vestavene efekty (tak ji nechava GCC).
 # LED desky jinak ridi Gigabyte Control Center (GCC) - pokud bezi, nastaveni prepise.
 #
@@ -87,6 +89,9 @@ def default_config():
             "D_LED2": {"nazev": "1 ventilátor", "pocet_led": 16, "pouzito": True, "barvy": rainbow(16)},
         },
         "fusion": zones,
+        # klavesnice G815: rizeni z aplikace, efekt "f140" / "deska" (jako ventilatory) / "vlastni"
+        "klavesnice": {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffffff"},
+        "efekt_klavesnice": copy.deepcopy(fx.DEFAULT_EFFECT),
     }
 
 
@@ -105,6 +110,8 @@ def targets(lcfg):
         if h.get("pouzito", name == "D_LED1"):
             n = max(1, min(ARGB_MAX_LEDS, int(h.get("pocet_led", 16))))
             out.append((name, n, "deska", h.get("barvy", rainbow(n))))
+    if lcfg.get("klavesnice", {}).get("zapnuto"):          # klavesnice = jedna "LED" (cela klavesnice)
+        out.append(("klavesnice", 1, "klavesnice", [lcfg["klavesnice"].get("barva", "#ffffff")]))
     return out
 
 
@@ -136,6 +143,11 @@ def wave_offsets(lcfg, keys):
 
 
 def effect_for(lcfg, group):
+    if group == "klavesnice":                              # vlastni efekt, nebo jako F140 / deska
+        src = lcfg.get("klavesnice", {}).get("efekt", "deska")
+        if src == "vlastni":
+            return lcfg.get("efekt_klavesnice", fx.DEFAULT_EFFECT)
+        group = "f140" if src == "f140" else "deska"
     if lcfg.get("stejne_pro_vse", True):
         return lcfg.get("efekt", fx.DEFAULT_EFFECT)
     return lcfg.get(f"efekt_{group}", fx.DEFAULT_EFFECT)
@@ -174,14 +186,17 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
     orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat."""
     tg = targets(lcfg)
     wave = bool(lcfg.get("vlna"))
-    offsets = wave_offsets(lcfg, [k for k, *_ in tg])[0] if wave else {}
+    offsets = wave_offsets(lcfg, [k for k, *_ in tg if k != "klavesnice"])[0] if wave else {}
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
         eff = effect_for(lcfg, group)
         cols = engine.frame(eff, t, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0))
         if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
             cols = _orient(cols, *orientation(lcfg, key))
-        k = float(lcfg.get("jas", 80)) * float(lcfg.get(f"jas_{group}", 100)) / 100.0
+        if group == "klavesnice":
+            k = float(lcfg.get("jas", 80)) * float(lcfg["klavesnice"].get("jas", 100)) / 100.0
+        else:
+            k = float(lcfg.get("jas", 80)) * float(lcfg.get(f"jas_{group}", 100)) / 100.0
         out[key] = fx.apply_brightness(cols, k)
     return out
 
@@ -248,17 +263,40 @@ class Session:
     """Otevrena spojeni s radici a posilani snimku. Kazdy radic zvlast: kdyz jeden chybi
     nebo selze, druhy jede dal a chybejici se zkusi pripojit znovu (retry_missing)."""
 
-    NAMES = {"nzxt": "NZXT RGB Controller (F140)", "fusion": "Gigabyte RGB Fusion (ventilátory na desce)"}
+    NAMES = {"nzxt": "NZXT RGB Controller (F140)", "fusion": "Gigabyte RGB Fusion (ventilátory na desce)",
+             "klavesnice": "klávesnice G815 (G HUB)"}
 
     def __init__(self, lcfg):
         self.nzxt = self.fusion = self.fdev = None
+        self.kbd = None                           # klavesnice.Sdk, kdyz ji aplikace ridi
         self.orders = {k: (1, 0, 2) for k in ARGB_HEADERS}
         self.errors = {}                          # radic -> chyba
         self.last = {}
         self.retry_missing(lcfg)
+        self.setup_keyboard(lcfg)
+
+    def setup_keyboard(self, lcfg):
+        """Klavesnice G815 pres Logitech LED SDK (G HUB): zapnout / vratit G HUBu."""
+        want = bool(lcfg.get("klavesnice", {}).get("zapnuto"))
+        if not want:
+            if self.kbd is not None:
+                self.kbd.stop()                   # klavesnice zpet G HUBu
+                self.kbd = None
+            self.errors.pop("klavesnice", None)
+            return
+        if self.kbd is None:
+            import klavesnice
+            self.kbd = klavesnice.Sdk()
+        try:
+            if self.kbd.start():
+                self.errors.pop("klavesnice", None)
+        except Exception as e:
+            self.errors["klavesnice"] = str(e)
 
     def retry_missing(self, lcfg):
         """Pripojit radice, ktere zatim nejedou. Vrati True, kdyz nejaky pribyl."""
+        if "klavesnice" in self.errors:
+            self.setup_keyboard(lcfg)
         if self.nzxt is not None and self.fusion is not None:
             return False
         try:
@@ -313,6 +351,12 @@ class Session:
 
     def _fail(self, which, e):
         """Chyba jednoho radice: odpojit jen ten, druhy jede dal."""
+        if which == "klavesnice":
+            if self.kbd is not None:
+                self.kbd.stop()
+            self.errors[which] = str(e)
+            log.warning("LED: %s – %s, zkusím znovu za %d s.", self.NAMES[which], e, RETRY_S)
+            return
         self._drop_dev(getattr(self, which))
         setattr(self, which, None)
         if which == "fusion":
@@ -369,9 +413,18 @@ class Session:
                         _argb_strip(self.fdev, cmd, cols + pad, self.orders[name])
             except Exception as e:
                 self._fail("fusion", e)
+        kb = frame.get("klavesnice")
+        if self.kbd is not None and self.kbd.ok and kb:
+            try:
+                self.kbd.color(kb[0], force)
+            except Exception as e:
+                self._fail("klavesnice", e)
         self.last = frame
 
     def close(self):
+        if self.kbd is not None:
+            self.kbd.stop()                       # klavesnice zpet G HUBu
+            self.kbd = None
         for d in (self.nzxt, self.fusion):
             if d is not None:
                 try:
@@ -480,7 +533,8 @@ class LedWorker(threading.Thread):
             now_wall, now = time.time(), time.monotonic()
             resumed = now_wall - last_wall > RESUME_GAP_S
             last_wall = now_wall
-            key = json.dumps({"z": lcfg.get("fusion"), "a": lcfg.get("argb")}, sort_keys=True)
+            key = json.dumps({"z": lcfg.get("fusion"), "a": lcfg.get("argb"),
+                              "k": lcfg.get("klavesnice", {}).get("zapnuto")}, sort_keys=True)
             try:
                 if session is None or resumed:
                     if session:
@@ -500,6 +554,7 @@ class LedWorker(threading.Thread):
                         session.setup_zones(lcfg)
                     except Exception as e:
                         session._fail("fusion", e)
+                    session.setup_keyboard(lcfg)              # klavesnice zapnuta / vracena G HUBu
                     hw_key, last_force = key, 0.0
                 dt, prev = now - prev, now
                 frame = render(engine, lcfg, now - t0, data, min(dt, 0.2))

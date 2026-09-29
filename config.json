@@ -1419,6 +1419,26 @@
     },
     "vlna_smer": "dozadu",
     "vlna_f140_spolu": false,
-    "f140_vpredu": "led2"
+    "f140_vpredu": "led2",
+    "klavesnice": {
+      "zapnuto": true,
+      "efekt": "vlastni",
+      "jas": 100,
+      "barva": "#ffffff"
+    },
+    "efekt_klavesnice": {
+      "typ": "trpyt",
+      "barvy": [
+        "#ff0000",
+        "#0060ff",
+        "#00ff40",
+        "#ffb000"
+      ],
+      "rychlost": 4,
+      "opacny_smer": false,
+      "senzor": "CPU (Tctl/Tdie)",
+      "min": 40,
+      "max": 90
+    }
   }
 }

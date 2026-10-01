@@ -255,6 +255,8 @@ def main():
                 img, prog = render_program(watcher, cfg, bad_screens)
                 if img is None:
                     img = render_screen(cfg, data, hist, seen_max, rot, bad_screens)
+                else:                            # prerusena obrazovka dostane po ikone celou dobu rotace
+                    rot["next"] = time.monotonic() + float(cfg["rotace_s"])
                 if img is not None:
                     b = img.tobytes()
                     if b == last_bytes:          # posilame jen zmeny

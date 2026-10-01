@@ -6,6 +6,7 @@
 import io
 import time
 
+from PIL import Image, ImageChops
 from winusbcdc.winusbpy import WinUsbPy
 from winusbcdc.winusbclasses import GUID
 
@@ -20,10 +21,30 @@ from liquidctl import find_liquidctl_devices  # noqa: E402  (az po oprave GUID)
 from liquidctl.error import Timeout  # noqa: E402
 
 # Odpovedi Krakenu na prenos obrazku (fw 2): 37 01 = zacatek prijat, 37 02 = obrazek prijat.
-# Pri startu nekterych her (Diablo IV) odpovida casto ff 01 - prenos odmitne a obrazek zahodi.
-# Ve fronte byvaji i zbloudile zpravy 75 xx (odpovedi na cteni stavu); liquidctl cte proste
-# dalsi zpravu, takze odmitnuti nepozna.
+# liquidctl po prikazu cte proste dalsi zpravu HID - ve fronte byvaly stare zpravy (ff 01,
+# 75 xx = odpovedi na cteni stavu) a pri startu nekterych her (Diablo IV) se tak ztracela asi
+# polovina obrazku. Proto vyprazdnit frontu, cekat na potvrzeni a pri ff / bez odpovedi opakovat.
 SEND_TRIES = 3
+
+# RGB565 po bajtech jako liquidctl _prepare_static_file_rgb16 (horni bajt R5 G3, dolni G3 B5),
+# ale pres tabulky Pillow misto pythonove smycky pres pixely (0,5 ms misto ~10 ms na snimek)
+_HI_R = [(v >> 3) << 3 for v in range(256)]
+_HI_G = [v >> 5 for v in range(256)]
+_LO_G = [((v >> 2) & 7) << 5 for v in range(256)]
+_LO_B = [v >> 3 for v in range(256)]
+
+
+def rgb565(img, rotation=0):
+    """Obrazek -> bajty pro LCD 240x240 (rotation 0-3 = otoceni displeje po 90 stupnich)."""
+    im = img.convert("RGB")
+    if im.size != (240, 240):
+        im = im.resize((240, 240))
+    if rotation:
+        im = im.rotate(rotation * -90)
+    r, g, b = im.split()
+    hi = ImageChops.add(r.point(_HI_R), g.point(_HI_G))
+    lo = ImageChops.add(g.point(_LO_G), b.point(_LO_B))
+    return Image.merge("LA", (hi, lo)).tobytes()
 
 
 class Kraken:
@@ -99,15 +120,15 @@ class Kraken:
     def show(self, img):
         """Poslat obrazek na LCD. True = Kraken ho prijal; False = odmitl i po SEND_TRIES pokusech
         (hlavni smycka ho posle znovu v dalsim kole)."""
-        buf = io.BytesIO()
-        img.save(buf, "PNG")
-        buf.seek(0)
         if self._first or self.double_send:
             # prvni obrazek po inicializaci musi jit dvakrat - to dela set_screen
+            buf = io.BytesIO()
+            img.save(buf, "PNG")
+            buf.seek(0)
             self.dev.set_screen("lcd", "static", buf)
             self._first = False
             return True
-        data = self.dev._prepare_static_file_rgb16(buf, self.dev.orientation)
+        data = rgb565(img, self.dev.orientation)
         for _ in range(SEND_TRIES):
             if self._send_fw2(data):
                 return True
@@ -143,7 +164,7 @@ class Kraken:
                   0x06, 0x00, 0x00, 0x00] + list(len(data).to_bytes(4, "little"))
         dev._bulk_write(header)
         for i in range(0, len(data), dev.bulk_buffer_size):
-            dev._bulk_write(list(data[i:i + dev.bulk_buffer_size]))
+            dev._bulk_write(data[i:i + dev.bulk_buffer_size])
         dev._write([0x36, 0x02])                     # konec prenosu
         return self._reply(0x02, 0.5)
 

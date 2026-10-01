@@ -1068,7 +1068,12 @@ class App(tk.Tk):
             self._prog_skip.state(["disabled"])
             return
         ago = max(0, time.time() - p.get("cas", time.time()))
-        when = f"před {int(ago)} s" if ago < 60 else f"před {int(ago // 60)} min" if ago < 3600 else             time.strftime("%H:%M", time.localtime(p.get("cas", 0)))
+        if ago < 60:
+            when = f"před {int(ago)} s"
+        elif ago < 3600:
+            when = f"před {int(ago // 60)} min"
+        else:
+            when = time.strftime("%H:%M", time.localtime(p.get("cas", 0)))
         self._prog_lbl.config(text=f"Naposledy: {p.get('nazev', '')} ({p.get('exe', '')}), {when}")
         self._prog_skip.state(["!disabled"])
 

@@ -210,15 +210,19 @@ class LedEditor:
             pf = ttk.Frame(f)
             pf.grid(row=row, column=1, sticky="ew", padx=8)
             pv = tk.DoubleVar(value=float(eff.get("pauza", 0)))
-            pl = ttk.Label(pf, style="Muted.TLabel", width=7)
+            pl = ttk.Label(pf, style="Muted.TLabel", width=9)
 
-            def on_pause(_e=None):
+            def show_pause():
+                x = round(float(pv.get()), 1)
+                pl.config(text="bez pauzy" if x <= 0 else f"{x:g} s".replace(".", ","))
+
+            def on_pause(_e=None):                          # jen zmena uzivatelem (ne pri sestaveni)
                 eff["pauza"] = round(float(pv.get()), 1)
-                pl.config(text="bez pauzy" if eff["pauza"] <= 0 else f"{eff['pauza']:g} s".replace(".", ","))
+                show_pause()
             V.scale(pf, variable=pv, from_=0, to=fx.MAX_PAUSE, resolution=0.5, length=150,
                     command=on_pause).pack(side="left", fill="x", expand=True)
             pl.pack(side="left", padx=(8, 0))
-            on_pause()
+            show_pause()
             row += 1
         if typ == "duha_prelevani":                         # plna duha, nebo vlastni barvy (az 8)
             ttk.Label(f, text="Režim barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)

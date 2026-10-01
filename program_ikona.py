@@ -371,7 +371,7 @@ class Watcher(threading.Thread):
         self.start_ft = now_filetime()
         self.done = set()                                 # (pid, cas spusteni) uz vyrizene
         self.last_key = None
-        self._info = {}                                   # (pid, cas spusteni) -> cesta k .exe
+        self._info = {}                                   # (okno, pid) -> ((pid, cas spusteni), cesta)
         self._icons = {}                                  # cesta -> (ikona, nazev)
         self._errors = set()
 
@@ -481,9 +481,10 @@ class Watcher(threading.Thread):
                 self._icons.clear()
             icon = exe_icon(path)
             self._icons[path] = (icon, exe_name(path) if icon is not None else "")
+            if icon is None:                              # do logu jen jednou, ne pri kazdem prepnuti
+                log.info("Ikona programu: %s nema ikonu.", path)
         icon, name = self._icons[path]
         if icon is None:
-            log.info("Ikona programu: %s nema ikonu.", path)
             return
         try:
             secs = max(1.0, min(120.0, float(c.get("doba_s", 8))))

@@ -187,10 +187,12 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
     tg = targets(lcfg)
     wave = bool(lcfg.get("vlna"))
     offsets = wave_offsets(lcfg, [k for k, *_ in tg if k != "klavesnice"])[0] if wave else {}
+    span = max(offsets.values(), default=0.0)
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
         eff = effect_for(lcfg, group)
-        cols = engine.frame(eff, t, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0))
+        cols = engine.frame(eff, t, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0),
+                            span=span)
         if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
             cols = _orient(cols, *orientation(lcfg, key))
         if group == "klavesnice":

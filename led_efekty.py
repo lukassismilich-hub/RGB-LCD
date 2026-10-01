@@ -59,7 +59,7 @@ ANIMATED = {k for k, v in EFFECTS.items() if v[2]} | {"teplota", "hladina"}
 SENSOR_EFFECTS = ("teplota", "hladina")          # barva / hladina podle senzoru (senzor, min, max)
 
 # efekty s paletou: volitelny pocet barev "pocet_barev" (min, max); vychozi = pocet v EFFECTS
-PALETTE = {"dychani": (1, 8), "paleta": (2, 8), "vysece": (2, 8), "stirani": (2, 8), "polarni_zare": (2, 8),
+PALETTE = {"duha_prelevani": (2, 8), "dychani": (1, 8), "paleta": (2, 8), "vysece": (2, 8), "stirani": (2, 8), "polarni_zare": (2, 8),
            "stridani": (2, 8), "staticky_prechod": (2, 8), "teplota": (2, 8), "vlneni": (2, 8),
            "dychajici_paleta": (2, 8), "kapky": (1, 8), "vodopad": (2, 8), "hladina": (1, 8)}
 MAX_COLORS = 8
@@ -67,6 +67,9 @@ MAX_COLORS = 8
 DEFAULT_PALETTE = ["#ff0000", "#0060ff", "#00ff40", "#ffb000", "#b000ff", "#00e5ff", "#ff0080", "#ffffff"]
 # efekty, ktere vyuzivaji polohu LED na kruhu (nahore / dole); "otoceni" = 0 / 90 / 180 / 270 stupnu
 VERTICAL = ("plamen", "vodopad", "hladina", "pretahovana")
+# duha - prelevani: "barvy_rezim" "duha" = plna duha (vychozi), "barvy" = vlastni paleta
+# dychani: "pauza" = jak dlouho LED sviti naplno, nez zacne zhasinat a dalsi barva (s, 0-10)
+MAX_PAUSE = 10.0
 
 DEFAULT_EFFECT = {"typ": "duha_toceni", "barvy": ["#ff0000", "#0060ff", "#00ff40"], "rychlost": 4,
                   "opacny_smer": False, "senzor": "CPU (Tctl/Tdie)", "min": 40, "max": 90}
@@ -78,6 +81,7 @@ def color_count(eff):
     default = EFFECTS.get(typ, ("", 0))[1]
     if typ not in PALETTE:
         return default
+    default = default or 3
     lo, hi = PALETTE[typ]
     try:
         n = int(eff.get("pocet_barev", default))
@@ -157,9 +161,10 @@ class Engine:
         self.state = {}
 
     def frame(self, eff, t, key, n, fan_idx=0, fan_count=1, wave=False, custom=None, data=None, dt=1 / FPS,
-              offset=None):
+              offset=None, span=None):
         """Barvy (r, g, b) 0-255 jako float pro n LED jednoho ventilatoru v case t.
-        offset = posun faze pri vlne (0..1); jinak fan_idx / fan_count, kdyz je wave."""
+        offset = posun faze pri vlne (0..1); jinak fan_idx / fan_count, kdyz je wave.
+        span = nejvetsi posun faze ze vsech ventilatoru (sirka vlny, pro pauzu u dychani)."""
         typ = eff.get("typ", "vypnuto")
         src = palette(eff) if typ in PALETTE else eff.get("barvy", [])
         cols = [hex_rgb(c) for c in src] or [(255, 255, 255)]
@@ -168,6 +173,9 @@ class Engine:
         direction = -1 if eff.get("opacny_smer") else 1
         if offset is None:
             offset = fan_idx / max(1, fan_count) if wave else 0.0
+            if span is None:
+                span = (fan_count - 1) / max(1, fan_count) if wave else 0.0
+        span = max(0.0, span or 0.0, offset)
         if EFFECTS.get(typ, (0, 0, False, False))[3]:
             offset *= direction                   # vlna jde stejnym smerem i pri opacnem otaceni
         black = (0.0, 0.0, 0.0)
@@ -181,13 +189,32 @@ class Engine:
             ph = t * rate * direction + offset
             return [_hsv(i / n + ph) for i in range(n)]
         if typ == "duha_prelevani":
+            if eff.get("barvy_rezim") == "barvy":
+                # kazda barva trva stejne dlouho jako jedna ze sesti zakladnich barev plne duhy
+                return [_cyclic(cols, t * rate * 0.5 * 6 / len(cols) + offset)] * n
             c = _hsv(t * rate * 0.5 + offset)
             return [c] * n
         if typ == "dychani":
             period = 6.0 / speed * 2              # jeden nadech (s)
-            x = t / period + offset
-            cycle = int(x)
-            k = (1 - math.cos((x - cycle) * 2 * math.pi)) / 2
+            try:
+                pause = max(0.0, min(MAX_PAUSE, float(eff.get("pauza", 0))))
+            except (TypeError, ValueError):
+                pause = 0.0
+            # cyklus trva vzdy period + pauza (rychlost efektu se pauzou ani vlnou nemeni);
+            # nadech jde vlnou (ventilator s nejvetsim posunem prvni), pak sviti vsechny najednou
+            # "pauza" sekund a vlnou zhasnou - vlna se vejde do nadechu a vydechu
+            spread = span * period / 2            # za jak dlouho vlna projde vsemi ventilatory
+            breath = period - spread              # nadech + vydech jednoho ventilatoru
+            total = period + pause
+            x = (t - (span - offset) * period / 2) / total
+            cycle = math.floor(x)
+            s = (x - cycle) * total
+            hold = spread + pause                 # jak dlouho tento ventilator sviti naplno
+            if s >= breath / 2 + hold:
+                s -= hold
+            elif s >= breath / 2:
+                s = breath / 2
+            k = (1 - math.cos(s / breath * 2 * math.pi)) / 2
             return [_scale(cols[cycle % len(cols)], k)] * n
         if typ == "kometa":
             head = ((t * rate * direction + offset) % 1.0) * n

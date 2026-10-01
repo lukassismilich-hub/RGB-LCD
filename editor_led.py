@@ -205,8 +205,33 @@ class LedEditor:
                             command=lambda: eff.__setitem__("opacny_smer", dv.get())).grid(
                 row=row, column=1, sticky="w", padx=8)
             row += 1
-        if typ in fx.PALETTE:                               # paleta s volitelnym poctem barev (az 8)
-            row = self._palette_editor(f, eff, typ, row, rebuild=rebuild)
+        if typ == "dychani":                                # pauza naplno mezi nadechy
+            ttk.Label(f, text="Pauza naplno", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+            pf = ttk.Frame(f)
+            pf.grid(row=row, column=1, sticky="ew", padx=8)
+            pv = tk.DoubleVar(value=float(eff.get("pauza", 0)))
+            pl = ttk.Label(pf, style="Muted.TLabel", width=7)
+
+            def on_pause(_e=None):
+                eff["pauza"] = round(float(pv.get()), 1)
+                pl.config(text="bez pauzy" if eff["pauza"] <= 0 else f"{eff['pauza']:g} s".replace(".", ","))
+            V.scale(pf, variable=pv, from_=0, to=fx.MAX_PAUSE, resolution=0.5, length=150,
+                    command=on_pause).pack(side="left", fill="x", expand=True)
+            pl.pack(side="left", padx=(8, 0))
+            on_pause()
+            row += 1
+        if typ == "duha_prelevani":                         # plna duha, nebo vlastni barvy (az 8)
+            ttk.Label(f, text="Režim barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+            mv = tk.StringVar(value="barvy" if eff.get("barvy_rezim") == "barvy" else "duha")
+
+            def on_mode():
+                eff["barvy_rezim"] = mv.get()
+                rebuild()
+            V.segmented(f, mv, [("duha", "plná duha"), ("barvy", "vlastní barvy")], command=on_mode).grid(
+                row=row, column=1, sticky="w", padx=8, pady=4)
+            row += 1
+        if typ in fx.PALETTE and not (typ == "duha_prelevani" and eff.get("barvy_rezim") != "barvy"):
+            row = self._palette_editor(f, eff, typ, row, rebuild=rebuild)   # paleta s volitelnym poctem barev
         elif ncolors:
             labels = {"kometa": ["kometa", "pozadí"], "trpyt": ["záblesky", "pozadí"],
                       "prechod": ["barva 1", "barva 2"], "teplota": ["studená", "střední", "horká"],

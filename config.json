@@ -1389,5 +1389,14 @@
       "min": 40,
       "max": 90
     }
+  },
+  "ikona_programu": {
+    "zapnuto": true,
+    "kdy": "spusteni",
+    "jen_cela_obrazovka": false,
+    "doba_s": 3,
+    "nazev": false,
+    "vynechat": [],
+    "zare": true
   }
 }

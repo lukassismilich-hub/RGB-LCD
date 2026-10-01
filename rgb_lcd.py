@@ -19,6 +19,7 @@ from cooling import Cooling
 import hwinfo
 from led import LedWorker
 import mono
+import program_ikona
 import screens
 import systemdata
 from kraken import Kraken
@@ -88,16 +89,57 @@ def update_history(history, cfg, data):
     return {k: [v for _, v in dq] for k, dq in history.items()}
 
 
-def write_state(data, cooling_state, hist, alpha_state, led_state, code, problems):
+def write_state(data, cooling_state, hist, alpha_state, led_state, code, problems, program):
     try:
         tmp = STATE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"cas": time.time(), "kod": code, "data": data, "chlazeni": cooling_state,
                        "historie": hist, "alphacool": alpha_state, "led": led_state,
-                       "obrazovky_chyby": problems}, f, ensure_ascii=False)
+                       "obrazovky_chyby": problems, "program": program}, f, ensure_ascii=False)
         os.replace(tmp, STATE)
     except OSError:
         pass
+
+
+def render_program(watcher, cfg, bad):
+    """(obrazek, program): ikona prave spusteneho programu (program_ikona), nebo (None, None)
+    = bezne obrazovky. Dobu zobrazeni spusti hlavni smycka, az Kraken obrazek prijme."""
+    cur = watcher.active()
+    if cur is None:
+        return None, None
+    if cur["img"] is None:
+        try:
+            pc = program_ikona.settings(cfg.get("ikona_programu"))
+            cur["img"] = program_ikona.render(cur["icon"], cur["name"], cfg.get("gama_grafiky", 0.65),
+                                              cur.get("nazev", pc.get("nazev", True)),
+                                              cur.get("zare", pc.get("zare", True)))   # test ma vlastni
+        except Exception as e:
+            if "ikona" not in bad:
+                bad["ikona"] = f"ikona programu: {e}"
+                log.error("Ikonu programu %s nejde vykreslit (%s).", cur.get("exe"), e)
+            cur["until"] = 0
+            return None, None
+    return cur["img"], cur
+
+
+def start_program(cur):
+    """Kraken ikonu prijal - od ted bezi doba zobrazeni."""
+    if cur is not None and cur["until"] is None:
+        now = time.monotonic()
+        cur["until"] = now + cur["secs"]
+        log.info("Ikona programu na LCD: %s (%.1f s po zachyceni, na %g s).", cur["name"],
+                 now - cur["found"], cur["secs"])
+
+
+def wait(seconds, wake):
+    """pause(), ktera skonci driv, kdyz se spusti program s ikonou (at je na LCD hned)."""
+    end = time.monotonic() + seconds
+    while not STOP.is_set() and not wake.is_set():
+        left = end - time.monotonic()
+        if left <= 0:
+            return
+        pause(min(0.05, left))
+    wake.clear()
 
 
 def render_screen(cfg, data, hist, seen_max, rot, bad):
@@ -155,6 +197,8 @@ def main():
     bad_screens = {}                                   # obrazovky, ktere nejde vykreslit (klic -> chyba)
     last_bytes = None
     last_state = 0.0
+    slow_warned = 0.0
+    rejected_logged = (0, 0.0)           # (pocet odmitnutych obrazku, cas posledniho zapisu do logu)
     code = config.code_stamp()                         # verze kodu - okno nastaveni pozna starou verzi
     warned_hwinfo = False
     alpha = AlphacoolWorker()            # vlastni vlakno - chlazeni nezdrzuje
@@ -163,6 +207,9 @@ def main():
     leds.start()
     leds.update(cfg["led"])
     ukonceni.on_power(suspend=leds.blackout, resume=leds.resume)   # spanek: LED zhasnout
+    watcher = program_ikona.Watcher()    # ikona spusteneho programu na LCD, vlastni vlakno
+    watcher.update(cfg.get("ikona_programu"))
+    watcher.start()
 
     try:
         while not STOP.is_set():
@@ -187,6 +234,7 @@ def main():
                     last_bytes = None
                     if cfg["jas"] != old_jas:
                         kraken.set_brightness(cfg["jas"])
+                    watcher.update(cfg.get("ikona_programu"))
                     log.info("Nastaveni nacteno znovu.")
 
                 data = collect(kraken)
@@ -196,7 +244,7 @@ def main():
                 leds.update(cfg["led"], data)
                 if time.monotonic() - last_state >= STATE_EVERY_S:
                     write_state(data, cooling.state, hist, alpha.state, leds.state, code,
-                                sorted(bad_screens.values()))
+                                sorted(bad_screens.values()), watcher.state)
                     last_state = time.monotonic()
                 if not any(not k.startswith("@") for k in data) and not warned_hwinfo:
                     log.warning("Z HWiNFO nejsou data - bezi HWiNFO se zapnutym Gadget reportingem?")
@@ -204,12 +252,20 @@ def main():
                 for name, item in data.items():
                     seen_max[name] = max(seen_max.get(name, item["value"]), item["value"])
 
-                img = render_screen(cfg, data, hist, seen_max, rot, bad_screens)
+                img, prog = render_program(watcher, cfg, bad_screens)
+                if img is None:
+                    img = render_screen(cfg, data, hist, seen_max, rot, bad_screens)
                 if img is not None:
                     b = img.tobytes()
-                    if b != last_bytes:          # posilame jen zmeny
-                        kraken.show(img)
+                    if b == last_bytes:          # posilame jen zmeny
+                        start_program(prog)
+                    elif kraken.show(img):       # False = Kraken obrazek odmitl, dalsi kolo znovu
                         last_bytes = b
+                        start_program(prog)
+                if kraken.rejected != rejected_logged[0] and time.monotonic() - rejected_logged[1] > 60:
+                    log.info("LCD: Kraken odmitl %d obrazku (zaneprazdneny, napr. pri startu hry) - "
+                             "posilaji se znovu.", kraken.rejected - rejected_logged[0])
+                    rejected_logged = (kraken.rejected, time.monotonic())
 
             except KeyboardInterrupt:
                 raise
@@ -224,8 +280,11 @@ def main():
                 continue
 
             elapsed = time.monotonic() - loop_start
+            if elapsed > 2.0 and time.monotonic() - slow_warned > 60:
+                log.warning("Smycka trvala %.1f s (PC vytizene nebo pomale cteni dat).", elapsed)
+                slow_warned = time.monotonic()
             period = max(config.MIN_REFRESH_S, float(cfg["obnova_s"]))
-            pause(max(0.05, period - elapsed))
+            wait(max(0.05, period - elapsed), watcher.wake)
     except KeyboardInterrupt:
         log.info("Ukoncuji (Ctrl+C).")
     finally:
@@ -234,6 +293,7 @@ def main():
             kraken.close()
             # az po predani chlazeni - to ma prednost; pri vypnuti PC LED zhasnout
             leds.stop(0.5, off=ukonceni.SHUTDOWN.is_set())
+            watcher.stop()
             alpha.stop(1.5)
         finally:
             ukonceni.DONE.set()

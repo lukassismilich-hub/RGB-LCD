@@ -4,6 +4,8 @@
 #   2) hledani rozhrani s VID/PID (bez nich winusbcdc 1.7 nevrati nic)
 
 import io
+import time
+
 from winusbcdc.winusbpy import WinUsbPy
 from winusbcdc.winusbclasses import GUID
 
@@ -15,6 +17,13 @@ WinUsbPy.usb_winusb_guid = GUID(
 )
 
 from liquidctl import find_liquidctl_devices  # noqa: E402  (az po oprave GUID)
+from liquidctl.error import Timeout  # noqa: E402
+
+# Odpovedi Krakenu na prenos obrazku (fw 2): 37 01 = zacatek prijat, 37 02 = obrazek prijat.
+# Pri startu nekterych her (Diablo IV) odpovida casto ff 01 - prenos odmitne a obrazek zahodi.
+# Ve fronte byvaji i zbloudile zpravy 75 xx (odpovedi na cteni stavu); liquidctl cte proste
+# dalsi zpravu, takze odmitnuti nepozna.
+SEND_TRIES = 3
 
 
 class Kraken:
@@ -23,6 +32,7 @@ class Kraken:
         self.double_send = double_send
         self.dev = None
         self._first = True
+        self.rejected = 0                # pocet odmitnutych prenosu obrazku (pro log)
 
     def open(self):
         paths = WinUsbPy.list_usb_devices(
@@ -87,6 +97,8 @@ class Kraken:
                 self.dev.set_speed_profile(channel, sorted(points))
 
     def show(self, img):
+        """Poslat obrazek na LCD. True = Kraken ho prijal; False = odmitl i po SEND_TRIES pokusech
+        (hlavni smycka ho posle znovu v dalsim kole)."""
         buf = io.BytesIO()
         img.save(buf, "PNG")
         buf.seek(0)
@@ -94,11 +106,46 @@ class Kraken:
             # prvni obrazek po inicializaci musi jit dvakrat - to dela set_screen
             self.dev.set_screen("lcd", "static", buf)
             self._first = False
-        else:
-            data = self.dev._prepare_static_file_rgb16(buf, self.dev.orientation)
-            self.dev._send_2023_data_fw2(
-                data, [0x06, 0x00, 0x00, 0x00] + list(len(data).to_bytes(4, "little"))
-            )
+            return True
+        data = self.dev._prepare_static_file_rgb16(buf, self.dev.orientation)
+        for _ in range(SEND_TRIES):
+            if self._send_fw2(data):
+                return True
+            self.rejected += 1
+            time.sleep(0.03)
+        return False
+
+    def _reply(self, want, timeout_s):
+        """Pockat na potvrzeni Krakenu (want = 2. bajt: 0x01 zacatek, 0x02 konec prenosu).
+        False = odmitnuti (ff xx) nebo nic do timeout_s; zbloudile zpravy (75 xx) preskoci."""
+        end = time.monotonic() + timeout_s
+        while True:
+            left = int((end - time.monotonic()) * 1000)
+            if left <= 0:
+                return False
+            try:
+                msg = self.dev.device.read(64, timeout=left)
+            except Timeout:
+                return False
+            if msg[0] == 0x37 and msg[1] == want:
+                return True
+            if msg[0] == 0xFF:
+                return False
+
+    def _send_fw2(self, data):
+        """Jako liquidctl _send_2023_data_fw2, ale s kontrolou odpovedi (viz vyse)."""
+        dev = self.dev
+        dev.device.clear_enqueued_reports()          # zbloudile odpovedi z fronty pryc
+        dev._write([0x36, 0x01, 0x00, 0x01, 0x06])  # zacatek prenosu
+        if not self._reply(0x01, 0.25):
+            return False                             # odmitnuto - data neposilat
+        header = [0x12, 0xFA, 0x01, 0xE8, 0xAB, 0xCD, 0xEF, 0x98, 0x76, 0x54, 0x32, 0x10,
+                  0x06, 0x00, 0x00, 0x00] + list(len(data).to_bytes(4, "little"))
+        dev._bulk_write(header)
+        for i in range(0, len(data), dev.bulk_buffer_size):
+            dev._bulk_write(list(data[i:i + dev.bulk_buffer_size]))
+        dev._write([0x36, 0x02])                     # konec prenosu
+        return self._reply(0x02, 0.5)
 
     def close(self, back_to_liquid=True):
         if self.dev is None:

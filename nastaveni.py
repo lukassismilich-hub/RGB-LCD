@@ -8,13 +8,14 @@ import json
 import os
 import time
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import colorchooser, filedialog, messagebox, ttk
 
 from PIL import ImageTk
 
 import config
 import hwinfo
 import kraken_prvky
+import program_ikona
 import screens
 import vzhled as V
 
@@ -171,7 +172,7 @@ FIELDS.update({
 
 
 # z posledniho stav.json: verze kodu bezici aplikace a obrazovky, ktere nejde vykreslit
-STATE_EXTRA = {"kod": None, "chyby": []}
+STATE_EXTRA = {"kod": None, "chyby": [], "program": {}}
 
 
 def load_data():
@@ -180,12 +181,13 @@ def load_data():
         with open(STATE, encoding="utf-8") as f:
             st = json.load(f)
         if time.time() - st.get("cas", 0) < 10:
-            STATE_EXTRA.update(kod=st.get("kod"), chyby=st.get("obrazovky_chyby", []))
+            STATE_EXTRA.update(kod=st.get("kod"), chyby=st.get("obrazovky_chyby", []),
+                               program=st.get("program") or {})
             return (st["data"], True, st.get("chlazeni", {}), st.get("historie", {}),
                     st.get("alphacool", {}), st.get("led", {}))
     except (OSError, ValueError, KeyError):
         pass
-    STATE_EXTRA.update(kod=None, chyby=[])
+    STATE_EXTRA.update(kod=None, chyby=[], program={})
     import systemdata
     data = hwinfo.read_full()
     data.update(systemdata.read())
@@ -943,8 +945,9 @@ class App(tk.Tk):
 
     # ------------------------------------------------ obecne + nahled
     def _build_right(self, page):
-        f = tk.Frame(page, bg=V.BG)
-        f.grid(row=0, column=2, sticky="ns")
+        sc = V.ScrollFrame(page)                          # nahled, obecne a ikona programu - roluje
+        sc.grid(row=0, column=2, sticky="ns")
+        f = sc.inner
         pv = V.card(f)
         pv.pack(fill="x")
         V.card_title(pv, "Náhled").pack(anchor="w", padx=16, pady=(14, 8))
@@ -997,9 +1000,104 @@ class App(tk.Tk):
             self.cfg["auto_obrazovky"] = av.get()
         ttk.Checkbutton(g, text="Přidávat nové senzory z HWiNFO", variable=av,
                         command=on_auto).grid(row=7, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 14))
+        self._build_program_card(f)
+        f.update_idletasks()
+        sc.canvas.config(width=f.winfo_reqwidth())
+
+    def _build_program_card(self, f):
+        """Ikona prave spusteneho programu / hry na LCD (program_ikona.py)."""
+        pc = self.cfg.setdefault("ikona_programu", json.loads(json.dumps(program_ikona.DEFAULTS)))
+        for key, v in program_ikona.DEFAULTS.items():
+            pc.setdefault(key, json.loads(json.dumps(v)))
+        k = V.card(f)
+        k.pack(fill="x", pady=(16, 0))
+        k.columnconfigure(0, weight=1)
+        V.card_title(k, "Ikona spuštěného programu").grid(row=0, column=0, columnspan=2, sticky="w",
+                                                         padx=16, pady=(14, 6))
+
+        def flag(key, text, row):
+            v = tk.BooleanVar(value=bool(pc.get(key)))
+            ttk.Checkbutton(k, text=text, variable=v, command=lambda: pc.__setitem__(key, v.get())).grid(
+                row=row, column=0, columnspan=2, sticky="w", padx=16, pady=3)
+        flag("zapnuto", "Ukázat ikonu programu nebo hry", 1)
+        wv = tk.StringVar(value=pc.get("kdy", "spusteni"))
+        V.segmented(k, wv, [("spusteni", "při spuštění"), ("prepnuti", "při přepnutí okna")],
+                    command=lambda: pc.__setitem__("kdy", wv.get())).grid(
+            row=2, column=0, columnspan=2, sticky="w", padx=16, pady=(4, 4))
+        flag("jen_cela_obrazovka", "Jen přes celou obrazovku (hry)", 3)
+        flag("nazev", "Název programu pod ikonou", 4)
+        flag("zare", "Záře v barvě ikony", 5)
+        ttk.Label(k, text="Doba zobrazení (s)", style="Muted.TLabel").grid(row=6, column=0, sticky="w", padx=16, pady=4)
+        dv = tk.StringVar(value=str(pc.get("doba_s", 8)))
+        ttk.Spinbox(k, textvariable=dv, from_=1, to=120, increment=1, width=6, font=V.MONO).grid(
+            row=6, column=1, sticky="e", padx=16, pady=4)
+
+        def on_dur(*_):
+            try:
+                x = max(1.0, min(120.0, float(dv.get().replace(",", "."))))
+                pc["doba_s"] = int(x) if x.is_integer() else x
+            except ValueError:
+                pass
+        dv.trace_add("write", on_dur)
+        ttk.Label(k, text="Nezobrazovat (názvy .exe, oddělit čárkou)", style="Muted.TLabel").grid(
+            row=7, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 2))
+        sv = tk.StringVar(value=", ".join(pc.get("vynechat", [])))
+        ttk.Entry(k, textvariable=sv).grid(row=8, column=0, columnspan=2, sticky="ew", padx=16)
+        sv.trace_add("write", lambda *_: pc.__setitem__(
+            "vynechat", [x.strip() for x in sv.get().split(",") if x.strip()]))
+        self._prog_lbl = ttk.Label(k, style="Small.TLabel", wraplength=250, justify="left")
+        self._prog_lbl.grid(row=9, column=0, columnspan=2, sticky="w", padx=16, pady=(8, 2))
+        bf = ttk.Frame(k)
+        bf.grid(row=10, column=0, columnspan=2, sticky="w", padx=16, pady=(2, 14))
+
+        def skip_last():
+            exe = STATE_EXTRA["program"].get("exe")
+            if exe and exe.lower() not in {x.lower() for x in pc.get("vynechat", [])}:
+                sv.set(", ".join(pc.get("vynechat", []) + [exe]))
+        self._prog_skip = ttk.Button(bf, text="Nezobrazovat tento", command=skip_last)
+        self._prog_skip.pack(side="left", padx=(0, 6))
+        ttk.Button(bf, text="Vyzkoušet…", command=self._try_program).pack(side="left")
+        self._program_preview_until = 0.0
+        self._update_program_card()
+
+    def _update_program_card(self):
+        p = STATE_EXTRA["program"]
+        if not p:
+            self._prog_lbl.config(text="Zatím se žádný program nezobrazil." if self.running
+                                  else "Aplikace neběží.")
+            self._prog_skip.state(["disabled"])
+            return
+        ago = max(0, time.time() - p.get("cas", time.time()))
+        when = f"před {int(ago)} s" if ago < 60 else f"před {int(ago // 60)} min" if ago < 3600 else             time.strftime("%H:%M", time.localtime(p.get("cas", 0)))
+        self._prog_lbl.config(text=f"Naposledy: {p.get('nazev', '')} ({p.get('exe', '')}), {when}")
+        self._prog_skip.state(["!disabled"])
+
+    def _try_program(self):
+        """Nahled ikony vybraneho .exe v nahledu i na LCD (na dobu zobrazeni)."""
+        path = filedialog.askopenfilename(parent=self, title="Vyber program", filetypes=[("Programy", "*.exe")])
+        if not path:
+            return
+        pc = self.cfg.get("ikona_programu", {})
+        try:
+            img = program_ikona.render_exe(os.path.normpath(path), pc, self.cfg["gama_grafiky"])
+        except Exception as e:
+            messagebox.showerror("Ikona programu", f"Ikonu nejde načíst: {e}", parent=self)
+            return
+        if img is None:
+            messagebox.showinfo("Ikona programu", "Program nemá vlastní ikonu – na LCD se nezobrazí.", parent=self)
+            return
+        self._program_preview_until = time.monotonic() + float(pc.get("doba_s", 8))
+        if self.running:                                  # i na LCD (aplikace ho do 0,25 s ukaze)
+            try:
+                program_ikona.request_test(os.path.normpath(path), pc)
+            except OSError:
+                pass
+        self._preview_img = ImageTk.PhotoImage(img)
+        self.preview.config(image=self._preview_img)
+        self.src_lbl.config(text=f"Ukázka ikony: {program_ikona.exe_name(os.path.normpath(path))}")
 
     def _update_preview(self):
-        if not self.cfg["obrazovky"]:
+        if not self.cfg["obrazovky"] or time.monotonic() < getattr(self, "_program_preview_until", 0):
             return
         try:
             scr = self.cfg["obrazovky"][self.sel]
@@ -1080,6 +1178,7 @@ class App(tk.Tk):
         self._update_alpha()
         self.leds.refresh()
         self._update_sidebar()
+        self._update_program_card()
         self._update_dirty()
         if self._keditor is not None:
             try:

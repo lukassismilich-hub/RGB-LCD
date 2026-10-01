@@ -7,6 +7,7 @@ import os
 import shutil
 
 import led
+import program_ikona
 import prvky
 
 log = logging.getLogger("rgb_lcd")
@@ -82,6 +83,8 @@ DEFAULTS = {
     },
     # LED: ventilatory F140 (NZXT RGB Controller) a zony zakladni desky (Gigabyte RGB Fusion)
     "led": led.default_config(),
+    # ikona prave spusteneho programu / hry na LCD Krakenu (program_ikona.py)
+    "ikona_programu": program_ikona.DEFAULTS,
 }
 
 
@@ -142,6 +145,8 @@ def load():
         a["prvky"] = prvky.default_layout(a.pop("radky"), a.pop("graf", {}))
     for k, v in DEFAULTS["alphacool"].items():         # doplneni novych klicu Alphacoolu
         a.setdefault(k, json.loads(json.dumps(v)))
+    for k, v in DEFAULTS["ikona_programu"].items():     # doplneni novych klicu ikony programu
+        cfg["ikona_programu"].setdefault(k, json.loads(json.dumps(v)))
     lc = cfg["led"]
     for k, v in DEFAULTS["led"].items():               # doplneni novych klicu LED
         lc.setdefault(k, json.loads(json.dumps(v)))

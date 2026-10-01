@@ -1322,11 +1322,11 @@
       "typ": "dychani",
       "barvy": [
         "#ff0000",
-        "#8000ff",
-        "#0000ff",
+        "#ffbf00",
+        "#00e600",
+        "#11ff4d",
         "#00ffff",
-        "#00ff00",
-        "#ffff00",
+        "#0040ff",
         "#8000ff",
         "#ff00bf"
       ],
@@ -1335,8 +1335,10 @@
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
       "max": 90,
-      "pocet_barev": 6,
-      "otoceni": 90
+      "pocet_barev": 8,
+      "otoceni": 90,
+      "pauza": 3.0,
+      "barvy_rezim": "barvy"
     },
     "efekt_f140": {
       "typ": "stridani",

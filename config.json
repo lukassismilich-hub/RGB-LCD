@@ -72,8 +72,8 @@
       "velikost_textu": 1.4,
       "hodiny_od": "#00ff00",
       "hodiny_do": "#ff0080",
-      "minuty_od": "#ffff00",
-      "minuty_do": "#0000ff"
+      "minuty_od": "#80ff00",
+      "minuty_do": "#ff0080"
     },
     {
       "typ": "graf_plny",

@@ -130,7 +130,7 @@
       "nadpis2": "GPU",
       "senzor2": "Takt GPU",
       "min2": 0,
-      "max2": 2.8,
+      "max2": 2.9,
       "jednotka": "",
       "delitel": 1000,
       "desetinna_mista": 1,
@@ -180,11 +180,11 @@
         ],
         [
           75,
-          10
+          15
         ],
         [
           80,
-          35
+          20
         ],
         [
           85,
@@ -192,7 +192,7 @@
         ],
         [
           90,
-          80
+          75
         ],
         [
           95,
@@ -259,12 +259,12 @@
         "x": 0,
         "y": 0,
         "w": 153,
-        "h": 53,
-        "senzor": "Takt jader",
-        "min": 2000,
-        "max": 5800,
+        "h": 52,
+        "senzor": "Celkové vytížení CPU",
+        "min": 0,
+        "max": 100,
         "delitel": 1,
-        "delka_s": 120,
+        "delka_s": 60,
         "sablona": "{Takt jader|1000|1}Ghz CPU {CPU (Tctl/Tdie)}°C {Celková spotřeba CPU}W ",
         "roh": "",
         "typ": "esper"
@@ -274,11 +274,11 @@
         "y": 53,
         "w": 153,
         "h": 53,
-        "senzor": "Takt GPU (naměřený)",
+        "senzor": "Zatížení jádra GPU",
         "min": 0,
-        "max": 3000,
+        "max": 100,
         "delitel": 1,
-        "delka_s": 120,
+        "delka_s": 60,
         "sablona": "{Takt GPU (naměřený)|1000|1}Ghz GPU {Teplota GPU}°C {GPU Spotřeba energie}W",
         "roh": "",
         "typ": "esper"
@@ -533,616 +533,103 @@
       },
       {
         "x": 2,
-        "y": 1,
-        "w": 79,
-        "h": 13,
-        "format": "HH:MM:SS",
+        "y": 0,
+        "w": 156,
+        "h": 12,
+        "sablona": "NOSTROMO · STAV SYSTÉMU",
         "zarovnani": "vlevo",
         "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
           "tucne": true
         },
         "barva": 0,
-        "typ": "hodiny"
+        "typ": "radek"
       },
       {
-        "x": 119,
-        "y": 1,
-        "w": 121,
+        "x": 160,
+        "y": 0,
+        "w": 78,
         "h": 12,
-        "format": "den datum",
+        "format": "HH:MM:SS",
         "zarovnani": "vpravo",
         "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
           "tucne": true
         },
         "barva": 0,
         "typ": "hodiny"
       },
       {
-        "x": 76,
-        "y": 16,
-        "w": 101,
-        "h": 15,
-        "soubor": "ryzen7.png",
-        "velikost": "puvodni",
-        "prah": 128,
-        "rastr": false,
-        "negativ": false,
-        "pozadi": false,
-        "barva": 1,
-        "typ": "obrazek",
-        "skryty": true
-      },
-      {
-        "x": 1,
-        "y": 14,
-        "w": 73,
-        "h": 16,
-        "soubor": "amd_logo.png",
-        "velikost": "puvodni",
-        "prah": 128,
-        "rastr": false,
-        "negativ": false,
-        "pozadi": false,
-        "barva": 1,
-        "typ": "obrazek",
-        "skryty": true
-      },
-      {
-        "x": 83,
-        "y": 32,
-        "w": 66,
-        "h": 14,
-        "popisek": "C:",
-        "senzor": "@disk C: volno",
-        "jednotka": "Gb",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vlevo",
+        "x": 2,
+        "y": 15,
+        "w": 114,
+        "h": 66,
+        "radky": "CPU = {CPU (Tctl/Tdie)}°C\nZÁTĚŽ = {Celkové vytížení CPU}%\nPŘÍKON = {Celková spotřeba CPU}W\nTAKT = {Takt jader|1000|1}GHz\nJÁDRA = {Průměrný počet aktivních jader|1|1}",
+        "radek_px": 13,
+        "kurzor": false,
         "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
           "tucne": true
         },
-        "barva": 1,
-        "typ": "text"
+        "typ": "term"
       },
       {
-        "x": 147,
-        "y": 32,
-        "w": 26,
-        "h": 11,
-        "popisek": "",
-        "senzor": "Teplota disku (C:)",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "stred",
+        "x": 124,
+        "y": 15,
+        "w": 114,
+        "h": 66,
+        "radky": "GPU = {Teplota GPU}°C\nZÁTĚŽ = {Zatížení jádra GPU}%\nPŘÍKON = {GPU Spotřeba energie}W\nTAKT = {Takt GPU (naměřený)|1000|1}GHz\nVRAM = {Přidělená paměť GPU|1000|1}GB",
+        "radek_px": 13,
+        "kurzor": false,
         "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 147,
-        "y": 41,
-        "w": 26,
-        "h": 11,
-        "popisek": "",
-        "senzor": "Teplota disku (D:)",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 83,
-        "y": 41,
-        "w": 66,
-        "h": 14,
-        "popisek": "D:",
-        "senzor": "@disk D: volno",
-        "jednotka": "Gb",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
           "tucne": true
         },
-        "barva": 1,
-        "typ": "text"
+        "typ": "term"
       },
       {
-        "x": 79,
-        "y": 56,
-        "w": 67,
-        "h": 14,
-        "popisek": "Up:",
-        "senzor": "@síť odesílání",
-        "jednotka": "MB/s",
-        "delitel": 1,
-        "desetinna_mista": 1,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Pixel Operator Mono 8",
-          "velikost": 8,
-          "tucne": false
-        },
+        "x": 2,
+        "y": 82,
+        "w": 236,
+        "h": 1,
+        "smer": "vodorovna",
+        "tloustka": 1,
         "barva": 1,
-        "typ": "text"
+        "typ": "cara"
       },
       {
-        "x": 80,
-        "y": 77,
-        "w": 80,
-        "h": 9,
-        "popisek": "Wifi:",
-        "senzor": "@síť rychlost připojení",
-        "jednotka": " MB/s",
-        "delitel": 1,
-        "desetinna_mista": 1,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Spleen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 194,
-        "y": 53,
-        "w": 29,
-        "h": 14,
-        "popisek": "",
-        "senzor": "GPU Spotřeba energie",
-        "jednotka": "W",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 194,
-        "y": 27,
-        "w": 29,
-        "h": 13,
-        "popisek": "",
-        "senzor": "Teplota GPU",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 17,
-        "y": 27,
-        "w": 29,
-        "h": 14,
-        "popisek": "",
-        "senzor": "CPU (Tctl/Tdie)",
-        "jednotka": "°C",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 17,
-        "y": 53,
-        "w": 29,
-        "h": 14,
-        "popisek": "",
-        "senzor": "Celková spotřeba CPU",
-        "jednotka": "W",
-        "delitel": 1,
-        "desetinna_mista": 0,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 80,
+        "x": 2,
         "y": 86,
-        "w": 80,
-        "h": 9,
-        "popisek": "Wifi:",
-        "senzor": "@wifi signál",
-        "jednotka": " dB",
-        "delitel": 1,
-        "desetinna_mista": 1,
-        "zarovnani": "vlevo",
+        "w": 114,
+        "h": 40,
+        "radky": "RAM = {Použitá fyzická paměť|1024|1}GB\nC: = {@disk C: volno}G {Teplota disku (C:)}°\nD: = {@disk D: volno}G {Teplota disku (D:)}°",
+        "radek_px": 13,
+        "kurzor": false,
         "pismo": {
-          "rodina": "Spleen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 79,
-        "y": 65,
-        "w": 67,
-        "h": 14,
-        "popisek": "Dw:",
-        "senzor": "@síť stahování",
-        "jednotka": "MB/s",
-        "delitel": 1,
-        "desetinna_mista": 1,
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Pixel Operator Mono 8",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 26,
-        "y": 20,
-        "w": 11,
-        "h": 11,
-        "nazev": "cpu",
-        "meritko": 1,
-        "barva": 1,
-        "typ": "ikona"
-      },
-      {
-        "x": 202,
-        "y": 20,
-        "w": 11,
-        "h": 11,
-        "nazev": "gpu",
-        "meritko": 1,
-        "barva": 1,
-        "typ": "ikona"
-      },
-      {
-        "x": 0,
-        "y": 12,
-        "w": 64,
-        "h": 64,
-        "jednotka": "%",
-        "desetinna_mista": 0,
-        "popisek": "CPU",
-        "hodnota": true,
-        "segmenty": 20,
-        "uhel": 270,
-        "tloustka": 6,
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
           "tucne": true
         },
-        "pismo_male": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
+        "typ": "term"
+      },
+      {
+        "x": 124,
+        "y": 86,
+        "w": 114,
+        "h": 40,
+        "radky": "↓ SÍŤ = {@síť stahování|1|1}MB/s\n↑ SÍŤ = {@síť odesílání|1|1}MB/s\nWIFI = {@wifi signál}dB",
+        "radek_px": 13,
+        "kurzor": false,
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
           "tucne": true
         },
-        "senzor": "Celkové vytížení CPU",
-        "min": 0,
-        "max": 100,
-        "delitel": 1,
-        "typ": "prstenec",
-        "skryty": false
-      },
-      {
-        "x": 176,
-        "y": 12,
-        "w": 64,
-        "h": 64,
-        "jednotka": "%",
-        "desetinna_mista": 0,
-        "popisek": "GPU",
-        "hodnota": true,
-        "segmenty": 20,
-        "uhel": 270,
-        "tloustka": 6,
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
-          "tucne": true
-        },
-        "pismo_male": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
-          "tucne": true
-        },
-        "senzor": "Zatížení jádra GPU",
-        "min": 0,
-        "max": 100,
-        "delitel": 1,
-        "typ": "prstenec"
-      },
-      {
-        "x": 66,
-        "y": 61,
-        "w": 11,
-        "h": 11,
-        "nazev": "sit",
-        "meritko": 1,
-        "barva": 1,
-        "typ": "ikona"
-      },
-      {
-        "x": 70,
-        "y": 38,
-        "w": 11,
-        "h": 11,
-        "nazev": "disk",
-        "meritko": 1,
-        "barva": 1,
-        "typ": "ikona"
-      },
-      {
-        "x": 70,
-        "y": 23,
-        "w": 11,
-        "h": 11,
-        "nazev": "ram",
-        "meritko": 1,
-        "barva": 1,
-        "typ": "ikona"
-      },
-      {
-        "x": 70,
-        "y": 17,
-        "w": 100,
-        "h": 5,
-        "styl": "segmenty",
-        "senzor2": "",
-        "senzor": "Použitá fyzická paměť",
-        "min": 0,
-        "max": 32768,
-        "delitel": 1,
-        "typ": "bar"
-      },
-      {
-        "x": 89,
-        "y": 21,
-        "w": 69,
-        "h": 15,
-        "popisek": "RAM",
-        "senzor": "Použitá fyzická paměť",
-        "jednotka": "Gb",
-        "delitel": 1024,
-        "desetinna_mista": 1,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 14,
-        "y": 78,
-        "w": 35,
-        "h": 13,
-        "popisek": "",
-        "senzor": "Průměrný počet aktivních jader",
-        "jednotka": "auto",
-        "delitel": 1,
-        "desetinna_mista": 1,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 19,
-        "y": 68,
-        "w": 35,
-        "h": 13,
-        "popisek": "",
-        "senzor": "Takt jader",
-        "jednotka": " GHz",
-        "delitel": 1000,
-        "desetinna_mista": 2,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 193,
-        "y": 68,
-        "w": 35,
-        "h": 13,
-        "popisek": "",
-        "senzor": "Takt GPU (naměřený)",
-        "jednotka": " GHz",
-        "delitel": 1000,
-        "desetinna_mista": 2,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 191,
-        "y": 77,
-        "w": 35,
-        "h": 13,
-        "popisek": "",
-        "senzor": "Přidělená paměť GPU",
-        "jednotka": "Gb",
-        "delitel": 1000,
-        "desetinna_mista": 2,
-        "zarovnani": "stred",
-        "pismo": {
-          "rodina": "Pixel Operator 8",
-          "velikost": 8,
-          "tucne": false
-        },
-        "barva": 1,
-        "typ": "text"
-      },
-      {
-        "x": 65,
-        "y": 12,
-        "w": 111,
-        "h": 45,
-        "vypln": "zadna",
-        "dvojity": true,
-        "barva": 1,
-        "typ": "obdelnik"
-      },
-      {
-        "x": 4,
-        "y": 95,
-        "w": 40,
-        "h": 31,
-        "jednotka": " RPM",
-        "desetinna_mista": 0,
-        "popisek": "",
-        "hodnota": true,
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "senzor": "Systém 1",
-        "min": 0,
-        "max": 2000,
-        "delitel": 1,
-        "typ": "budik"
-      },
-      {
-        "x": 52,
-        "y": 95,
-        "w": 40,
-        "h": 31,
-        "jednotka": " RPM",
-        "desetinna_mista": 0,
-        "popisek": "",
-        "hodnota": true,
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "senzor": "Systém 2",
-        "min": 0,
-        "max": 2000,
-        "delitel": 1,
-        "typ": "budik"
-      },
-      {
-        "x": 100,
-        "y": 95,
-        "w": 40,
-        "h": 31,
-        "jednotka": " RPM",
-        "desetinna_mista": 0,
-        "popisek": "",
-        "hodnota": true,
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "senzor": "Systém 3",
-        "min": 0,
-        "max": 2000,
-        "delitel": 1,
-        "typ": "budik"
-      },
-      {
-        "x": 148,
-        "y": 95,
-        "w": 40,
-        "h": 31,
-        "jednotka": " RPM",
-        "desetinna_mista": 0,
-        "popisek": "",
-        "hodnota": true,
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "senzor": "@ventilatory",
-        "min": 0,
-        "max": 1800,
-        "delitel": 1,
-        "typ": "budik"
-      },
-      {
-        "x": 196,
-        "y": 95,
-        "w": 40,
-        "h": 31,
-        "jednotka": " RPM",
-        "desetinna_mista": 0,
-        "popisek": "",
-        "hodnota": true,
-        "pismo": {
-          "rodina": "Silkscreen",
-          "velikost": 8,
-          "tucne": false
-        },
-        "senzor": "@pumpa",
-        "min": 0,
-        "max": 3200,
-        "delitel": 1,
-        "typ": "budik"
+        "typ": "term"
       }
     ]
   },
@@ -1392,9 +879,9 @@
   },
   "ikona_programu": {
     "zapnuto": true,
-    "kdy": "spusteni",
+    "kdy": "prepnuti",
     "jen_cela_obrazovka": false,
-    "doba_s": 3,
+    "doba_s": 2,
     "nazev": false,
     "vynechat": [],
     "zare": true

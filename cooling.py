@@ -23,7 +23,8 @@ STALE_LIMIT_S = 20     # teplota CPU beze zmeny -> HWiNFO nejspis zamrzlo
 RESEND_S = 30          # i beze zmeny obcas zopakovat (napr. po probuzeni)
 MIN_STEP = 2           # zmena vykonu v %, od ktere se posila
 SUMMARY_S = 60         # souhrn zateze do logu po minutach
-BUSY_FAN, BUSY_PUMP = 30, 40   # nad timto vykonem (%) se minuta bere jako zatez a zapise se
+BUSY_ON, BUSY_OFF = 40, 30     # zatez = ventilatory od 40 %; konec, az jsou pod 30 % ...
+BUSY_OFF_S = 30                # ... aspon 30 s (jinak by se pri teplote kolem hranice log zahltil)
 
 
 def interpolate(points, x):
@@ -57,12 +58,19 @@ class Cooling:
         self.liquid_loaded = False
         self.state = {}
         self.minute = None       # souhrn aktualni minuty (maxima, cas na vysokem vykonu)
-        self.busy_since = None   # zacatek zateze (kdy vykon presahl BUSY_*)
+        self.busy_since = None   # zacatek zateze (ventilatory od BUSY_ON)
+        self.calm_since = None   # od kdy jsou ventilatory zase pod BUSY_OFF
 
     def _summary(self, now, raw, temp):
-        """Kazdou minutu zapsat nejvyssi vykon a teplotu, pokud se ventilatory nebo pumpa
-        rozjely. Pri zmene jen o par % se jinak do logu nic nedostane."""
+        """Pri zatezi (ventilatory od BUSY_ON %) zapsat zacatek, kazdou minutu nejvyssi vykon
+        a teplotu a konec zateze. Pri zmene jen o par % se jinak do logu nic nedostane."""
         fan, pump = self.sent.get("fan", 0), self.sent.get("pump", 0)
+        if self.busy_since is None:
+            if fan < BUSY_ON:
+                return
+            self.busy_since, self.calm_since, self.minute = now, None, None
+            log.info("Chlazeni: zatez zacala - ventilatory %d %%, pumpa %d %% (CPU %.1f °C, okamzite %.1f °C)",
+                     fan, pump, temp, raw)
         m = self.minute
         if m is None:
             m = self.minute = {"od": now, "posledni": now, "fan": 0, "pump": 0, "raw": raw, "temp": temp,
@@ -76,22 +84,21 @@ class Cooling:
         m["pump"] = max(m["pump"], pump)
         m["raw"] = max(m["raw"], raw)
         m["temp"] = max(m["temp"], temp)
-        busy = fan > BUSY_FAN or pump > BUSY_PUMP
-        if busy and self.busy_since is None:
-            self.busy_since = now
-            log.info("Chlazeni: zatez zacala - ventilatory %d %%, pumpa %d %% (CPU %.1f °C, okamzite %.1f °C)",
-                     fan, pump, temp, raw)
-        if now - m["od"] < SUMMARY_S and (busy or self.busy_since is None):
+        if fan >= BUSY_OFF:
+            self.calm_since = None
+        elif self.calm_since is None:
+            self.calm_since = now
+        over = self.calm_since is not None and now - self.calm_since >= BUSY_OFF_S
+        if now - m["od"] < SUMMARY_S and not over:
             return
-        if m["fan"] > BUSY_FAN or m["pump"] > BUSY_PUMP:
-            log.info("Chlazeni (minuta): ventilatory max %d %% v %s%s, pumpa max %d %%, CPU vyhlazena max %.1f °C, "
-                     "okamzite max %.1f °C", m["fan"], m["max_v"],
-                     f" ({m['fan90']:.0f} s nad 90 %)" if m["fan90"] else "", m["pump"], m["temp"], m["raw"])
-        if not busy and self.busy_since is not None:
-            log.info("Chlazeni: zatez skoncila po %.0f s - ventilatory %d %%, pumpa %d %% (CPU %.1f °C)",
-                     now - self.busy_since, fan, pump, temp)
-            self.busy_since = None
+        log.info("Chlazeni (minuta): ventilatory max %d %% v %s%s, pumpa max %d %%, CPU vyhlazena max %.1f °C, "
+                 "okamzite max %.1f °C", m["fan"], m["max_v"],
+                 f" ({m['fan90']:.0f} s nad 90 %)" if m["fan90"] else "", m["pump"], m["temp"], m["raw"])
         self.minute = None
+        if over:
+            log.info("Chlazeni: zatez skoncila po %.0f s - ventilatory %d %%, pumpa %d %% (CPU %.1f °C)",
+                     self.calm_since - self.busy_since, fan, pump, temp)
+            self.busy_since = self.calm_since = None
 
     def apply_liquid(self, kraken, cool, reason):
         kraken.apply_cooling(cool)

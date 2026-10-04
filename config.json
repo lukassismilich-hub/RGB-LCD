@@ -149,7 +149,7 @@
     "zapnuto": true,
     "zdroj": "cpu",
     "senzor_cpu": "CPU (Tctl/Tdie)",
-    "vyhlazeni_s": 5,
+    "vyhlazeni_s": 15,
     "cpu": {
       "pumpa": [
         [

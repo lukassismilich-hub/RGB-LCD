@@ -517,6 +517,36 @@
         },
         "barva": 1,
         "typ": "radek"
+      },
+      {
+        "x": 170,
+        "y": 56,
+        "w": 27,
+        "h": 21,
+        "lod": "x-wing",
+        "smer": "vpravo",
+        "blikani": true,
+        "typ": "lod"
+      },
+      {
+        "x": 221,
+        "y": 27,
+        "w": 17,
+        "h": 13,
+        "lod": "tie",
+        "smer": "vpravo",
+        "blikani": true,
+        "typ": "lod"
+      },
+      {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 128,
+        "pocet": 80,
+        "semeno": 11,
+        "blikani": true,
+        "typ": "hvezdy"
       }
     ],
     "otoceni": 180,

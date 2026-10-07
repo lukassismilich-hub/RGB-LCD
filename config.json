@@ -258,35 +258,20 @@
       {
         "x": 0,
         "y": 0,
-        "w": 150,
+        "w": 240,
         "h": 128,
-        "senzor": "CPU (Tctl/Tdie)",
-        "min": 40,
-        "max": 95,
+        "senzor": "Vytížení Jádra",
+        "min": 1,
+        "max": 100,
         "delitel": 1,
         "typ": "yavin"
       },
       {
-        "x": 154,
+        "x": 24,
         "y": 0,
-        "w": 84,
-        "h": 12,
-        "sablona": "YAVIN 4",
-        "zarovnani": "vlevo",
-        "pismo": {
-          "rodina": "Terminus (TTF)",
-          "velikost": 12,
-          "tucne": true
-        },
-        "barva": 1,
-        "typ": "radek"
-      },
-      {
-        "x": 154,
-        "y": 13,
-        "w": 84,
-        "h": 11,
-        "sablona": "HVĚZDA SMRTI",
+        "w": 130,
+        "h": 10,
+        "sablona": "TAKTICKÝ DISPLEJ · YAVIN 4",
         "zarovnani": "vlevo",
         "pismo": {
           "rodina": "Micro 5",
@@ -297,50 +282,186 @@
         "typ": "radek"
       },
       {
-        "x": 154,
-        "y": 27,
-        "w": 84,
-        "h": 22,
-        "senzor": "CPU (Tctl/Tdie)",
+        "x": 0,
+        "y": 31,
+        "w": 38,
+        "h": 66,
+        "vypln": "plna",
+        "dvojity": false,
+        "barva": 0,
+        "typ": "obdelnik"
+      },
+      {
+        "x": 1,
+        "y": 33,
+        "w": 36,
+        "h": 11,
+        "popisek": "CPU",
+        "sablona": "",
+        "sirka_stitku": 36,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "typ": "stitek"
+      },
+      {
+        "x": 1,
+        "y": 47,
+        "w": 36,
+        "h": 17,
+        "senzor": "Celkové vytížení CPU",
         "delitel": 1,
         "desetinna_mista": 0,
-        "jednotka": "°C",
-        "popisek": "CPU",
-        "zarovnani": "vlevo",
+        "jednotka": "%",
+        "popisek": "",
+        "zarovnani": "stred",
         "cas": false,
         "format_casu": "%H:%M",
         "barva": 1,
         "typ": "seg"
       },
       {
-        "x": 154,
-        "y": 53,
-        "w": 84,
-        "h": 1,
-        "smer": "vodorovna",
-        "tloustka": 1,
-        "barva": 1,
-        "typ": "cara"
-      },
-      {
-        "x": 154,
-        "y": 57,
-        "w": 84,
-        "h": 54,
-        "radky": "GPU = {Teplota GPU}°\nZÁT = {Celkové vytížení CPU}%\nRAM = {Použitá fyzická paměť|1024|1}G\n↓ = {@síť stahování|1|1}M",
-        "radek_px": 13,
-        "kurzor": false,
+        "x": 1,
+        "y": 67,
+        "w": 36,
+        "h": 11,
+        "popisek": "GPU",
+        "sablona": "",
+        "sirka_stitku": 36,
+        "zarovnani": "vlevo",
         "pismo": {
           "rodina": "Terminus (TTF)",
           "velikost": 12,
           "tucne": true
         },
-        "typ": "term"
+        "typ": "stitek"
       },
       {
-        "x": 154,
-        "y": 115,
-        "w": 84,
+        "x": 1,
+        "y": 80,
+        "w": 36,
+        "h": 17,
+        "senzor": "Zatížení jádra GPU",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "jednotka": "%",
+        "popisek": "",
+        "zarovnani": "stred",
+        "cas": false,
+        "format_casu": "%H:%M",
+        "barva": 1,
+        "typ": "seg"
+      },
+      {
+        "x": 45,
+        "y": 33,
+        "w": 121,
+        "h": 64,
+        "delka": 6,
+        "typ": "rohy"
+      },
+      {
+        "x": 48,
+        "y": 36,
+        "w": 120,
+        "h": 11,
+        "popisek": "CPU",
+        "sablona": "{CPU (Tctl/Tdie)}° {Celková spotřeba CPU}W {Takt jader|1000|1}GHz",
+        "sirka_stitku": 22,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "typ": "stitek"
+      },
+      {
+        "x": 48,
+        "y": 48,
+        "w": 120,
+        "h": 11,
+        "popisek": "GPU",
+        "sablona": "{Teplota GPU}° {GPU Spotřeba energie}W {Takt GPU (naměřený)|1000|1}GHz",
+        "sirka_stitku": 22,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "typ": "stitek"
+      },
+      {
+        "x": 48,
+        "y": 60,
+        "w": 120,
+        "h": 11,
+        "popisek": "RAM",
+        "sablona": "{Použitá fyzická paměť|1024|1}G VRAM {Přidělená paměť GPU|1000|1}G",
+        "sirka_stitku": 22,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "typ": "stitek"
+      },
+      {
+        "x": 48,
+        "y": 72,
+        "w": 120,
+        "h": 11,
+        "popisek": "C:",
+        "sablona": "{@disk C: volno}G {Teplota disku (C:)}°",
+        "sirka_stitku": 22,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "typ": "stitek"
+      },
+      {
+        "x": 48,
+        "y": 84,
+        "w": 120,
+        "h": 11,
+        "popisek": "D:",
+        "sablona": "{@disk D: volno}G {Teplota disku (D:)}°",
+        "sirka_stitku": 22,
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "typ": "stitek"
+      },
+      {
+        "x": 30,
+        "y": 117,
+        "w": 76,
+        "h": 10,
+        "sablona": "AKTIVNÍ JÁDRA {Průměrný počet aktivních jader|1|1}",
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Micro 5",
+          "velikost": 11,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "radek"
+      },
+      {
+        "x": 166,
+        "y": 0,
+        "w": 72,
         "h": 12,
         "format": "HH:MM:SS",
         "zarovnani": "vpravo",
@@ -351,6 +472,51 @@
         },
         "barva": 1,
         "typ": "hodiny"
+      },
+      {
+        "x": 150,
+        "y": 12,
+        "w": 88,
+        "h": 11,
+        "format": "den datum",
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Micro 5",
+          "velikost": 11,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "hodiny"
+      },
+      {
+        "x": 160,
+        "y": 101,
+        "w": 78,
+        "h": 12,
+        "sablona": "{@wifi signál}dB {@síť rychlost připojení}Mb",
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "radek"
+      },
+      {
+        "x": 134,
+        "y": 115,
+        "w": 104,
+        "h": 12,
+        "sablona": "↓{@síť stahování|1|1} ↑{@síť odesílání|1|1} MB/s",
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "radek"
       }
     ],
     "otoceni": 180,
@@ -503,13 +669,99 @@
       {
         "x": 0,
         "y": 0,
-        "w": 240,
+        "w": 150,
         "h": 128,
         "senzor": "CPU (Tctl/Tdie)",
         "min": 40,
         "max": 95,
         "delitel": 1,
         "typ": "yavin"
+      },
+      {
+        "x": 154,
+        "y": 0,
+        "w": 84,
+        "h": 12,
+        "sablona": "YAVIN 4",
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "radek"
+      },
+      {
+        "x": 154,
+        "y": 13,
+        "w": 84,
+        "h": 11,
+        "sablona": "HVĚZDA SMRTI",
+        "zarovnani": "vlevo",
+        "pismo": {
+          "rodina": "Micro 5",
+          "velikost": 11,
+          "tucne": false
+        },
+        "barva": 1,
+        "typ": "radek"
+      },
+      {
+        "x": 154,
+        "y": 27,
+        "w": 84,
+        "h": 22,
+        "senzor": "CPU (Tctl/Tdie)",
+        "delitel": 1,
+        "desetinna_mista": 0,
+        "jednotka": "°C",
+        "popisek": "CPU",
+        "zarovnani": "vlevo",
+        "cas": false,
+        "format_casu": "%H:%M",
+        "barva": 1,
+        "typ": "seg"
+      },
+      {
+        "x": 154,
+        "y": 53,
+        "w": 84,
+        "h": 1,
+        "smer": "vodorovna",
+        "tloustka": 1,
+        "barva": 1,
+        "typ": "cara"
+      },
+      {
+        "x": 154,
+        "y": 57,
+        "w": 84,
+        "h": 54,
+        "radky": "GPU = {Teplota GPU}°\nZÁT = {Celkové vytížení CPU}%\nRAM = {Použitá fyzická paměť|1024|1}G\n↓ = {@síť stahování|1|1}M",
+        "radek_px": 13,
+        "kurzor": false,
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "typ": "term"
+      },
+      {
+        "x": 154,
+        "y": 115,
+        "w": 84,
+        "h": 12,
+        "format": "HH:MM:SS",
+        "zarovnani": "vpravo",
+        "pismo": {
+          "rodina": "Terminus (TTF)",
+          "velikost": 12,
+          "tucne": true
+        },
+        "barva": 1,
+        "typ": "hodiny"
       }
     ],
     "moje_obrazovky": {

@@ -153,6 +153,8 @@ def load():
     for group in ("nzxt", "fusion", "argb"):
         for ch, v in DEFAULTS["led"][group].items():
             lc[group].setdefault(ch, json.loads(json.dumps(v)))
+    for k in led.EXTRAS:                                 # omylem zapsane natoceni klavesnice/grafiky
+        lc["argb"].pop(k, None)
     for scr in cfg["obrazovky"]:                        # stare jednobarevne bary -> prechod od/do
         for n in ("1", "2"):
             if "barva" + n in scr:

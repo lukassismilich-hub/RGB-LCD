@@ -5,8 +5,10 @@
 #   - natoceni ventilatoru (posun LED 1, obraceny smer) - aby se efekt na vsech tocil stejne
 #   - zivy animovany nahled (stejny vypocet jako ve vlakne LED)
 #   - sbalene: ARGB hlavicky (pocet LED, D_LED2) a ostatni zony desky
-#   - klavesnice Logitech G815: integrovana pamet zapnout / vypnout (HID++, hned), zaloha pameti
-#     (jen cteni), barva z aplikace pres LED SDK z G HUB (efekt jako F140 / deska / vlastni)
+#   - graficka karta RTX 5070: svetelny pasek z aplikace (efekt jako F140 / deska / vlastni, jas,
+#     klidna barva)
+#   - klavesnice Logitech G815 (zatim skryta, led.KEYBOARD): integrovana pamet zapnout / vypnout,
+#     zaloha pameti (jen cteni), barva z aplikace pres LED SDK z G HUB
 # Zmeny se na ventilatorech projevi po Ulozit.
 
 import math
@@ -52,12 +54,16 @@ class LedEditor:
         self.fx_frame = V.card(left)
         self.fx_frame.grid(row=1, column=0, sticky="nsew", pady=(16, 0))
         self._build_effects()
-        self.kb = V.card(left)
-        self.kb.grid(row=2, column=0, sticky="nsew", pady=(16, 0))
+        self.gpu = V.card(left)
+        self.gpu.grid(row=2, column=0, sticky="nsew", pady=(16, 0))
+        self._build_gpu()
         self._kb_job = None                       # bezici prace s klavesnici (vlakno) a jeji vysledek
         self._kb_mode = None
-        self._build_keyboard()
-        self._kb_run(self._kb_read_mode)          # aktualni rezim klavesnice
+        if led.KEYBOARD:                          # klavesnice zatim skryta
+            self.kb = V.card(left)
+            self.kb.grid(row=3, column=0, sticky="nsew", pady=(16, 0))
+            self._build_keyboard()
+            self._kb_run(self._kb_read_mode)      # aktualni rezim klavesnice
 
         pv = V.card(right)
         pv.pack(fill="x")
@@ -431,6 +437,88 @@ class LedEditor:
         self._build_custom()                                # kruhy barev a natoceni podle zapojenych hlavicek
         self._build_sync()
 
+    # ------------------------------------------------------- graficka karta
+    def _build_gpu(self):
+        f = self.gpu
+        for w in f.winfo_children():
+            w.destroy()
+        gc = self.lcfg.setdefault("grafika", dict(led.EXTRA_DEFAULT))
+        f.columnconfigure(1, weight=1)
+        V.card_title(f, "Grafická karta RTX 5070").grid(row=0, column=0, columnspan=2, sticky="w", padx=20,
+                                                         pady=(14, 6))
+        self.gpu_prev = tk.Canvas(f, width=120, height=34, bg=V.CARD, highlightthickness=0)
+        self.gpu_prev.grid(row=0, column=2, rowspan=2, sticky="e", padx=20, pady=(10, 0))
+        on = tk.BooleanVar(value=bool(gc.get("zapnuto")))
+
+        def on_toggle():
+            gc["zapnuto"] = on.get()
+            self._build_gpu()
+        ttk.Checkbutton(f, text="Řídit světelný pásek karty z aplikace", variable=on,
+                        command=on_toggle).grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(2, 4))
+        if not gc.get("zapnuto"):
+            ttk.Label(f, style="Small.TLabel", wraplength=440, justify="left", text=(
+                "Karta svítí podle svého uloženého nastavení (z Gigabyte Control Center).")).grid(
+                row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 16))
+            return
+        ttk.Label(f, text="Efekt", style="Muted.TLabel").grid(row=2, column=0, sticky="w", padx=(20, 10), pady=4)
+        src = tk.StringVar(value=gc.get("efekt", "deska"))
+
+        def on_src():
+            gc["efekt"] = src.get()
+            self._build_gpu()
+        V.segmented(f, src, [("f140", "jako F140"), ("deska", "jako deska"), ("vlastni", "vlastní")],
+                    command=on_src).grid(row=2, column=1, columnspan=2, sticky="w", pady=4)
+        ttk.Label(f, text="Jas", style="Muted.TLabel").grid(row=3, column=0, sticky="w", padx=(20, 10), pady=4)
+        jv = tk.IntVar(value=int(gc.get("jas", 100)))
+        jl = ttk.Label(f, width=5, text=f"{jv.get()} %", font=V.MONO, anchor="e")
+        jl.grid(row=3, column=2, sticky="e", padx=(8, 20))
+
+        def on_jas(_e=None):
+            gc["jas"] = int(jv.get())
+            jl.config(text=f"{int(jv.get())} %")
+        V.scale(f, variable=jv, from_=10, to=100, resolution=5, length=140, command=on_jas).grid(
+            row=3, column=1, sticky="ew", pady=4)
+        ttk.Label(f, text="Klidná barva", style="Muted.TLabel").grid(row=4, column=0, sticky="w", padx=(20, 10),
+                                                                     pady=4)
+        b = V.swatch(f, gc.get("barva", "#ffffff"), None, width=6)
+        b.grid(row=4, column=1, sticky="w", pady=4, ipady=2)
+
+        def pick():
+            col = colorchooser.askcolor(color=gc.get("barva", "#ffffff"), parent=self.gpu)[1]
+            if col:
+                gc["barva"] = col
+                V.set_swatch(b, col)
+        b.config(command=pick)
+        ttk.Label(f, style="Small.TLabel", wraplength=440, justify="left", text=(
+            "Klidná barva = po ukončení aplikace a u efektu „vlastní barvy LED“. Celý pásek svítí jednou "
+            "barvou – efekt se počítá jako pro jeden ventilátor, mimo vlnu. Do paměti karty se nic "
+            "neukládá: po restartu PC karta svítí po svém, dokud ji aplikace nepřevezme.")).grid(
+            row=5, column=0, columnspan=3, sticky="w", padx=20, pady=(4, 4))
+        if gc.get("efekt") == "vlastni":
+            eff = self.lcfg.setdefault("efekt_grafika", dict(fx.DEFAULT_EFFECT))
+            pf = ttk.Frame(f)
+            pf.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=20, pady=(4, 16))
+            self._effect_panel(pf, eff, 3, rebuild=self._build_gpu)
+        else:
+            ttk.Frame(f, height=12).grid(row=6, column=0)
+
+    def _gpu_preview(self, col):
+        """Barva pasku v karte grafiky (obrys karty se svetelnym paskem)."""
+        c = getattr(self, "gpu_prev", None)
+        try:
+            if c is None or not c.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        c.delete("all")
+        c.create_rectangle(2, 4, 118, 30, outline="#262b33", fill="#111418")
+        for x in (32, 88):                                    # dva ventilatory karty
+            c.create_oval(x - 11, 6, x + 11, 28, outline="#1d2228", width=3)
+        if not col:
+            return
+        r, g, b = (round(255 * (v / 255) ** 0.5) for v in col[0])
+        c.create_rectangle(6, 30, 114, 33, outline="", fill=f"#{r:02x}{g:02x}{b:02x}")
+
     # ---------------------------------------------------------- klavesnice
     def _build_keyboard(self):
         self._build_keyboard_card()
@@ -590,12 +678,13 @@ class LedEditor:
                        "směrem. Náhled natočení zohledňuje (LED 1 vpravo, číslování po směru hodin).").grid(
             row=1, column=0, columnspan=4, sticky="w", padx=16, pady=(2, 6))
         names = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2"}
-        for r, (key, n, _g, _c) in enumerate(led.targets(self.lcfg), start=2):
+        fans = [t for t in led.targets(self.lcfg) if t[0] not in led.EXTRAS]   # grafika/klavesnice = 1 LED
+        for r, (key, n, _g, _c) in enumerate(fans, start=2):
             if key.startswith("f140_"):
                 ch = self.lcfg["nzxt"].setdefault("led" + key[-1], {})
             else:
                 ch = self.lcfg["argb"].setdefault(key, {})
-            last = r == 1 + len(led.targets(self.lcfg))
+            last = r == 1 + len(fans)
             pad = (2, 14 if last else 2)
             ttk.Label(f, text=names.get(key, key), style="Muted.TLabel").grid(row=r, column=0, sticky="w",
                                                                               padx=(16, 12), pady=pad)
@@ -699,6 +788,7 @@ class LedEditor:
             frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2))
             kb = frame.pop("klavesnice", None)
             self._kb_preview(kb)
+            self._gpu_preview(frame.pop("grafika", None))
             order = led.wave_offsets(lc, list(frame))[1]          # jako ve skrini: vlevo predek, vpravo zadek
             items = [(k, frame[k]) for k in order]
             n_items = len(items)

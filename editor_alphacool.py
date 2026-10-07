@@ -103,6 +103,10 @@ FIELDS.update({
     "hvezda_smrti": _R + [("prstenec", "Prstenec nabití", "bool", None)],
     "hyperprostor": _R + [("hvezdy", "Počet hvězd", "int", None), ("ramecek", "Rámeček", "bool", None)],
     "yavin": list(_R),
+    "stitek": [("popisek", "Štítek", "text", None), ("sirka_stitku", "Šířka štítku (0 = podle textu)", "int", None),
+               ("sablona", "Text se {senzor|dělitel|místa}", "template", None),
+               ("zarovnani", "Zarovnání textu", "choice", ["vlevo", "vpravo"])] + _FONT,
+    "rohy": [("delka", "Délka rohů (px)", "int", None)],
 })
 
 

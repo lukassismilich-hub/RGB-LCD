@@ -7,6 +7,8 @@
 #   hvezda_smrti  Hvezda smrti s talirem superlaseru a prikopem, kolem prstenec "nabiti" podle hodnoty
 #   hyperprostor  hvezdy se pri vyssi hodnote natahuji do car a leti rychleji
 #   yavin         takticky displej bitvy o Yavin: Hvezda smrti obiha planetu k mesici podle hodnoty
+#   stitek        radek se stitkem: popisek inverzne v plnem obdelniku, za nim text ze sablony
+#   rohy          rohovy ramecek (jen rohy, jako zamerovaci displej)
 #
 # Vsechno se kresli jen cary a body (1 bit, 240x128) - zadna loga ani pisma z filmu.
 
@@ -16,8 +18,11 @@ import random
 from PIL import Image, ImageDraw
 
 from prvky import _num, frac, get_font, value
-from prvky_scifi import (C_FREE, C_T, C_USED, CPU_L, CPU_T, CPU_W, D_FREE, DOWN, GC, GG, GPU_L, GPU_T, GPU_W,
-                         RAM, RAMG, SMALL, TERM, UP, VRAMG, S, _el, _header, _row, _term, fill_template)
+from prvky_scifi import (C_FREE, C_T, C_USED, CORES, CPU_L, CPU_T, CPU_W, D_FREE, D_T, DOWN, GC, GG, GPU_L, GPU_T,
+                         GPU_W, RAM, RAMG, SMALL, TERM, UP, VRAMG, WIFI_S, S, _el, _header, _row, _term,
+                         _xor_text, fill_template)
+
+LINK = "@síť rychlost připojení"
 
 
 def _fr(p, data):
@@ -234,11 +239,37 @@ def draw_yavin(img, d, p, data, now):
     img.paste(1, (x, y), lay)
 
 
+# ------------------------------------------------------------ obecne: radek se stitkem, rohovy ramecek
+def draw_tag_row(img, d, p, data, now):
+    x, y, w, h = p["x"], p["y"], p["w"], p["h"]
+    f = get_font(p.get("pismo", TERM))
+    lbl = p.get("popisek", "")
+    tw = int(_num(p, "sirka_stitku", 0)) or int(d.textlength(lbl, font=f)) + 6
+    tw = min(tw, w)
+    d.rectangle((x, y, x + tw - 1, y + h - 1), fill=1)
+    _xor_text(img, (x + tw / 2, y + h / 2), lbl, f, "mm")
+    txt = fill_template(p.get("sablona", ""), data)
+    if txt:
+        if p.get("zarovnani") == "vpravo":
+            d.text((x + w - 1, y + h / 2), txt, font=f, fill=1, anchor="rm")
+        else:
+            d.text((x + tw + 3, y + h / 2), txt, font=f, fill=1, anchor="lm")
+
+
+def draw_corners(img, d, p, data, now):
+    x, y, w, h = p["x"], p["y"], p["w"], p["h"]
+    k = max(2, int(_num(p, "delka", 6)))
+    x1, y1 = x + w - 1, y + h - 1
+    for cx, cy, sx, sy in ((x, y, 1, 1), (x1, y, -1, 1), (x, y1, 1, -1), (x1, y1, -1, -1)):
+        d.line((cx, cy, cx + sx * k, cy), fill=1)
+        d.line((cx, cy, cx, cy + sy * k), fill=1)
+
+
 DRAW = {"zamerovac": draw_trench, "mec": draw_saber, "hvezda_smrti": draw_deathstar, "hyperprostor": draw_hyperspace,
-        "yavin": draw_yavin}
+        "yavin": draw_yavin, "stitek": draw_tag_row, "rohy": draw_corners}
 TYPES = {"zamerovac": "Zaměřovač X-wingu (Star Wars)", "mec": "Světelný meč (Star Wars)",
          "hvezda_smrti": "Hvězda smrti (Star Wars)", "hyperprostor": "Hyperprostor (Star Wars)",
-         "yavin": "Bitva o Yavin (Star Wars)"}
+         "yavin": "Bitva o Yavin (Star Wars)", "stitek": "Řádek se štítkem", "rohy": "Rohový rámeček"}
 NEW = {
     "zamerovac": dict(x=0, y=0, w=140, h=100, senzor=CPU_L, min=0, max=100, delitel=1),
     "mec": dict(x=2, y=2, w=236, h=27, popisek="CPU", sablona=S(CPU_T) + "°C", senzor=CPU_T, min=30, max=95,
@@ -246,6 +277,9 @@ NEW = {
     "hvezda_smrti": dict(x=0, y=0, w=128, h=128, senzor=CPU_L, min=0, max=100, delitel=1, prstenec=True),
     "hyperprostor": dict(x=0, y=14, w=240, h=58, senzor=CPU_L, min=0, max=100, delitel=1, hvezdy=70, ramecek=True),
     "yavin": dict(x=0, y=0, w=150, h=128, senzor=CPU_T, min=40, max=95, delitel=1),
+    "stitek": dict(x=2, y=2, w=120, h=11, popisek="CPU", sablona=S(CPU_T) + "°", sirka_stitku=24,
+                   zarovnani="vlevo", pismo=TERM),
+    "rohy": dict(x=2, y=2, w=100, h=60, delka=6),
 }
 
 
@@ -291,13 +325,34 @@ def templates():
             _row(122, 100, 116, f"GPU {S(GPU_L)}% {S(GPU_W)}W", al="vpravo"),
             _row(2, 113, 118, f"C: {S(C_FREE)}G D: {S(D_FREE)}G"),
             _row(122, 113, 116, f"↓ {S(DOWN, 1, 1)} ↑ {S(UP, 1, 1)} MB/s", al="vpravo")],
+        # pres cely displej; hodnoty mimo drahu Hvezdy smrti (od -60 do 33 stupnu, polomer 6 px)
         "Bitva o Yavin – taktický displej (Star Wars)": [
-            _el("yavin", x=0, y=0, w=150, h=128, senzor=CPU_T, min=40, max=95),
-            _row(154, 0, 84, "YAVIN 4"),
-            _row(154, 13, 84, "HVĚZDA SMRTI", h=11, font=SMALL),
-            _el("seg", x=154, y=27, w=84, h=22, senzor=CPU_T, jednotka="°C", popisek="CPU"),
-            _el("cara", x=154, y=53, w=84, h=1, smer="vodorovna", tloustka=1),
-            _term(154, 57, 84, 54, [("GPU", S(GPU_T) + "°"), ("ZÁT", S(CPU_L) + "%"), ("RAM", RAMG + "G"),
-                                    ("↓", S(DOWN, 1, 1) + "M")]),
-            _el("hodiny", x=154, y=115, w=84, h=12, format="HH:MM:SS", zarovnani="vpravo", pismo=TERM)],
+            _el("yavin", x=0, y=0, w=240, h=128, senzor=CPU_T, min=40, max=95),
+            _row(24, 0, 130, "TAKTICKÝ DISPLEJ · YAVIN 4", h=10, font=SMALL),
+            # v planete na cernem podkladu: zatez CPU a GPU
+            _el("obdelnik", x=0, y=31, w=38, h=66, vypln="plna", barva=0),
+            _el("stitek", x=1, y=33, w=36, h=11, popisek="CPU", sablona="", sirka_stitku=36),
+            _el("seg", x=1, y=47, w=36, h=17, senzor=CPU_L, jednotka="%", popisek="", zarovnani="stred"),
+            _el("stitek", x=1, y=67, w=36, h=11, popisek="GPU", sablona="", sirka_stitku=36),
+            _el("seg", x=1, y=80, w=36, h=17, senzor=GPU_L, jednotka="%", popisek="", zarovnani="stred"),
+            # uvnitr drahy: blok hodnot v rohovem ramecku, radky se stitky
+            _el("rohy", x=44, y=36, w=121, h=64, delka=6),
+            _el("stitek", x=48, y=39, w=120, h=11, popisek="CPU", sablona=f"{S(CPU_T)}° {S(CPU_W)}W {GC}GHz",
+                sirka_stitku=22),
+            _el("stitek", x=48, y=51, w=120, h=11, popisek="GPU", sablona=f"{S(GPU_T)}° {S(GPU_W)}W {GG}GHz",
+                sirka_stitku=22),
+            _el("stitek", x=48, y=63, w=120, h=11, popisek="RAM", sablona=f"{RAMG}G VRAM {VRAMG}G",
+                sirka_stitku=22),
+            _el("stitek", x=48, y=75, w=120, h=11, popisek="C:", sablona=f"{S(C_FREE)}G volno {S(C_T)}°",
+                sirka_stitku=22),
+            _el("stitek", x=48, y=87, w=120, h=11, popisek="D:", sablona=f"{S(D_FREE)}G volno {S(D_T)}°",
+                sirka_stitku=22),
+            # vlevo dole pod planetou
+            _row(30, 117, 76, f"AKTIVNÍ JÁDRA {S(CORES, 1, 1)}", h=10, font=SMALL),
+            # vpravo nahore nad drahou
+            _el("hodiny", x=166, y=0, w=72, h=12, format="HH:MM:SS", zarovnani="vpravo", pismo=TERM),
+            _el("hodiny", x=150, y=12, w=88, h=11, format="den datum", zarovnani="vpravo", pismo=SMALL),
+            # vpravo dole pod drahou
+            _row(160, 101, 78, f"{S(WIFI_S)}dB {S(LINK)}Mb", al="vpravo"),
+            _row(134, 115, 104, f"↓{S(DOWN, 1, 1)} ↑{S(UP, 1, 1)} MB/s", al="vpravo")],
     }

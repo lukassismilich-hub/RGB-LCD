@@ -1332,7 +1332,7 @@
     "efekt": {
       "typ": "dychani",
       "barvy": [
-        "#ff0000",
+        "#00ff00",
         "#ffbf00",
         "#00e600",
         "#11ff4d",
@@ -1402,7 +1402,7 @@
     },
     "grafika": {
       "zapnuto": true,
-      "efekt": "f140",
+      "efekt": "deska",
       "jas": 100,
       "barva": "#ffffff"
     },

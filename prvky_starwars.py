@@ -250,8 +250,11 @@ def draw_tag_row(img, d, p, data, now):
     _xor_text(img, (x + tw / 2, y + h / 2), lbl, f, "mm")
     txt = fill_template(p.get("sablona", ""), data)
     if txt:
-        if p.get("zarovnani") == "vpravo":
+        al = p.get("zarovnani")
+        if al == "vpravo":
             d.text((x + w - 1, y + h / 2), txt, font=f, fill=1, anchor="rm")
+        elif al == "stred":                              # na stred mista za stitkem
+            d.text(((x + tw + 3 + x + w - 1) / 2, y + h / 2), txt, font=f, fill=1, anchor="mm")
         else:
             d.text((x + tw + 3, y + h / 2), txt, font=f, fill=1, anchor="lm")
 

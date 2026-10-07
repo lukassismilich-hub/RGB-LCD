@@ -105,7 +105,7 @@ FIELDS.update({
     "yavin": list(_R),
     "stitek": [("popisek", "Štítek", "text", None), ("sirka_stitku", "Šířka štítku (0 = podle textu)", "int", None),
                ("sablona", "Text se {senzor|dělitel|místa}", "template", None),
-               ("zarovnani", "Zarovnání textu", "choice", ["vlevo", "vpravo"])] + _FONT,
+               ("zarovnani", "Zarovnání textu", "choice", ALIGN)] + _FONT,
     "rohy": [("delka", "Délka rohů (px)", "int", None)],
 })
 

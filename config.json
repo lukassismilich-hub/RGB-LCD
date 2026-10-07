@@ -631,7 +631,132 @@
         },
         "typ": "term"
       }
-    ]
+    ],
+    "moje_obrazovky": {
+      "moje 1": {
+        "na_vysku": false,
+        "prvky": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 153,
+            "h": 52,
+            "senzor": "Celkové vytížení CPU",
+            "min": 0,
+            "max": 100,
+            "delitel": 1,
+            "delka_s": 60,
+            "sablona": "{Takt jader|1000|1}Ghz CPU {CPU (Tctl/Tdie)}°C {Celková spotřeba CPU}W ",
+            "roh": "",
+            "typ": "esper"
+          },
+          {
+            "x": 0,
+            "y": 53,
+            "w": 153,
+            "h": 53,
+            "senzor": "Zatížení jádra GPU",
+            "min": 0,
+            "max": 100,
+            "delitel": 1,
+            "delka_s": 60,
+            "sablona": "{Takt GPU (naměřený)|1000|1}Ghz GPU {Teplota GPU}°C {GPU Spotřeba energie}W",
+            "roh": "",
+            "typ": "esper"
+          },
+          {
+            "x": 1,
+            "y": 108,
+            "w": 237,
+            "h": 9,
+            "sablona": "↓ {@síť stahování|1|1} ↑ {@síť odesílání|1|1} MB/s {@wifi signál}dB {@síť rychlost připojení}MB/s",
+            "zarovnani": "stred",
+            "pismo": {
+              "rodina": "Terminus (TTF)",
+              "velikost": 12,
+              "tucne": true
+            },
+            "barva": 1,
+            "typ": "radek"
+          },
+          {
+            "x": 0,
+            "y": 117,
+            "w": 78,
+            "h": 12,
+            "format": "HH:MM:SS",
+            "zarovnani": "vlevo",
+            "pismo": {
+              "rodina": "Terminus (TTF)",
+              "velikost": 12,
+              "tucne": true
+            },
+            "barva": 1,
+            "typ": "hodiny"
+          },
+          {
+            "x": 161,
+            "y": 117,
+            "w": 78,
+            "h": 12,
+            "format": "den datum",
+            "zarovnani": "vpravo",
+            "pismo": {
+              "rodina": "Terminus (TTF)",
+              "velikost": 12,
+              "tucne": true
+            },
+            "barva": 1,
+            "typ": "hodiny"
+          },
+          {
+            "x": 154,
+            "y": 6,
+            "w": 85,
+            "h": 34,
+            "radky": "\nCPU = {Celkové vytížení CPU}%\nJÁD = {Průměrný počet aktivních jader|1|1}\nRAM = {Použitá fyzická paměť|1024|1}G\n",
+            "radek_px": 11,
+            "kurzor": false,
+            "pismo": {
+              "rodina": "Terminus (TTF)",
+              "velikost": 12,
+              "tucne": true
+            },
+            "typ": "term"
+          },
+          {
+            "x": 154,
+            "y": 74,
+            "w": 85,
+            "h": 23,
+            "radky": "GPU = {Zatížení jádra GPU}%\nVRAM = {Přidělená paměť GPU|1000|1}G\n\n",
+            "radek_px": 11,
+            "kurzor": false,
+            "pismo": {
+              "rodina": "Terminus (TTF)",
+              "velikost": 12,
+              "tucne": true
+            },
+            "typ": "term"
+          },
+          {
+            "x": 154,
+            "y": 45,
+            "w": 85,
+            "h": 23,
+            "radky": "C: = {@disk C: volno}G {Teplota disku (C:)}°C\nD: = {@disk D: volno}G {Teplota disku (D:)}°C\n",
+            "radek_px": 11,
+            "kurzor": false,
+            "pismo": {
+              "rodina": "Terminus (TTF)",
+              "velikost": 12,
+              "tucne": true
+            },
+            "typ": "term"
+          }
+        ]
+      }
+    }
   },
   "led": {
     "zapnuto": true,

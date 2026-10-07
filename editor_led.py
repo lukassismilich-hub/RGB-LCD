@@ -174,7 +174,8 @@ class LedEditor:
                     command=lambda: lc.__setitem__("f140_vpredu", front.get())).grid(row=2, column=1, sticky="w",
                                                                                      pady=3)
         ttk.Label(of, style="Small.TLabel", wraplength=440, justify="left",
-                  text="Ve skříni: D_LED1 vpředu, 2× F140 uprostřed, D_LED2 vzadu. Který F140 je vpředu, poznáš "
+                  text="Ve skříni: D_LED1 vpředu, 2× F140 uprostřed, D_LED2 vzadu, grafika pod F140 (ve vlně "
+                       "za D_LED2 – vlna oběhne skříň dokola). Který F140 je vpředu, poznáš "
                        "s efektem „blikání“ a F140 postupně: vlna musí jít plynule jedním směrem – když F140 "
                        "bliknou obráceně, přepni „Blíž předku“.").grid(row=3, column=0, columnspan=2, sticky="w",
                                                                          pady=(4, 0))
@@ -491,8 +492,10 @@ class LedEditor:
         b.config(command=pick)
         ttk.Label(f, style="Small.TLabel", wraplength=440, justify="left", text=(
             "Klidná barva = po ukončení aplikace a u efektu „vlastní barvy LED“. Celý pásek svítí jednou "
-            "barvou – efekt se počítá jako pro jeden ventilátor, mimo vlnu. Do paměti karty se nic "
-            "neukládá: po restartu PC karta svítí po svém, dokud ji aplikace nepřevezme.")).grid(
+            "barvou – efekt se počítá jako pro jeden ventilátor. Karta je pod F140: ve vlně svítí až za "
+            "D_LED2, vlna tak oběhne skříň dokola. Pro souhru s ventilátory zvol „jako F140“ nebo „jako "
+            "deska“. Do paměti karty se nic neukládá: po restartu PC karta svítí po svém, dokud ji "
+            "aplikace nepřevezme.")).grid(
             row=5, column=0, columnspan=3, sticky="w", padx=20, pady=(4, 4))
         if gc.get("efekt") == "vlastni":
             eff = self.lcfg.setdefault("efekt_grafika", dict(fx.DEFAULT_EFFECT))
@@ -788,7 +791,8 @@ class LedEditor:
             frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2))
             kb = frame.pop("klavesnice", None)
             self._kb_preview(kb)
-            self._gpu_preview(frame.pop("grafika", None))
+            gpu = frame.pop("grafika", None)
+            self._gpu_preview(gpu)
             order = led.wave_offsets(lc, list(frame))[1]          # jako ve skrini: vlevo predek, vpravo zadek
             items = [(k, frame[k]) for k in order]
             n_items = len(items)
@@ -814,6 +818,13 @@ class LedEditor:
                 label = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "D_LED1",
                          "D_LED2": "D_LED2"}.get(key, key)
                 c.create_text(cx, cy, text=label, fill=V.MUTED, font=("Segoe UI", 8))
+            if gpu:                                             # grafika je ve skrini pod F140
+                f_idx = [i for i, (k, _c) in enumerate(items) if k.startswith("f140_")] or [n_items // 2]
+                x0, x1 = cell * min(f_idx) + 14, cell * (max(f_idx) + 1) - 14
+                r, g, b = (round(255 * (v / 255) ** 0.5) for v in gpu[0])
+                c.create_rectangle(x0, PREVIEW_H - 33, x1, PREVIEW_H - 25, outline="#262b33",
+                                   fill=f"#{r:02x}{g:02x}{b:02x}")
+                c.create_text((x0 + x1) / 2, PREVIEW_H - 14, text="grafika", fill=V.MUTED, font=("Segoe UI", 8))
         self.preview.after(PREVIEW_MS, self._animate)
 
     def _kb_preview(self, kb):

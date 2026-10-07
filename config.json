@@ -1181,7 +1181,7 @@
         "rychlost": "slowest",
         "obraceny_smer": false,
         "nazev": "F140 (1)",
-        "posun": 6,
+        "posun": 5,
         "obracene": false
       },
       "led2": {
@@ -1291,7 +1291,7 @@
         "barva": "#ffffff",
         "rychlost": "slowest",
         "obraceny_smer": false,
-        "posun": 5,
+        "posun": 4,
         "obracene": false
       },
       "D_LED2": {
@@ -1322,8 +1322,7 @@
         "pouzito": true,
         "obracene": false,
         "posun": 5
-      },
-      "klavesnice": {}
+      }
     },
     "jas": 100,
     "jas_f140": 100,
@@ -1394,6 +1393,25 @@
         "#0060ff",
         "#00ff40",
         "#ffb000"
+      ],
+      "rychlost": 4,
+      "opacny_smer": false,
+      "senzor": "CPU (Tctl/Tdie)",
+      "min": 40,
+      "max": 90
+    },
+    "grafika": {
+      "zapnuto": true,
+      "efekt": "f140",
+      "jas": 100,
+      "barva": "#ffffff"
+    },
+    "efekt_grafika": {
+      "typ": "dychani",
+      "barvy": [
+        "#ff0000",
+        "#0060ff",
+        "#00ff40"
       ],
       "rychlost": 4,
       "opacny_smer": false,

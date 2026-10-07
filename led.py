@@ -8,7 +8,8 @@
 #     (D_LED1 0x01, D_LED2 0x02), barvy po LED paketem [0xCC, hlavicka, offset 2 B, pocet bajtu,
 #     az 19 LED], poradi bajtu z kalibrace (GRB). Protokol podle OpenRGB.
 #   - ostatni zony desky (male LED, 12V RGB) = jen jedna barva / efekt cipu pres liquidctl
-#   - graficka karta RTX 5070 Eagle OC = jedna barva bocniho pasku pres I2C karty (grafika.py, NvAPI)
+#   - graficka karta RTX 5070 Eagle OC = jedna barva bocniho pasku pres I2C karty (grafika.py, NvAPI),
+#     ve vlne za D_LED2 (karta je pod F140)
 #   - klavesnice Logitech G815 = jedna barva cele klavesnice pres Logitech LED SDK z G HUB
 #     (klavesnice.py); funguje jen pri vypnute integrovane pameti klavesnice. Zatim skryta (KEYBOARD).
 # Liquidctl sam D_LED neovladne, kdyz ma hlavicka vypnute vestavene efekty (tak ji nechava GCC).
@@ -50,7 +51,7 @@ ARGB_HEADERS = {"D_LED1": ("led6", 0x58, 0x01), "D_LED2": ("led7", 0x59, 0x02)}
 ARGB_ZONES = {v[0] for v in ARGB_HEADERS.values()}
 ARGB_MAX_LEDS = 32
 KEYBOARD = False             # klavesnice G815 zatim skryta (v okne i ve vlakne), kod zustava
-EXTRAS = ("grafika", "klavesnice")   # cile s jednou "LED" mimo ventilatory (mimo vlnu a natoceni)
+EXTRAS = ("grafika", "klavesnice")   # cile s jednou "LED" mimo ventilatory (bez natoceni)
 EXTRA_DEFAULT = {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffffff"}
 
 
@@ -130,8 +131,11 @@ def targets(lcfg):
     return out
 
 
-# rozmisteni ve skrini zepredu dozadu: D_LED1 vpredu, 2x F140 uprostred, D_LED2 vzadu
-CASE_ORDER = ("D_LED1", "F140", "D_LED2")
+# rozmisteni ve skrini zepredu dozadu: D_LED1 vpredu, 2x F140 uprostred, D_LED2 vzadu; grafika je pod
+# F140, ve vlne az za D_LED2 - vlna tak obehne skrin dokola (predek, nahore, zadek, dole) a navaze
+# zase na predek (posuny jsou rovnomerne po kruhu 0..1)
+CASE_ORDER = ("D_LED1", "F140", "D_LED2", "grafika")
+NO_WAVE = ("klavesnice",)
 
 
 def wave_offsets(lcfg, keys):
@@ -201,7 +205,7 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
     orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat."""
     tg = targets(lcfg)
     wave = bool(lcfg.get("vlna"))
-    offsets = wave_offsets(lcfg, [k for k, *_ in tg if k not in EXTRAS])[0] if wave else {}
+    offsets = wave_offsets(lcfg, [k for k, *_ in tg if k not in NO_WAVE])[0] if wave else {}
     span = max(offsets.values(), default=0.0)
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):

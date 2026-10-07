@@ -1235,8 +1235,8 @@
         "rychlost": "normal"
       },
       "led4": {
-        "nazev": "zóna 4",
-        "rezim": "color-cycle",
+        "nazev": "LED pásek u grafiky",
+        "rezim": "grafika",
         "barva": "#ffffff",
         "rychlost": "slowest"
       },

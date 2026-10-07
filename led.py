@@ -42,7 +42,9 @@ FUSION_MODES = {
     "flash": ("blikání", True, True),
     "double-flash": ("dvojité blikání", True, True),
     "color-cycle": ("střídání barev", False, True),
+    "grafika": ("jako grafika", False, False),   # barvu pocita aplikace stejne jako pasek grafiky
 }
+SYNC_ZONE = "grafika"                        # rezim zony desky, ktera sviti s grafikou (LED pasek u karty)
 FUSION_SPEEDS = {"slowest": "nejpomaleji", "slower": "pomaleji", "normal": "normálně", "faster": "rychleji",
                  "fastest": "nejrychleji", "ludicrous": "šíleně rychle"}
 
@@ -103,6 +105,12 @@ def default_config():
     }
 
 
+def gpu_zones(lcfg):
+    """Zony desky (mimo ARGB) v rezimu "jako grafika" - sviti stejne jako pasek graficke karty."""
+    return sorted(k for k, z in lcfg.get("fusion", {}).items()
+                  if k not in ARGB_ZONES and z.get("rezim") == SYNC_ZONE)
+
+
 def extra_on(lcfg, key):
     """Ridi aplikace grafiku / klavesnici?"""
     if key == "klavesnice" and not KEYBOARD:
@@ -126,8 +134,8 @@ def targets(lcfg):
             n = max(1, min(ARGB_MAX_LEDS, int(h.get("pocet_led", 16))))
             out.append((name, n, "deska", h.get("barvy", rainbow(n))))
     for key in EXTRAS:                                     # grafika / klavesnice = jedna "LED"
-        if extra_on(lcfg, key):
-            out.append((key, 1, key, [lcfg[key].get("barva", "#ffffff")]))
+        if extra_on(lcfg, key) or (key == "grafika" and gpu_zones(lcfg)):   # i kvuli zonam "jako grafika"
+            out.append((key, 1, key, [lcfg.get(key, EXTRA_DEFAULT).get("barva", "#ffffff")]))
     return out
 
 
@@ -215,7 +223,7 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
         if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
             cols = _orient(cols, *orientation(lcfg, key))
         if group in EXTRAS:
-            k = float(lcfg.get("jas", 80)) * float(lcfg[group].get("jas", 100)) / 100.0
+            k = float(lcfg.get("jas", 80)) * float(lcfg.get(group, EXTRA_DEFAULT).get("jas", 100)) / 100.0
         else:
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(f"jas_{group}", 100)) / 100.0
         out[key] = fx.apply_brightness(cols, k)
@@ -259,6 +267,19 @@ def _argb_strip(dev, cmd, colors, order):
         sent += len(chunk) * 3
 
 
+def _zone_fixed(dev, zone, rgb):
+    """Cela zona desky (male LED, 12V RGB) jednou barvou - stejny paket jako liquidctl
+    set_color(zone, "fixed"): registr 0x20+n s maskou zony, barva v poradi B G R, jas 90,
+    pak 0x28 = pouzit nastaveni a znovu maska primeho rezimu ARGB (0x32), at ji to nezmeni."""
+    import liquidctl.driver.rgb_fusion2 as rf
+    addr1, addr2 = rf._COLOR_CHANNELS[zone]
+    r, g, b = (max(0, min(255, int(v))) for v in rgb)
+    data = [0xCC, addr1, addr2] + [0] * 8 + [0x01, 90, 0x00, b, g, r]
+    dev.send_feature_report(data + [0] * (64 - len(data)))
+    dev.send_feature_report([0xCC, 0x28, 0xFF] + [0] * 61)
+    dev.send_feature_report([0xCC, 0x32, 0x03] + [0] * 61)
+
+
 def _devices():
     import kraken  # noqa: F401  oprava GUID pred prvnim importem liquidctl
     from liquidctl import find_liquidctl_devices
@@ -291,6 +312,7 @@ class Session:
         self.nzxt = self.fusion = self.fdev = None
         self.kbd = None                           # klavesnice.Sdk, kdyz ji aplikace ridi
         self.gpu = None                           # grafika.Gpu, kdyz ji aplikace ridi
+        self.sync_zones = gpu_zones(lcfg)         # zony desky "jako grafika"
         self.orders = {k: (1, 0, 2) for k in ARGB_HEADERS}
         self.errors = {}                          # radic -> chyba
         self.last = {}
@@ -424,10 +446,12 @@ class Session:
 
     def setup_zones(self, lcfg):
         """Ostatni zony desky (male LED, 12V RGB) - jedna barva / efekt cipu."""
+        self.sync_zones = gpu_zones(lcfg)          # "jako grafika" - barvu posila send() po snimcich
+        self.last.pop("grafika", None)
         if self.fusion is None:
             return
         for name, z in sorted(lcfg.get("fusion", {}).items()):
-            if name in ARGB_ZONES:
+            if name in ARGB_ZONES or name in self.sync_zones:
                 continue
             mode = z.get("rezim", "off")
             _n, takes_color, has_speed = FUSION_MODES.get(mode, FUSION_MODES["off"])
@@ -462,6 +486,10 @@ class Session:
                     if force or cols != self.last.get(name):
                         pad = [[0, 0, 0]] * (ARGB_MAX_LEDS - len(cols))
                         _argb_strip(self.fdev, cmd, cols + pad, self.orders[name])
+                gp = frame.get("grafika")                                 # zony "jako grafika"
+                if gp and self.sync_zones and (force or gp != self.last.get("grafika")):
+                    for zone in self.sync_zones:
+                        _zone_fixed(self.fdev, zone, gp[0])
             except Exception as e:
                 self._fail("fusion", e)
         kb = frame.get("klavesnice")

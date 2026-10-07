@@ -456,7 +456,12 @@ class LedEditor:
             self._build_gpu()
         ttk.Checkbutton(f, text="Řídit světelný pásek karty z aplikace", variable=on,
                         command=on_toggle).grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(2, 4))
-        if not gc.get("zapnuto"):
+        zones = led.gpu_zones(self.lcfg)
+        if zones:
+            ttk.Label(f, style="Small.TLabel", foreground=V.OK, text=(
+                "S grafikou svítí i zóna desky: " + ", ".join(zones) + " (režim „jako grafika“ v Hardware).")).grid(
+                row=7, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 12))
+        if not gc.get("zapnuto") and not zones:
             ttk.Label(f, style="Small.TLabel", wraplength=440, justify="left", text=(
                 "Karta svítí podle svého uloženého nastavení (z Gigabyte Control Center).")).grid(
                 row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 16))
@@ -752,7 +757,9 @@ class LedEditor:
             if zone in led.ARGB_ZONES:
                 continue
             z = self.lcfg["fusion"][zone]
-            ttk.Label(f, text=zone, style="Muted.TLabel").grid(row=r, column=0, sticky="w", padx=4, pady=2)
+            nazev = z.get("nazev", "")
+            label = zone if not nazev or nazev.startswith("zóna") else f"{zone} – {nazev}"
+            ttk.Label(f, text=label, style="Muted.TLabel").grid(row=r, column=0, sticky="w", padx=4, pady=2)
             mv = tk.StringVar(value=names.get(z.get("rezim", "off"), "vypnuto"))
             ttk.Combobox(f, textvariable=mv, values=list(names.values()), state="readonly", width=14).grid(
                 row=r, column=1, padx=4, pady=2)
@@ -763,8 +770,14 @@ class LedEditor:
             ttk.Combobox(f, textvariable=sv, values=list(led.FUSION_SPEEDS.values()), state="readonly",
                          width=12).grid(row=r, column=3, padx=4, pady=2)
             sv.trace_add("write", lambda *a, z=z, sv=sv: z.__setitem__("rychlost", rev_speed[sv.get()]))
-            mv.trace_add("write", lambda *a, z=z, mv=mv: z.__setitem__("rezim", rev_names[mv.get()]))
+            mv.trace_add("write", lambda *a, z=z, mv=mv: self._zone_mode(z, rev_names[mv.get()]))
             r += 1
+
+    def _zone_mode(self, z, mode):
+        was = z.get("rezim") == led.SYNC_ZONE
+        z["rezim"] = mode
+        if was != (mode == led.SYNC_ZONE):
+            self._build_gpu()                                # karta grafiky ukazuje zony "jako grafika"
 
     def _pick_zone(self, z, b):
         col = colorchooser.askcolor(color=z.get("barva", "#ffffff"), parent=self.hw)[1]

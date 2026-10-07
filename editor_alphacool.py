@@ -97,6 +97,12 @@ FIELDS.update({
                       ("min", "Minimum (bloky)", "num", None), ("max", "Maximum (bloky)", "num", None),
                       ("bloky", "Počet bloků (od výšky 24 px)", "int", None)],
     "warp": list(_R),
+    # Star Wars (prvky_starwars.py)
+    "zamerovac": _R,
+    "mec": [("popisek", "Popisek", "text", None), ("sablona", "Hodnoty vpravo", "template", None)] + _R + _FONT,
+    "hvezda_smrti": _R + [("prstenec", "Prstenec nabití", "bool", None)],
+    "hyperprostor": _R + [("hvezdy", "Počet hvězd", "int", None), ("ramecek", "Rámeček", "bool", None)],
+    "yavin": list(_R),
 })
 
 
@@ -220,15 +226,21 @@ class AlphaEditor:
         for t, name in prvky.TYPES.items():
             m.add_command(label=name, command=lambda t=t: self.add(t))
         add["menu"] = m
-        add.grid(row=0, column=2, padx=(8, 0))
-        tpl = ttk.Menubutton(head, text="Hotové obrazovky")
+        add.grid(row=0, column=1, padx=(8, 0))
+        screens = ttk.Frame(head)                 # obrazovky na druhem radku (na vysku je sloupec uzky)
+        screens.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        mine = ttk.Menubutton(screens, text="Moje obrazovky")
+        self.my_menu = tk.Menu(mine, tearoff=0, postcommand=self._fill_my_menu)
+        mine["menu"] = self.my_menu
+        mine.grid(row=0, column=0)
+        tpl = ttk.Menubutton(screens, text="Hotové obrazovky")
         tm = tk.Menu(tpl, tearoff=0)
         for name in prvky._scifi.templates():
             tm.add_command(label=name, command=lambda n=name: self.load_template(n))
         tm.add_separator()
         tm.add_command(label="Vrátit předchozí rozvržení", command=self.restore_layout)
         tpl["menu"] = tm
-        tpl.grid(row=0, column=1, padx=(12, 0))
+        tpl.grid(row=0, column=1, padx=(8, 0))
         self.lst = V.listbox(lf, height=12, width=32)
         self.lst.grid(row=1, column=0, sticky="nsew", padx=(8, 0))
         sb = ttk.Scrollbar(lf, orient="vertical", command=self.lst.yview)
@@ -257,13 +269,80 @@ class AlphaEditor:
                                    "Současné se uschová – vrátíš ho položkou „Vrátit předchozí rozvržení“.\n"
                                    "Na displeji se projeví po Uložit.", parent=self.canvas):
             return
-        tpls = prvky._scifi.templates()
-        current = self.acfg.get("prvky", [])
-        if current not in tpls.values():          # prochazeni hotovych obrazovek nesmi prepsat vlastni rozvrzeni
-            self.acfg["prvky_zaloha"] = copy.deepcopy(current)
-        self.acfg["prvky"] = copy.deepcopy(tpls[name])
+        self._stash_current()
+        self.acfg["prvky"] = copy.deepcopy(prvky._scifi.templates()[name])
         self.sel = None
         self._changed(rebuild=True)
+
+    def _stash_current(self):
+        """Uschovat soucasne rozvrzeni na sirku do "prvky_zaloha" - jen kdyz neni hotova ani ulozena
+        obrazovka (prochazeni obrazovek nesmi prepsat rozpracovane rozvrzeni)."""
+        current = self.acfg.get("prvky", [])
+        known = list(prvky._scifi.templates().values()) + [s["prvky"] for s in self._mine().values()]
+        if current and current not in known:
+            self.acfg["prvky_zaloha"] = copy.deepcopy(current)
+
+    # --------------------------------------------------- moje obrazovky
+    def _mine(self):
+        """Ulozene vlastni obrazovky: nazev -> {"na_vysku": bool, "prvky": [...]}."""
+        return self.acfg.setdefault("moje_obrazovky", {})
+
+    def _fill_my_menu(self):
+        m = self.my_menu
+        m.delete(0, "end")
+        m.add_command(label="Uložit současnou jako…", command=self.save_mine)
+        mine = self._mine()
+        if mine:
+            m.add_separator()
+            for name, s in sorted(mine.items(), key=lambda kv: kv[0].lower()):
+                m.add_command(label=name + ("  (na výšku)" if s.get("na_vysku") else ""),
+                              command=lambda n=name: self.load_mine(n))
+            m.add_separator()
+            dm = tk.Menu(m, tearoff=0)
+            for name in sorted(mine, key=str.lower):
+                dm.add_command(label=name, command=lambda n=name: self.delete_mine(n))
+            m.add_cascade(label="Smazat uloženou", menu=dm)
+
+    def save_mine(self):
+        from tkinter import simpledialog
+        mine = self._mine()
+        name = simpledialog.askstring("Moje obrazovky", "Název obrazovky:", parent=self.canvas)
+        name = (name or "").strip()
+        if not name:
+            return
+        if name in mine and not messagebox.askyesno("Moje obrazovky", f"Obrazovka „{name}“ už je uložená.\n"
+                                                    "Přepsat ji současným rozvržením?", parent=self.canvas):
+            return
+        mine[name] = {"na_vysku": prvky.portrait(self.acfg), "prvky": copy.deepcopy(self.items)}
+        self._changed()
+        messagebox.showinfo("Moje obrazovky", f"Obrazovka „{name}“ je připravená.\n"
+                            "Natrvalo se uloží tlačítkem Uložit nahoře.", parent=self.canvas)
+
+    def load_mine(self, name):
+        s = self._mine().get(name)
+        if s is None:
+            return
+        if bool(s.get("na_vysku")) != prvky.portrait(self.acfg):
+            messagebox.showinfo("Moje obrazovky", f"Obrazovka „{name}“ je " +
+                                ("na výšku – přepni otočení displeje na 90° nebo 270°."
+                                 if s.get("na_vysku") else "na šířku – přepni otočení displeje na 0° nebo 180°."),
+                                parent=self.canvas)
+            return
+        if not messagebox.askyesno("Moje obrazovky", f"Nahradit současné rozvržení obrazovkou „{name}“?\n\n"
+                                   "Na displeji se projeví po Uložit.", parent=self.canvas):
+            return
+        if not s.get("na_vysku"):
+            self._stash_current()
+        self.acfg[prvky.layout_key(self.acfg)] = copy.deepcopy(s["prvky"])
+        self.sel = None
+        self._changed(rebuild=True)
+
+    def delete_mine(self, name):
+        if not messagebox.askyesno("Moje obrazovky", f"Smazat uloženou obrazovku „{name}“?\n"
+                                   "Současné rozvržení na displeji zůstane.", parent=self.canvas):
+            return
+        self._mine().pop(name, None)
+        self._changed()
 
     def restore_layout(self):
         """Prohodi soucasne a uschovane rozvrzeni (jde tedy i zpet)."""

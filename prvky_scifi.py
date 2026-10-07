@@ -1,4 +1,5 @@
-# prvky_scifi.py - sci-fi prvky a hotove obrazovky pro Alphacool (Blade Runner, Vetrelci)
+# prvky_scifi.py - sci-fi prvky a hotove obrazovky pro Alphacool (Blade Runner, Vetrelci, Star Trek;
+# Star Wars v prvky_starwars.py)
 # Navrhy z Claude Design (platno, stranka "Alphacool – hotove obrazovky").
 #
 # Prvky (API jako prvky.py: draw(img, d, p, data, now[, history])):
@@ -520,8 +521,8 @@ def _term(x, y, w, h, rows, **kw):
 
 
 def templates():
-    """{nazev: [prvky]} - hotove obrazovky 240x128 (na sirku)."""
-    return {
+    """{nazev: [prvky]} - hotove obrazovky 240x128 (na sirku), vcetne Star Wars (prvky_starwars)."""
+    out = {
         "Nostromo – stav systému (Vetřelec)": _header("NOSTROMO · STAV SYSTÉMU") + [
             _term(2, 15, 114, 66, [("CPU", S(CPU_T) + "°C"), ("ZÁTĚŽ", S(CPU_L) + "%"), ("PŘÍKON", S(CPU_W) + "W"),
                                    ("TAKT", GC + "GHz"), ("JÁDRA", S(CORES, 1, 1))]),
@@ -651,6 +652,8 @@ def templates():
                                                     ("↑", UP, 1, 1, "MB/S"), ("DISK", C_T, 1, 0, "°C")))
         ],
     }
+    out.update(_sw.templates())
+    return out
 
 
 def label(p):
@@ -663,3 +666,12 @@ def label(p):
     else:
         extra = p.get("popisek") or p.get("sablona") or p.get("senzor") or ""
     return f"{t}: {extra}".rstrip(": ")
+
+
+# ------------------------------------------------------------ Star Wars (prvky_starwars.py)
+# Import az na konci: prvky_starwars pouziva funkce a konstanty tohoto modulu.
+import prvky_starwars as _sw  # noqa: E402
+
+DRAW.update(_sw.DRAW)
+TYPES.update(_sw.TYPES)
+NEW.update(_sw.NEW)

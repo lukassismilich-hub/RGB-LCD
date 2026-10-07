@@ -624,6 +624,8 @@ def render(acfg, data, history=None, now=None):
     img = Image.new("1", canvas_size(acfg), 0)
     d = ImageDraw.Draw(img)
     now = now or datetime.now()
+    # seznam prvku pro prvky, ktere se jinym vyhybaji (hvezdy v prvky_starwars)
+    img.info["prvky"] = [p for p in items(acfg) if not p.get("skryty")]
     for p in items(acfg):
         if p.get("skryty"):
             continue

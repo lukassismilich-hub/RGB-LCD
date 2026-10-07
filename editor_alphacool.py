@@ -107,6 +107,10 @@ FIELDS.update({
                ("sablona", "Text se {senzor|dělitel|místa}", "template", None),
                ("zarovnani", "Zarovnání textu", "choice", ALIGN)] + _FONT,
     "rohy": [("delka", "Délka rohů (px)", "int", None)],
+    "hvezdy": [("pocet", "Počet hvězd", "int", None), ("semeno", "Rozmístění (číslo)", "int", None),
+               ("blikani", "Jasné hvězdy blikají", "bool", None)],
+    "lod": [("lod", "Loď", "choice", ["x-wing", "tie"]), ("smer", "Směr", "choice", ["vpravo", "vlevo"]),
+            ("blikani", "Blikající motory (X-wing)", "bool", None)],
 })
 
 

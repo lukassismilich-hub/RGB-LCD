@@ -9,6 +9,10 @@
 #   yavin         takticky displej bitvy o Yavin: Hvezda smrti obiha planetu k mesici podle hodnoty
 #   stitek        radek se stitkem: popisek inverzne v plnem obdelniku, za nim text ze sablony
 #   rohy          rohovy ramecek (jen rohy, jako zamerovaci displej)
+#   hvezdy        hvezdne pozadi: kresli se jako POSLEDNI a hvezdu da jen tam, kde je kolem tma
+#                 (nikdy pres cary ani Hvezdu smrti), mimo plochu ostatnich prvku (img.info["prvky"],
+#                 krome pozadi pres vic nez pulku displeje) a mimo planety (img.info["planety"])
+#   lod           mala vesmirna lod: X-wing (shora) nebo stihac TIE (zepredu)
 #
 # Vsechno se kresli jen cary a body (1 bit, 240x128) - zadna loga ani pisma z filmu.
 
@@ -164,6 +168,7 @@ def draw_deathstar(img, d, p, data, now):
     mask = Image.new("1", lay.size, 0)
     ImageDraw.Draw(mask).ellipse((1, 1, 2 * r - 1, 2 * r - 1), fill=1)
     img.paste(lay, (cx - r, cy - r), mask)
+    img.info.setdefault("planety", []).append((cx, cy, R))
     if fr >= 0.95 and now.microsecond < 600000:              # plne nabito: paprsek
         bx, by = cx - r * 0.38, cy - r * 0.36
         d.line((bx, by, x, by - r * 0.3), fill=1, width=2)
@@ -237,6 +242,7 @@ def draw_yavin(img, d, p, data, now):
         if now.microsecond < 600000:
             _dotted_line(ld, (sx_, sy_), (mx, my), step=2)
     img.paste(1, (x, y), lay)
+    img.info.setdefault("planety", []).append((x + px, y + py, pr + 1))
 
 
 # ------------------------------------------------------------ obecne: radek se stitkem, rohovy ramecek
@@ -268,11 +274,113 @@ def draw_corners(img, d, p, data, now):
         d.line((cx, cy, cx, cy + sy * k), fill=1)
 
 
+# ------------------------------------------------------------ hvezdne pozadi a lode
+def draw_stars(img, d, p, data, now):
+    """Hvezdy jen na prazdnych mistech: kolem hvezdy musi byt tma (2 px u tecky, 3 px u krizku,
+    4 px u velke hvezdy), mimo planety. Pozice jsou pevne (seminko), takze se nehybou.
+    Blikaji krizky, velke hvezdy a asi tretina tecek - kazda vlastnim tempem (perioda 3-7 s)."""
+    x, y, w, h = p["x"], p["y"], p["w"], p["h"]
+    if w < 4 or h < 4:
+        return
+    rng = random.Random(int(_num(p, "semeno", 11)))
+    planets = img.info.get("planety", [])
+    half = img.width * img.height / 2
+    boxes, drawn = [], True                                   # prvky pred hvezdami uz jsou nakreslene
+    for q in img.info.get("prvky", []):
+        if q is p:
+            drawn = False
+            continue
+        if q.get("typ") in BACKDROP or q.get("w", 0) * q.get("h", 0) >= half:
+            continue
+        qx, qy, qw, qh = q.get("x", 0), q.get("y", 0), q.get("w", 0), q.get("h", 0)
+        if drawn:                                             # jen to, co prvek opravdu nakreslil (text bez okraje)
+            bb = img.crop((qx, qy, qx + qw, qy + qh)).getbbox()
+            if bb is None:
+                continue
+            qx, qy, qw, qh = qx + bb[0], qy + bb[1], bb[2] - bb[0], bb[3] - bb[1]
+        boxes.append((qx - 2, qy - 2, qx + qw + 1, qy + qh + 1))
+    want = int(_num(p, "pocet", 45))
+    t = _t(now)
+    blink = p.get("blikani", True)
+    placed = 0
+    for _ in range(want * 4):                                 # stejna posloupnost kandidatu v kazdem snimku
+        sx, sy = x + rng.randrange(w), y + rng.randrange(h)
+        kind = rng.random()
+        big, cross = kind < 0.08, kind < 0.30                 # 8 % velkych, 22 % krizku, zbytek tecky
+        phase, speed = rng.random(), rng.uniform(0.15, 0.33)
+        dot_blinks = rng.random() < 0.35
+        if placed >= want:
+            continue
+        if any((sx - cx) ** 2 + (sy - cy) ** 2 < (r + 3) ** 2 for cx, cy, r in planets):
+            continue
+        if any(x0 <= sx <= x1 and y0 <= sy <= y1 for x0, y0, x1, y1 in boxes):
+            continue                                          # na plose jineho prvku (radky, hodiny, lode)
+        rr = 4 if big else 3 if cross else 2
+        if img.crop((sx - rr, sy - rr, sx + rr + 1, sy + rr + 1)).getbbox():
+            continue                                          # blizko textu nebo cary
+        placed += 1
+        ph = (t * speed + phase) % 1.0 if blink else 0.0
+        arm = [(sx - 1, sy), (sx + 1, sy), (sx, sy - 1), (sx, sy + 1)]
+        if big:                                               # velka: kriz s rameny 2 px, zablesk zmensi
+            d.point([(sx, sy)] + arm, fill=1)
+            if ph < 0.7:
+                d.point([(sx - 2, sy), (sx + 2, sy), (sx, sy - 2), (sx, sy + 2)], fill=1)
+        elif cross:                                           # krizek, chvili jen tecka
+            d.point((sx, sy), fill=1)
+            if ph < 0.65:
+                d.point(arm, fill=1)
+        elif not (dot_blinks and ph > 0.7):                   # tecka, nektere na chvili zhasnou
+            d.point((sx, sy), fill=1)
+
+
+def _xwing(ld, glow):
+    """X-wing shora, nos vpravo, 25 x 19 px."""
+    ld.polygon([(5, 8), (19, 8), (24, 9), (19, 10), (5, 10)], fill=1)          # trup a nos
+    ld.point([(15, 9), (16, 9)], fill=0)                                      # kokpit
+    ld.polygon([(6, 8), (10, 8), (9, 2), (7, 2)], fill=1)                     # kridla
+    ld.polygon([(6, 10), (10, 10), (9, 16), (7, 16)], fill=1)
+    ld.line((6, 1, 18, 1), fill=1)                                            # laserova dela na koncich kridel
+    ld.line((6, 17, 18, 17), fill=1)
+    ld.rectangle((2, 6, 6, 7), fill=1)                                        # motory
+    ld.rectangle((2, 11, 6, 12), fill=1)
+    if glow:
+        ld.point([(0, 6), (0, 7), (0, 11), (0, 12)], fill=1)
+
+
+def _tie(ld):
+    """Stihac TIE zepredu, 15 x 11 px."""
+    ld.rectangle((0, 0, 1, 10), fill=1)                                       # kridla z boku
+    ld.rectangle((13, 0, 14, 10), fill=1)
+    ld.line((2, 5, 4, 5), fill=1)                                             # vzpery
+    ld.line((10, 5, 12, 5), fill=1)
+    ld.ellipse((4, 2, 10, 8), outline=1)                                      # kabina s oknem
+    ld.ellipse((6, 4, 8, 6), outline=1)
+
+
+SHIPS = {"x-wing": (25, 19), "tie": (15, 11)}
+BACKDROP = ("hvezdy", "yavin")                                # pozadi - hvezdy se vyhnou jen planete
+
+
+def draw_ship(img, d, p, data, now):
+    x, y, w, h = p["x"], p["y"], p["w"], p["h"]
+    kind = p.get("lod", "x-wing")
+    sw, sh = SHIPS.get(kind, SHIPS["x-wing"])
+    lay, ld = _layer(sw, sh)
+    if kind == "tie":
+        _tie(ld)
+    else:
+        _xwing(ld, glow=not p.get("blikani", True) or now.microsecond < 500000)
+    if p.get("smer", "vpravo") == "vlevo":
+        lay = lay.transpose(Image.FLIP_LEFT_RIGHT)
+    img.paste(1, (x + (w - sw) // 2, y + (h - sh) // 2), lay)                 # na stred prvku
+
+
 DRAW = {"zamerovac": draw_trench, "mec": draw_saber, "hvezda_smrti": draw_deathstar, "hyperprostor": draw_hyperspace,
-        "yavin": draw_yavin, "stitek": draw_tag_row, "rohy": draw_corners}
+        "yavin": draw_yavin, "stitek": draw_tag_row, "rohy": draw_corners, "hvezdy": draw_stars, "lod": draw_ship}
 TYPES = {"zamerovac": "Zaměřovač X-wingu (Star Wars)", "mec": "Světelný meč (Star Wars)",
          "hvezda_smrti": "Hvězda smrti (Star Wars)", "hyperprostor": "Hyperprostor (Star Wars)",
-         "yavin": "Bitva o Yavin (Star Wars)", "stitek": "Řádek se štítkem", "rohy": "Rohový rámeček"}
+         "yavin": "Bitva o Yavin (Star Wars)", "stitek": "Řádek se štítkem", "rohy": "Rohový rámeček",
+         "hvezdy": "Hvězdy (dávat na konec seznamu)", "lod": "Vesmírná loď (Star Wars)"}
 NEW = {
     "zamerovac": dict(x=0, y=0, w=140, h=100, senzor=CPU_L, min=0, max=100, delitel=1),
     "mec": dict(x=2, y=2, w=236, h=27, popisek="CPU", sablona=S(CPU_T) + "°C", senzor=CPU_T, min=30, max=95,
@@ -283,6 +391,8 @@ NEW = {
     "stitek": dict(x=2, y=2, w=120, h=11, popisek="CPU", sablona=S(CPU_T) + "°", sirka_stitku=24,
                    zarovnani="vlevo", pismo=TERM),
     "rohy": dict(x=2, y=2, w=100, h=60, delka=6),
+    "hvezdy": dict(x=0, y=0, w=240, h=128, pocet=45, semeno=11, blikani=True),
+    "lod": dict(x=2, y=2, w=27, h=21, lod="x-wing", smer="vpravo", blikani=True),
 }
 
 
@@ -357,5 +467,9 @@ def templates():
             _el("hodiny", x=150, y=12, w=88, h=11, format="den datum", zarovnani="vpravo", pismo=SMALL),
             # vpravo dole pod drahou
             _row(160, 101, 78, f"{S(WIFI_S)}dB {S(LINK)}Mb", al="vpravo"),
-            _row(134, 115, 104, f"↓{S(DOWN, 1, 1)} ↑{S(UP, 1, 1)} MB/s", al="vpravo")],
+            _row(134, 115, 104, f"↓{S(DOWN, 1, 1)} ↑{S(UP, 1, 1)} MB/s", al="vpravo"),
+            # lode a hvezdy (hvezdy posledni - hledaji prazdna mista v hotovem obrazku)
+            _el("lod", x=170, y=56, w=27, h=21, lod="x-wing", smer="vpravo"),
+            _el("lod", x=221, y=27, w=17, h=13, lod="tie"),
+            _el("hvezdy", x=0, y=0, w=240, h=128, pocet=80)],
     }

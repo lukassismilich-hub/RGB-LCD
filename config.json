@@ -1321,7 +1321,7 @@
         "barva": "#ffffff",
         "rychlost": "slowest",
         "obraceny_smer": false,
-        "posun": 4,
+        "posun": 5,
         "obracene": false
       },
       "D_LED2": {
@@ -1362,23 +1362,23 @@
     "efekt": {
       "typ": "stirani",
       "barvy": [
+        "#ff0000",
+        "#ffff00",
+        "#00ff00",
         "#00ffff",
+        "#0000ff",
+        "#ff00ff",
         "#ffffff",
-        "#00e600",
-        "#11ff4d",
-        "#00ffff",
-        "#0040ff",
-        "#8000ff",
         "#ff00bf"
       ],
-      "rychlost": 5,
+      "rychlost": 1,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
       "max": 90,
-      "pocet_barev": 8,
-      "otoceni": 90,
-      "pauza": 3.0,
+      "pocet_barev": 7,
+      "otoceni": 270,
+      "pauza": 2.0,
       "barvy_rezim": "barvy"
     },
     "efekt_f140": {

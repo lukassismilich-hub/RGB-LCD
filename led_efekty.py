@@ -68,7 +68,9 @@ DEFAULT_PALETTE = ["#ff0000", "#0060ff", "#00ff40", "#ffb000", "#b000ff", "#00e5
 # efekty, ktere vyuzivaji polohu LED na kruhu (nahore / dole); "otoceni" = 0 / 90 / 180 / 270 stupnu
 VERTICAL = ("plamen", "vodopad", "hladina", "pretahovana")
 # duha - prelevani: "barvy_rezim" "duha" = plna duha (vychozi), "barvy" = vlastni paleta
-# dychani: "pauza" = jak dlouho LED sviti naplno, nez zacne zhasinat a dalsi barva (s, 0-10)
+# "pauza" (s, 0-10): dychani = jak dlouho LED sviti naplno, nez zacne zhasinat a dalsi barva;
+# stridani / stirani = jak dlouho vsechny ventilatory sviti stejnou barvou, nez zacne dalsi zmena
+PAUSE_EFFECTS = ("dychani", "stridani", "stirani")
 MAX_PAUSE = 10.0
 
 DEFAULT_EFFECT = {"typ": "duha_toceni", "barvy": ["#ff0000", "#0060ff", "#00ff40"], "rychlost": 4,
@@ -100,6 +102,13 @@ def palette(eff):
         if c not in cols:
             cols.append(c)
     return cols[:n]
+
+
+def _pause(eff):
+    try:
+        return max(0.0, min(MAX_PAUSE, float(eff.get("pauza", 0))))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def hex_rgb(h):
@@ -196,10 +205,7 @@ class Engine:
             return [c] * n
         if typ == "dychani":
             period = 6.0 / speed * 2              # jeden nadech (s)
-            try:
-                pause = max(0.0, min(MAX_PAUSE, float(eff.get("pauza", 0))))
-            except (TypeError, ValueError):
-                pause = 0.0
+            pause = _pause(eff)
             # cyklus trva vzdy period + pauza (rychlost efektu se pauzou ani vlnou nemeni);
             # nadech jde vlnou (ventilator s nejvetsim posunem prvni), pak sviti vsechny najednou
             # "pauza" sekund a vlnou zhasnou - vlna se vejde do nadechu a vydechu
@@ -265,9 +271,16 @@ class Engine:
             b = _comet((head + n / 2) % n, n, max(2.0, n * 0.4), c2, direction)
             return [tuple(max(a[i][j], b[i][j]) for j in range(3)) for i in range(n)]
         if typ == "stirani":
-            x = t * rate * 1.5 + offset
-            step = int(x)
-            edge = (x - step) * n
+            # jedno setreni ventilatoru trva "wipe" (podle rychlosti). Pri vlne se ventilatory setrou
+            # postupne jeden po druhem (poradi podle posunu, ventilator s nejvetsim posunem prvni);
+            # az sviti vsechny novou barvou, drzi ji "pauza" sekund, pak dalsi barva.
+            # Posuny vlny jsou v/m pro m pozic, span = (m - 1) / m -> m = 1 / (1 - span).
+            wipe = 1.0 / (rate * 1.5)
+            slots = max(1, round(1.0 / (1.0 - span))) if span < 1 else 1
+            slot = round((span - abs(offset)) * slots)            # 0 = setre se prvni
+            total = slots * wipe + _pause(eff)
+            step = math.floor(t / total)
+            edge = max(0.0, min(1.0, (t - step * total - slot * wipe) / wipe)) * n
             prev, cur = cols[step % len(cols)], cols[(step + 1) % len(cols)]
             out = []
             for i in range(n):
@@ -344,7 +357,13 @@ class Engine:
             k = (1 - math.cos((x % 1.0) * 2 * math.pi)) / 2
             return [_hsv(int(x) * 0.13 + x * 0.02, k)] * n
         if typ == "stridani":                     # ostre prepinani barev
-            idx = int(math.floor(t * speed * 0.25 + offset * len(cols))) % len(cols)
+            # krok = jak dlouho trva jedna barva (podle rychlosti); cyklus = krok + pauza.
+            # Pri vlne se kazda zmena barvy siri ventilator po ventilatoru (ventilator s nejvetsim
+            # posunem prvni, prodleva (span - offset) * krok) - az sviti vsechny stejne, drzi barvu
+            # do konce kroku a "pauza" sekund, pak zacne dalsi zmena.
+            step = 4.0 / speed
+            total = step + _pause(eff)
+            idx = int(math.floor((t - (span - offset) * step) / total)) % len(cols)
             return [cols[idx]] * n
         if typ == "blesky":
             st = self.state.setdefault(("blesky", key), [0.0, 0.0])      # jas zablesku, cas dalsiho

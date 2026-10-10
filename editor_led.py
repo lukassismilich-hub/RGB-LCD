@@ -212,8 +212,9 @@ class LedEditor:
                             command=lambda: eff.__setitem__("opacny_smer", dv.get())).grid(
                 row=row, column=1, sticky="w", padx=8)
             row += 1
-        if typ == "dychani":                                # pauza naplno mezi nadechy
-            ttk.Label(f, text="Pauza naplno", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+        if typ in fx.PAUSE_EFFECTS:                         # pauza naplno / se stejnou barvou
+            ttk.Label(f, text="Pauza naplno" if typ == "dychani" else "Pauza", style="Muted.TLabel").grid(
+                row=row, column=0, sticky="w", pady=4)
             pf = ttk.Frame(f)
             pf.grid(row=row, column=1, sticky="ew", padx=8)
             pv = tk.DoubleVar(value=float(eff.get("pauza", 0)))

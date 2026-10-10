@@ -543,7 +543,7 @@
         "y": 0,
         "w": 240,
         "h": 128,
-        "pocet": 80,
+        "pocet": 60,
         "semeno": 11,
         "blikani": true,
         "typ": "hvezdy"
@@ -1360,10 +1360,10 @@
     "stejne_pro_vse": true,
     "vlna": true,
     "efekt": {
-      "typ": "dychani",
+      "typ": "stirani",
       "barvy": [
-        "#00ff00",
-        "#ffbf00",
+        "#00ffff",
+        "#ffffff",
         "#00e600",
         "#11ff4d",
         "#00ffff",
@@ -1371,7 +1371,7 @@
         "#8000ff",
         "#ff00bf"
       ],
-      "rychlost": 2,
+      "rychlost": 5,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,

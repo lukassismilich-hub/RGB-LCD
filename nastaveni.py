@@ -1006,7 +1006,14 @@ class App(tk.Tk):
             self.cfg["plasticky_vzhled"] = pv.get()
             self._update_preview()
         ttk.Checkbutton(g, text="Plastický (3D) vzhled – bary, oblouky, grafy, čísla", variable=pv,
-                        command=on_plastic).grid(row=8, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 14))
+                        command=on_plastic).grid(row=8, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 0))
+        gv = tk.BooleanVar(value=self.cfg.get("plasticka_zare", False))
+
+        def on_glow():
+            self.cfg["plasticka_zare"] = gv.get()
+            self._update_preview()
+        ttk.Checkbutton(g, text="Záře kolem 3D tvarů", variable=gv,
+                        command=on_glow).grid(row=9, column=0, columnspan=2, sticky="w", padx=32, pady=(6, 14))
         self._build_program_card(f)
         f.update_idletasks()
         sc.canvas.config(width=f.winfo_reqwidth())
@@ -1115,7 +1122,8 @@ class App(tk.Tk):
             scr = self.cfg["obrazovky"][self.sel]
             scr, data, hist, sample = self._preview_data(scr)
             img = screens.render(scr, data, self.cfg["velikost_obsahu"], self.cfg["gama_grafiky"],
-                                 self.cfg.get("velikost_textu", 1.0), hist, self.cfg.get("plasticky_vzhled", True))
+                                 self.cfg.get("velikost_textu", 1.0), hist, self.cfg.get("plasticky_vzhled", True),
+                                 self.cfg.get("plasticka_zare", False))
         except Exception as e:
             self.src_lbl.config(text=f"Chyba náhledu: {e}")
             return

@@ -366,6 +366,8 @@ def _unit_after(img, x_left, y_top, txt, font, unit, tcols, deg_px=26, unit_px=1
 #   panely = vystouple (svetla horni hrana, tmava spodni), velka cisla = vytlacena do hloubky.
 # Stinovani se pocita pres masky tvaru (Pillow), takze plati pro libovolny tvar a barvu.
 PLASTIC = True              # render() prepina podle config["plasticky_vzhled"]
+GLOW = False                # zare kolem barevnych tvaru (config["plasticka_zare"]); na LCD je obrys
+                            # tvaru rozmazany a obrazce pusobi mensi, proto vychozi vypnuto
 GROOVE = (10, 12, 15)       # dno drazky oblouku
 _c3d = {}
 
@@ -481,6 +483,8 @@ def _ring_shade(img, mask, cx, cy, r, thick, shade=TUBE):
 
 def _glow(img, layer, mask, radius, alpha=0.45):
     """Mekka zare barevneho tvaru (layer = tvar na cernem, mask = tvar); kreslit pred tvarem."""
+    if not GLOW:
+        return
     bb = mask.getbbox()
     if not bb or radius <= 0 or alpha <= 0:
         return
@@ -2128,10 +2132,12 @@ def _fit(big, box, fill):
     return out
 
 
-def render(scr, data, fill=0.92, gamma=0.65, text_scale=1.0, history=None, plastic=None):
+def render(scr, data, fill=0.92, gamma=0.65, text_scale=1.0, history=None, plastic=None, glow=None):
     """scr = popis obrazovky, data = {senzor: {"value", "unit"}}, history = {senzor: [hodnoty]},
-    plastic = plasticky (3D) vzhled (None = ponechat PLASTIC)"""
-    global _TS, PLASTIC
+    plastic = plasticky (3D) vzhled, glow = zare kolem tvaru (None = ponechat PLASTIC / GLOW)"""
+    global _TS, PLASTIC, GLOW
+    if glow is not None:
+        GLOW = bool(glow)
     if plastic is not None and bool(plastic) != PLASTIC:
         PLASTIC = bool(plastic)
         _boxes.clear()                                   # orez se pocita z vykresleni

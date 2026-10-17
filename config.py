@@ -49,6 +49,7 @@ DEFAULTS = {
     "velikost_textu": 1.0,
     "gama_grafiky": 0.65,
     "plasticky_vzhled": True,                            # 3D vzhled obrazovek Krakenu (screens.PLASTIC)
+    "plasticka_zare": False,                             # zare kolem 3D tvaru (screens.GLOW)
     "rotace_s": 5,
     "obnova_s": 1,
     "auto_obrazovky": True,

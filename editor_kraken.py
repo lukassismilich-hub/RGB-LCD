@@ -98,6 +98,7 @@ class KrakenEditor(tk.Toplevel):
         try:
             _scr, data, hist, sample = self.app._preview_data(self.scr)
             K.SC.PLASTIC = bool(self.app.cfg.get("plasticky_vzhled", True))
+            K.SC.GLOW = bool(self.app.cfg.get("plasticka_zare", False))
             big = K.render(self.items, data, hist)
             img = big.resize((240 * SCALE, 240 * SCALE), Image.LANCZOS)
             gamma = self.app.cfg.get("gama_grafiky", 1.0)

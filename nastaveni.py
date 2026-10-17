@@ -999,7 +999,14 @@ class App(tk.Tk):
         def on_auto():
             self.cfg["auto_obrazovky"] = av.get()
         ttk.Checkbutton(g, text="Přidávat nové senzory z HWiNFO", variable=av,
-                        command=on_auto).grid(row=7, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 14))
+                        command=on_auto).grid(row=7, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 0))
+        pv = tk.BooleanVar(value=self.cfg.get("plasticky_vzhled", True))
+
+        def on_plastic():
+            self.cfg["plasticky_vzhled"] = pv.get()
+            self._update_preview()
+        ttk.Checkbutton(g, text="Plastický (3D) vzhled – bary, oblouky, grafy, čísla", variable=pv,
+                        command=on_plastic).grid(row=8, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 14))
         self._build_program_card(f)
         f.update_idletasks()
         sc.canvas.config(width=f.winfo_reqwidth())
@@ -1108,7 +1115,7 @@ class App(tk.Tk):
             scr = self.cfg["obrazovky"][self.sel]
             scr, data, hist, sample = self._preview_data(scr)
             img = screens.render(scr, data, self.cfg["velikost_obsahu"], self.cfg["gama_grafiky"],
-                                 self.cfg.get("velikost_textu", 1.0), hist)
+                                 self.cfg.get("velikost_textu", 1.0), hist, self.cfg.get("plasticky_vzhled", True))
         except Exception as e:
             self.src_lbl.config(text=f"Chyba náhledu: {e}")
             return

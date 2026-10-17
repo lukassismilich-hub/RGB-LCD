@@ -48,6 +48,7 @@ DEFAULTS = {
     "velikost_obsahu": 0.92,
     "velikost_textu": 1.0,
     "gama_grafiky": 0.65,
+    "plasticky_vzhled": True,                            # 3D vzhled obrazovek Krakenu (screens.PLASTIC)
     "rotace_s": 5,
     "obnova_s": 1,
     "auto_obrazovky": True,

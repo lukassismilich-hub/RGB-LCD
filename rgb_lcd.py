@@ -164,7 +164,7 @@ def render_screen(cfg, data, hist, seen_max, rot, bad):
         key = json.dumps(scr, sort_keys=True, ensure_ascii=False)
         try:
             return screens.render(scr, data, cfg["velikost_obsahu"], cfg["gama_grafiky"],
-                                  cfg.get("velikost_textu", 1.0), hist)
+                                  cfg.get("velikost_textu", 1.0), hist, cfg.get("plasticky_vzhled", True))
         except Exception as e:
             if scr.get("typ") not in screens.DRAW:
                 e = "tahle verze aplikace typ nezná - restartuj aplikaci"
@@ -173,7 +173,8 @@ def render_screen(cfg, data, hist, seen_max, rot, bad):
                 log.error("Obrazovku %s nejde vykreslit (%s) - preskakuji ji.", scr.get("typ"), e)
             rot["idx"] += 1                      # zkusit dalsi obrazovku v rotaci
     try:                                         # nejde vykreslit nic: aspon hodiny
-        return screens.render({"typ": "hodiny"}, data, 0.92, cfg.get("gama_grafiky", 0.65))
+        return screens.render({"typ": "hodiny"}, data, 0.92, cfg.get("gama_grafiky", 0.65),
+                              plastic=cfg.get("plasticky_vzhled", True))
     except Exception:
         return None
 

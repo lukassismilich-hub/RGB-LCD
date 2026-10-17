@@ -110,6 +110,9 @@ def _line_text(img, d, p, text, weight="ExtraBold", px=16, cols=None):
 def _arc(img, cx, cy, r, thick, start, span, fr, cols, track=None, dim=None, caps=True, reverse=False):
     """Oblouk s prechodem podel oblouku; uhly: 0 = nahore, po smeru hodin.
     reverse = plni se od konce oblouku (napr. pravy oblouk rostouci zdola nahoru)."""
+    if SC.PLASTIC:
+        return SC.arc3d(img, cx, cy, r, thick, start - 90, span, fr, cols, dim=dim, caps=caps, reverse=reverse,
+                        track=track is not None)
     d = ImageDraw.Draw(img)
     box = (cx - r, cy - r, cx + r, cy + r)
     rr = r - thick / 2
@@ -159,6 +162,11 @@ def draw_panel(img, d, p, data, now, history):
     x0, y0, x1, y1 = _box(p)
     r = min(_num(p, "zaobleni", 11) * S, (x1 - x0) / 2, (y1 - y0) / 2)
     outline = _rgb(p, "barva_obrysu", "#2c323b") if p.get("obrys") else None
+    if SC.PLASTIC:
+        SC._raised(img, (x0, y0, x1, y1), r, _rgb(p, "barva", "#0e1013"))
+        if outline:
+            d.rounded_rectangle((x0, y0, x1 - 1, y1 - 1), r, outline=outline, width=S)
+        return
     d.rounded_rectangle((x0, y0, x1 - 1, y1 - 1), r, fill=_rgb(p, "barva", "#0e1013"), outline=outline,
                         width=S if outline else 0)
 
@@ -200,6 +208,9 @@ def draw_bar(img, d, p, data, now, history):
     x0, y0, x1, y1 = _box(p)
     w, h = x1 - x0, y1 - y0
     r = min(w, h) // 2 if p.get("zaobleni", True) else 0
+    if SC.PLASTIC:
+        return SC._bar3d(img, (x0, y0, x1, y1), r, fr, _cols(p, "#3cff3c", "#ff3b3b"), p.get("smer") == "svisle",
+                         base=_rgb(p, "podklad", TRACK))
     d.rounded_rectangle((x0, y0, x1 - 1, y1 - 1), r, fill=_rgb(p, "podklad", TRACK))
     if fr <= 0:
         return
@@ -228,6 +239,13 @@ def draw_segments(img, d, p, data, now, history):
     cols = _cols(p, "#22d3ee", "#ff9f1c")
     off = _rgb(p, "podklad", "#1a1d22")
     rad = min(_num(p, "zaobleni", 1) * S, sl / 2)
+    if SC.PLASTIC:
+        boxes = []
+        for i in range(n):
+            a = i * (sl + gap)
+            b = (x0, y1 - a - sl, x1 - 1, y1 - a - 1) if vertical else (x0 + a, y0, x0 + a + sl - 1, y1 - 1)
+            boxes.append(b + (SC.mix(*cols, i / max(1, n - 1)) if i < lit else None,))
+        return SC._segments3d(img, boxes, cols, rad, off=off, vertical=vertical, bar_box=(x0, y0, x1, y1))
     for i in range(n):
         col = SC.mix(*cols, i / max(1, n - 1)) if i < lit else off
         a = i * (sl + gap)
@@ -256,6 +274,10 @@ def draw_ring(img, d, p, data, now, history):
     lit = round(fr * n)
     gapd = min(2.4, step / 3)
     box = (cx - r, cy - r, cx + r, cy + r)
+    if SC.PLASTIC:
+        return SC.seg_ring3d(img, cx, cy, r, thick, [
+            (start - 90 + i * step + gapd / 2, start - 90 + (i + 1) * step - gapd / 2, SC.mix(*cols, i / (n - 1)), i < lit)
+            for i in range(n)])
     for i in range(n):
         a0 = start - 90 + i * step + gapd / 2
         col = SC.mix(*cols, i / (n - 1))
@@ -281,6 +303,10 @@ def draw_gauge(img, d, p, data, now, history):
     ln = r - thick - 8 * S * k
     perp = a + math.pi / 2
     base = max(2 * S, 7 * S * k)
+    if SC.PLASTIC:                                        # rucicka ze dvou pulek a vypoukla cepicka
+        SC._needle(img, cx, cy, start - 90 + span * fr, ln, base, base * 1.8, nc)
+        SC._dome(img, cx, cy, max(3 * S, 12 * S * k), SC._lerp(nc, (120, 128, 138), 0.3))
+        return
     d.polygon([(cx + base * math.cos(perp), cy + base * math.sin(perp)), (cx + ln * math.cos(a), cy + ln * math.sin(a)),
                (cx - base * math.cos(perp), cy - base * math.sin(perp))], fill=nc)
     hub = max(3 * S, 12 * S * k)
@@ -309,9 +335,18 @@ def draw_graph(img, d, p, data, now, history):
         area = Image.new("L", img.size, 0)
         ImageDraw.Draw(area).polygon(pts + [(pts[-1][0], y1 - pad), (pts[0][0], y1 - pad)], fill=150)
         SC._paint(img, area, SC._vgrad(w, h + 1, *cols), (x0, y0))
+    light = SC._vgrad(w, h + 1, *[SC.mix(c, SC.WHITE, 0.35) for c in cols])
+    if SC.PLASTIC:                                        # cara s tmavym bokem a odleskem
+        full = Image.new("RGB", img.size, SC.BLACK)
+        full.paste(light, (x0, y0))
+        SC._line3d(img, pts, lw, full, side=SC._dim(cols[1], 0.4))
+        if dot:
+            ex, ey = pts[-1]
+            SC._dome(img, ex, ey, lw * 1.4, SC.mix(cols[1], SC.WHITE, 0.4))
+        return
     line = Image.new("L", img.size, 0)
     ImageDraw.Draw(line).line(pts, fill=255, width=int(lw), joint="curve")
-    SC._paint(img, line, SC._vgrad(w, h + 1, *[SC.mix(c, SC.WHITE, 0.35) for c in cols]), (x0, y0))
+    SC._paint(img, line, light, (x0, y0))
     if dot:
         ex, ey = pts[-1]
         rr = lw * 1.3
@@ -332,12 +367,16 @@ def draw_radial(img, d, p, data, now, history):
         vals = [None] * n
     r1, ln = r * 0.58, r * 0.4
     w = max(S, r * 0.045)
+    rays = []
     for i, v in enumerate(vals):
         fr = 0.06 if v is None else max(0.06, SC._frac(v, lo, hi))
         a = math.radians(i * 6 - 90)
         r2 = r1 + ln * fr
         xa, ya, xb, yb = cx + r1 * math.cos(a), cy + r1 * math.sin(a), cx + r2 * math.cos(a), cy + r2 * math.sin(a)
-        col = SC.OFF if v is None else SC.WHITE if i == n - 1 else SC.mix(*cols, fr)
+        rays.append(((xa, ya, xb, yb), SC.OFF if v is None else SC.WHITE if i == n - 1 else SC.mix(*cols, fr)))
+    if SC.PLASTIC:
+        return SC._rays3d(img, rays, w)
+    for (xa, ya, xb, yb), col in rays:
         d.line((xa, ya, xb, yb), fill=col, width=int(w))
         for x, y in ((xa, ya), (xb, yb)):
             d.ellipse((x - w / 2, y - w / 2, x + w / 2, y + w / 2), fill=col)
@@ -348,7 +387,12 @@ def draw_level(img, d, p, data, now, history):
     cx, cy, r = _circle(p)
     cols = _cols(p, "#22d3ee", "#1d4ed8")
     R = r * 0.94
-    d.ellipse((cx - R, cy - R, cx + R, cy + R), fill=(7, 11, 14))
+    if SC.PLASTIC:                                        # kovova obruc a tmave dno koule
+        SC._metal_ring(img, cx, cy, r, r * 0.07)
+        SC._disc(img, cx, cy, r * 0.93, (13, 20, 24), (1, 1, 1))
+        R = r * 0.9
+    else:
+        d.ellipse((cx - R, cy - R, cx + R, cy + R), fill=(7, 11, 14))
     level = cy + R - 2 * R * fr
     vessel = Image.new("L", img.size, 0)
     ImageDraw.Draw(vessel).ellipse((cx - R, cy - R, cx + R, cy + R), fill=255)
@@ -359,9 +403,36 @@ def draw_level(img, d, p, data, now, history):
         ImageDraw.Draw(wave).polygon(pts + [(xb, cy + R + S), (xa, cy + R + S)], fill=alpha)
         fill = SC._vgrad(img.width, img.height, cols[1], cols[0]) if grad else Image.new("RGB", img.size, cols[0])
         SC._paint(img, ImageChops.multiply(wave, vessel), fill)
+    if SC.PLASTIC:
+        _glass(img, vessel, cx, cy, R, [(x, level + R * 0.045 * math.sin((x - xa) / (R * 0.37)))
+                                        for x in range(xa, xb + 1, 3 * S)])
+        return
     rw = max(S, r * 0.055)
     d.ellipse((cx - r + rw / 2, cy - r + rw / 2, cx + r - rw / 2, cy + r - rw / 2),
               outline=_rgb(p, "barva_okraje", "#16252d"), width=int(rw))
+
+
+def _glass(img, vessel, cx, cy, R, surface):
+    """Sklenena koule: lesk hladiny, tmavnuti k okraji, mekky odlesk vlevo nahore."""
+    m = Image.new("L", img.size, 0)
+    ImageDraw.Draw(m).line(surface, fill=255, width=max(S, int(R * 0.03)))
+    SC._tint(img, ImageChops.multiply(m, vessel), SC.WHITE, 0.55)
+    sh = Image.new("L", img.size, 0)
+    sd = ImageDraw.Draw(sh)
+    ox, oy = cx - R * 0.16, cy - R * 0.24
+    for i in range(30, -1, -1):
+        t = i / 30
+        rr = R * 1.25 * t
+        sd.ellipse((ox - rr, oy - rr, ox + rr, oy + rr), fill=int(255 * SC._interp([(0, 0), (0.62, 0.12), (1, 0.8)], t)))
+    SC._tint(img, ImageChops.multiply(sh, vessel), SC.BLACK)
+    hl = Image.new("L", img.size, 0)
+    hd = ImageDraw.Draw(hl)
+    hx, hy, rx, ry = cx - R * 0.34, cy - R * 0.58, R * 0.42, R * 0.22
+    for i in range(16):
+        t = i / 15
+        hd.ellipse((hx - rx * (1 - t), hy - ry * (1 - t), hx + rx * (1 - t), hy + ry * (1 - t)), fill=int(150 * t ** 1.5))
+    SC._tint(img, ImageChops.multiply(hl, vessel), SC.WHITE)
+    ImageDraw.Draw(img).ellipse((cx - R, cy - R, cx + R, cy + R), outline=SC.BLACK, width=max(S, int(R * 0.015)))
 
 
 def clock_text(fmt, now):
@@ -389,6 +460,23 @@ def draw_analog(img, d, p, data, now, history):
     cx, cy, r = _circle(p)
     dial, hc, sc = _rgb(p, "barva_od", "#ffffff"), _rgb(p, "barva_do", "#ffffff"), _rgb(p, "barva_sekund", "#ff3c28")
     k = r / (114 * S)                                     # meritko vuci puvodnim rucickovym hodinam
+    if SC.PLASTIC:                                        # kovova luneta, zapusteny ciferník, plasticke rucicky
+        SC._metal_ring(img, cx, cy, r, 6 * S * k)
+        SC._disc(img, cx, cy, r - 6 * S * k, (27, 31, 37), (3, 4, 5))
+        for i in range(60):
+            a = math.radians(i * 6 - 90)
+            big = i % 5 == 0
+            r1, r2 = r - 11 * S * k, r - (26 if i % 15 == 0 else 20 if big else 14) * S * k
+            seg = (cx + r1 * math.cos(a), cy + r1 * math.sin(a), cx + r2 * math.cos(a), cy + r2 * math.sin(a))
+            wt = max(1, int((5 if i % 15 == 0 else 4 if big else 2) * S * k))
+            d.line([v + (S * k if j % 2 == 0 else 1.5 * S * k) for j, v in enumerate(seg)], fill=SC.BLACK, width=wt)
+            d.line(seg, fill=dial if big else SC._dim(dial, 0.5), width=wt)
+        SC._needle(img, cx, cy, (now.hour % 12 + now.minute / 60) * 30 - 90, 60 * S * k, 6.5 * S * k, 11 * S * k, hc)
+        SC._needle(img, cx, cy, (now.minute + now.second / 60) * 6 - 90, 90 * S * k, 4.5 * S * k, 13 * S * k, hc)
+        if p.get("sekundy", True):
+            SC._needle(img, cx, cy, now.second * 6 - 90, 97 * S * k, max(S, 1.8 * S * k), 22 * S * k, sc)
+        SC._dome(img, cx, cy, 9 * S * k, sc if p.get("sekundy", True) else hc)
+        return
     d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=SC._dim(dial, 0.55), width=max(1, int(3 * S * k)))
     for i in range(60):
         a = math.radians(i * 6 - 90)

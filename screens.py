@@ -302,8 +302,9 @@ def _value_text(scr, n, data, font, template):
 # ------------------------------------------------------------------ prvky
 
 def _bar(img, x, y, w, h, frac, cols):
-    if PLASTIC:
-        return _bar3d(img, (x, y, x + w, y + h), h // 2, frac, cols)
+    if PLASTIC:                                      # drazka kolem baru, vypln v puvodni velikosti
+        g = _bar_rim(h)
+        return _bar3d(img, (x - g, y - g, x + w + g, y + h + g), h // 2 + g, frac, cols, inset=g)
     d = ImageDraw.Draw(img)
     r = h // 2
     d.rounded_rectangle((x, y, x + w, y + h), r, fill=GREY)
@@ -446,8 +447,8 @@ CYLINDER = ([(0, 0), (0.2, 0), (0.34, 0.42), (0.46, 0.08), (0.62, 0), (1, 0)],
             [(0, 0.55), (0.2, 0), (0.7, 0), (1, 0.6)])
 # trubka a drazka pres tloustku oblouku: t = 0 vnejsi okraj .. 1 vnitrni okraj
 TUBE = ([(0, 0), (0.5, 0), (0.64, 0.38), (0.72, 0.75), (0.8, 0.32), (0.92, 0), (1, 0)],
-        [(0, 0.6), (0.38, 0), (0.94, 0), (1, 0.25)])
-GROOVE_SHADE = ([(0, 0), (0.86, 0), (0.92, 0.11), (1, 0.11)], [(0, 0.85), (0.3, 0.5), (0.36, 0), (1, 0)])
+        [(0, 0.42), (0.22, 0), (1, 0)])               # stin jen u samotneho okraje, at trubka nevypada uzsi
+GROOVE_SHADE = ([(0, 0), (0.86, 0), (0.92, 0.11), (1, 0.11)], [(0, 0.6), (0.14, 0.3), (0.22, 0), (1, 0)])
 
 
 def _gloss(img, mask, box, across=False, shade=GLOSS):
@@ -526,7 +527,10 @@ def _bar3d(img, box, r, frac, cols, vertical=False, base=None, inset=True):
     _groove_rect(img, box, r, base)
     if frac <= 0:
         return
-    ins = max(S, round(min(x1 - x0, y1 - y0) * 0.1)) if inset else 0
+    if inset is True:
+        ins = max(S, round(min(x1 - x0, y1 - y0) * 0.1))
+    else:
+        ins = int(inset or 0)                       # cislo = presna sirka okraje drazky
     fx0, fy0, fx1, fy1 = x0 + ins, y0 + ins, x1 - ins, y1 - ins
     rr = max(0, r - ins)
     if vertical:
@@ -540,6 +544,11 @@ def _bar3d(img, box, r, frac, cols, vertical=False, base=None, inset=True):
     layer = Image.new("RGB", img.size, BLACK)
     layer.paste(fill, (x0, y0))
     _shape(img, layer, mask, (fx0, fy0, fx1, fy1), across=vertical, shade=CYLINDER if vertical else GLOSS)
+
+
+def _bar_rim(h):
+    """Sirka okraje drazky kolem baru vysokeho h (body platna)."""
+    return max(S, round(h * 0.18))
 
 
 def _raised(img, box, r, base=(14, 16, 19)):
@@ -845,10 +854,10 @@ def draw_gauge(scr, data, template=False, history=None):
     r = 96 * S
     start, span = 150, 240
     cols = colors(scr, "oblouk")
-    if PLASTIC:                                     # ciferník v kovove lunete
-        _metal_ring(img, c, c, r + 13 * S, 7 * S)
-        d.ellipse((c - r - 6 * S, c - r - 6 * S, c + r + 6 * S, c + r + 6 * S), fill=(2, 2, 3))
-        _disc(img, c, c, r + 5 * S, (27, 31, 37), (3, 4, 5))
+    if PLASTIC:                                     # ciferník v kovove lunete (vejde se do okraje displeje)
+        _metal_ring(img, c, c, r + 10 * S, 5 * S)
+        d.ellipse((c - r - 5 * S, c - r - 5 * S, c + r + 5 * S, c + r + 5 * S), fill=(2, 2, 3))
+        _disc(img, c, c, r + 4 * S, (27, 31, 37), (3, 4, 5))
     _arc(img, c, r, 18 * S, start, span, frac, cols, dim_rest=0.28)
 
     # rysky
@@ -1503,9 +1512,9 @@ def _label(img, x, base, text, weight, px, col, anchor="ls", max_w=None):
 def _rbar(img, x, y, w, h, frac, cols, track=TRACK):
     """Zakulaceny bar s prechodem (souradnice navrhu)."""
     x, y, w, h = _u(x), _u(y), _u(w), _u(h)
-    if PLASTIC:                                      # drazka je o kousek vyssi, at je v ni videt vypln
-        g = max(S, round(h * 0.2))
-        return _bar3d(img, (x, y - g, x + w, y + h + g), (h + 2 * g) // 2, frac, cols, base=track)
+    if PLASTIC:                                      # drazka kolem baru, vypln v puvodni velikosti
+        g = _bar_rim(h)
+        return _bar3d(img, (x - g, y - g, x + w + g, y + h + g), h // 2 + g, frac, cols, base=track, inset=g)
     d = ImageDraw.Draw(img)
     r = h // 2
     d.rounded_rectangle((x, y, x + w, y + h), r, fill=track)
@@ -2075,13 +2084,17 @@ def _content_box(scr, data):
         return (0, 0, W, W)
     key = json.dumps(scr, sort_keys=True, ensure_ascii=False) + f"|{_TS}"
     if key not in _boxes:
+        global PLASTIC
         box = None
+        plastic = PLASTIC
         for ch in _TEMPLATE_CHARS:
             _TCHAR = ch
-            try:
+            PLASTIC = False                           # orez podle ploche geometrie: zare a luneta plasticke
+            try:                                      # verze ho nezvetsi (obrazce zustanou stejne velke)
                 big = DRAW[scr.get("typ", "hodiny")](scr, data, template=True)
             finally:
                 _TCHAR = None
+                PLASTIC = plastic
             bb = big.convert("L").point(lambda v: 255 if v > 8 else 0).getbbox()
             if bb:
                 box = bb if box is None else (min(box[0], bb[0]), min(box[1], bb[1]),
@@ -2097,6 +2110,15 @@ def clear_cache():
 
 
 def _fit(big, box, fill):
+    if PLASTIC and box != (0, 0, W, W):
+        # stejne meritko jako ploche, ale vyrez pres cely displej: zare, luneta a hloubka cisel
+        # se vejdou do okraje kolem obsahu, misto aby obsah zmensily
+        x0, y0, x1, y1 = box
+        k = (SIZE * fill) / max(x1 - x0, y1 - y0)
+        half = SIZE / k / 2
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        return big.crop((round(cx - half), round(cy - half), round(cx + half), round(cy + half))).resize(
+            (SIZE, SIZE), Image.LANCZOS)
     crop = big.crop(box)
     cw, ch = crop.size
     k = (SIZE * fill) / max(cw, ch)

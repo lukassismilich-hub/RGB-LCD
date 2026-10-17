@@ -208,9 +208,11 @@ def draw_bar(img, d, p, data, now, history):
     x0, y0, x1, y1 = _box(p)
     w, h = x1 - x0, y1 - y0
     r = min(w, h) // 2 if p.get("zaobleni", True) else 0
-    if SC.PLASTIC:
-        return SC._bar3d(img, (x0, y0, x1, y1), r, fr, _cols(p, "#3cff3c", "#ff3b3b"), p.get("smer") == "svisle",
-                         base=_rgb(p, "podklad", TRACK))
+    if SC.PLASTIC:                                        # drazka kolem baru, vypln v puvodni velikosti
+        g = SC._bar_rim(min(w, h))
+        return SC._bar3d(img, (x0 - g, y0 - g, x1 + g, y1 + g), r + g if r else 0, fr,
+                         _cols(p, "#3cff3c", "#ff3b3b"), p.get("smer") == "svisle", base=_rgb(p, "podklad", TRACK),
+                         inset=g)
     d.rounded_rectangle((x0, y0, x1 - 1, y1 - 1), r, fill=_rgb(p, "podklad", TRACK))
     if fr <= 0:
         return

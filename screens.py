@@ -1913,50 +1913,73 @@ def draw_big_number(scr, data, template=False, history=None):
     return img
 
 
-def _glass(img, vessel, c, R, level):
-    """Skleněná koule nad hladinou: lesk hladiny, bublinky, stin k okraji, odlesky (navrh 480)."""
+def liquid_sphere(img, cx, cy, r_out, frac, cols):
+    """Plasticka hladina: kovova obruc, sklenena koule s kapalinou (dve vlny, svetlejsi u hladiny),
+    lesk hladiny, bublinky, tmavnuti k okraji, odlesky a svetlo na dne. Souradnice platna,
+    r_out = vnejsi polomer obruce; tvary podle navrhu 480 (obruc 230, koule 208) zmensene na r_out.
+    Pouziva obrazovka Hladina i prvek hladina volneho rozvrzeni."""
+    k = r_out / 230.0                                    # body platna na bod navrhu
+    M = lambda x, y: (cx + (x - 240) * k, cy + (y - 240) * k)
     d = ImageDraw.Draw(img)
+    R = 208 * k
+    _metal_ring(img, cx, cy, r_out, 16 * k)
+    d.ellipse((cx - 214 * k, cy - 214 * k, cx + 214 * k, cy + 214 * k), fill=(1, 1, 1))
+    _disc(img, cx, cy, R, (13, 20, 24), (2, 3, 4))
+    vessel = _disc_mask(img, cx, cy, R)
+    level = 480 - (34 + 412 * max(0.0, min(1.0, frac)))  # hladina v souradnicich navrhu
+    box0 = M(0, 0)
+    size = max(1, int(480 * k))
+    for amp, ph, alpha, grad in ((12, 1.8, 90, False), (9, 0.0, 255, True)):
+        pts = [M(x, level + amp * math.sin(x / 38 + ph)) for x in range(0, 481, 6)]
+        wave = Image.new("L", img.size, 0)
+        ImageDraw.Draw(wave).polygon(pts + [M(480, 480), M(0, 480)], fill=alpha)
+        if grad:
+            fill = _grad(size, size, [(0, _lerp(cols[0], WHITE, 0.35)), (level / 480 + 0.05, cols[0]), (1, cols[1])])
+        else:
+            fill = Image.new("RGB", (size, size), cols[0])
+        _paint(img, ImageChops.multiply(wave, vessel), fill, (int(box0[0]), int(box0[1])))
     menisc = Image.new("L", img.size, 0)
-    ImageDraw.Draw(menisc).line([(_u(x), _u(level + 9 * math.sin(x / 38))) for x in range(0, 481, 6)],
-                                fill=255, width=_u(4))
+    ImageDraw.Draw(menisc).line([M(x, level + 9 * math.sin(x / 38)) for x in range(0, 481, 6)],
+                                fill=255, width=max(1, int(4 * k)))
     _tint(img, ImageChops.multiply(menisc, vessel), WHITE, 0.55)
     for bx, by, br in ((150, 360, 7), (176, 410, 4), (300, 330, 9), (322, 392, 5), (260, 430, 6), (210, 300, 3.5),
                        (356, 300, 4)):
-        if by - br > level + 12:
+        if by - br > level + 12:                         # bublinky jen pod hladinou
             b = Image.new("L", img.size, 0)
-            ImageDraw.Draw(b).ellipse((_u(bx - br), _u(by - br), _u(bx + br), _u(by + br)), outline=255,
-                                      width=max(S, _u(1.5)))
+            (x0, y0), (x1, y1) = M(bx - br, by - br), M(bx + br, by + br)
+            ImageDraw.Draw(b).ellipse((x0, y0, x1, y1), outline=255, width=max(1, int(2 * k)))
             _tint(img, ImageChops.multiply(b, vessel), WHITE, 0.4)
-            hx, hy, hr = _u(bx - br * 0.35), _u(by - br * 0.35), max(S, _u(br * 0.3))
+            (hx, hy), hr = M(bx - br * 0.35, by - br * 0.35), max(2 * k, br * 0.3 * k)
             d.ellipse((hx - hr, hy - hr, hx + hr, hy + hr), fill=_lerp(img.getpixel((int(hx), int(hy))), WHITE, 0.8))
 
     def sphere():                                       # tmavnuti k okraji koule
         im = Image.new("L", img.size, 0)
         sd = ImageDraw.Draw(im)
-        cx, cy = c - R * 0.16, c - R * 0.24
+        ox, oy = cx - R * 0.16, cy - R * 0.24
         for i in range(40, -1, -1):
             t = i / 40
             rr = R * 1.25 * t
-            sd.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), fill=int(255 * _interp([(0, 0), (0.62, 0.12), (1, 0.8)], t)))
+            sd.ellipse((ox - rr, oy - rr, ox + rr, oy + rr), fill=int(255 * _interp([(0, 0), (0.62, 0.12), (1, 0.8)], t)))
         return ImageChops.multiply(im, vessel)
-    _tint(img, _cached(("sphere", c, R), sphere), BLACK)
+    _tint(img, _cached(("sphere", img.size, round(cx), round(cy), round(R)), sphere), BLACK)
 
     def spot(rx, ry, peak):                             # mekky odlesk natoceny o 32 stupnu
-        im = Image.new("L", (int(2 * rx), int(2 * ry)), 0)
+        im = Image.new("L", (max(1, int(2 * rx)), max(1, int(2 * ry))), 0)
         sd = ImageDraw.Draw(im)
         for i in range(20):
             t = i / 19
             sd.ellipse((rx * t, ry * t, 2 * rx - rx * t, 2 * ry - ry * t), fill=int(255 * peak * t ** 1.5))
         return im.rotate(32, resample=Image.BICUBIC, expand=True)
-    for (cx, cy, rx, ry, peak) in ((170, 120, 92, 52, 0.55), (146, 104, 22, 11, 0.8)):
-        s = _cached(("spot", rx, ry, peak), lambda: spot(_u(rx), _u(ry), peak))
+    for (sx, sy, rx, ry, peak) in ((170, 120, 92, 52, 0.55), (146, 104, 22, 11, 0.8)):
+        s = _cached(("spot", round(rx * k), round(ry * k), peak), lambda: spot(rx * k, ry * k, peak))
         full = Image.new("L", img.size, 0)
-        full.paste(s, (int(_u(cx) - s.width / 2), int(_u(cy) - s.height / 2)))
+        px, py = M(sx, sy)
+        full.paste(s, (int(px - s.width / 2), int(py - s.height / 2)))
         _tint(img, ImageChops.multiply(full, vessel), WHITE)
     caustic = Image.new("L", img.size, 0)
-    ImageDraw.Draw(caustic).arc((_u(70), _u(70), _u(410), _u(410)), 40, 140, fill=255, width=_u(5))
+    ImageDraw.Draw(caustic).arc((*M(70, 70), *M(410, 410)), 40, 140, fill=255, width=max(1, int(5 * k)))
     _tint(img, caustic, WHITE, 0.14)
-    d.ellipse((c - R, c - R, c + R, c + R), outline=(0, 0, 0), width=_u(3))
+    d.ellipse((cx - R, cy - R, cx + R, cy + R), outline=(0, 0, 0), width=max(1, int(3 * k)))
 
 
 # 11 ----------------------------------------------------------- kapalina jako hladina
@@ -1965,28 +1988,21 @@ def draw_level(scr, data, template=False, history=None):
     d = ImageDraw.Draw(img)
     cols = colors(scr, "voda")
     c = W // 2
-    R = _u(208 if PLASTIC else 206)
-    if PLASTIC:                                         # kovova obruc a dno skleněné koule
-        _metal_ring(img, c, c, _u(230), _u(16))
-        d.ellipse((c - _u(214), c - _u(214), c + _u(214), c + _u(214)), fill=(1, 1, 1))
-        _disc(img, c, c, R, (13, 20, 24), (2, 3, 4))
-    else:
-        d.ellipse((c - R, c - R, c + R, c + R), fill=(7, 11, 14))
     txt, frac, unit, v = _slot(scr, "", data)
-    level = 480 - (34 + 412 * frac)
-    vessel = Image.new("L", img.size, 0)
-    ImageDraw.Draw(vessel).ellipse((c - R, c - R, c + R, c + R), fill=255)
-    for amp, ph, alpha, grad in ((12, 1.8, 90, False), (9, 0.0, 255, True)):
-        pts = [(_u(x), _u(level + amp * math.sin(x / 38 + ph))) for x in range(0, 481, 6)]
-        wave = Image.new("L", img.size, 0)
-        ImageDraw.Draw(wave).polygon(pts + [(W, W), (0, W)], fill=alpha)
-        fill = _vgrad(W, W, cols[1], cols[0]) if grad else Image.new("RGB", (W, W), cols[0])
-        if PLASTIC and grad:
-            fill = _grad(W, W, [(0, _lerp(cols[0], WHITE, 0.35)), (level / 480 + 0.05, cols[0]), (1, cols[1])])
-        _paint(img, ImageChops.multiply(wave, vessel), fill)
-    if PLASTIC:
-        _glass(img, vessel, c, R, level)
+    if PLASTIC:                                         # sklenena koule v kovove obruci (i prvek hladina)
+        liquid_sphere(img, c, c, _u(230), frac, cols)
     else:
+        R = _u(206)
+        d.ellipse((c - R, c - R, c + R, c + R), fill=(7, 11, 14))
+        level = 480 - (34 + 412 * frac)
+        vessel = Image.new("L", img.size, 0)
+        ImageDraw.Draw(vessel).ellipse((c - R, c - R, c + R, c + R), fill=255)
+        for amp, ph, alpha, grad in ((12, 1.8, 90, False), (9, 0.0, 255, True)):
+            pts = [(_u(x), _u(level + amp * math.sin(x / 38 + ph))) for x in range(0, 481, 6)]
+            wave = Image.new("L", img.size, 0)
+            ImageDraw.Draw(wave).polygon(pts + [(W, W), (0, W)], fill=alpha)
+            fill = _vgrad(W, W, cols[1], cols[0]) if grad else Image.new("RGB", (W, W), cols[0])
+            _paint(img, ImageChops.multiply(wave, vessel), fill)
         Ro = _u(220)
         d.ellipse((c - Ro, c - Ro, c + Ro, c + Ro), outline=(22, 37, 45), width=_u(12))
     _label(img, 240, 119, scr.get("nadpis", ""), "ExtraBold", 24, (191, 239, 255), "ms", max_w=300)

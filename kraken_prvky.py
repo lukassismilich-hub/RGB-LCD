@@ -467,13 +467,10 @@ def draw_level(img, d, p, data, now, history):
     _v, _t, _u, fr = _sensor(p, data)
     cx, cy, r = _circle(p)
     cols = _cols(p, "#22d3ee", "#1d4ed8")
+    if SC.PLASTIC:                                        # stejna koule jako obrazovka Hladina
+        return SC.liquid_sphere(img, cx, cy, r, fr, cols)
     R = r * 0.94
-    if SC.PLASTIC:                                        # kovova obruc a tmave dno koule
-        SC._metal_ring(img, cx, cy, r, r * 0.07)
-        SC._disc(img, cx, cy, r * 0.93, (13, 20, 24), (1, 1, 1))
-        R = r * 0.9
-    else:
-        d.ellipse((cx - R, cy - R, cx + R, cy + R), fill=(7, 11, 14))
+    d.ellipse((cx - R, cy - R, cx + R, cy + R), fill=(7, 11, 14))
     level = cy + R - 2 * R * fr
     vessel = Image.new("L", img.size, 0)
     ImageDraw.Draw(vessel).ellipse((cx - R, cy - R, cx + R, cy + R), fill=255)
@@ -484,36 +481,9 @@ def draw_level(img, d, p, data, now, history):
         ImageDraw.Draw(wave).polygon(pts + [(xb, cy + R + S), (xa, cy + R + S)], fill=alpha)
         fill = SC._vgrad(img.width, img.height, cols[1], cols[0]) if grad else Image.new("RGB", img.size, cols[0])
         SC._paint(img, ImageChops.multiply(wave, vessel), fill)
-    if SC.PLASTIC:
-        _glass(img, vessel, cx, cy, R, [(x, level + R * 0.045 * math.sin((x - xa) / (R * 0.37)))
-                                        for x in range(xa, xb + 1, 3 * S)])
-        return
     rw = max(S, r * 0.055)
     d.ellipse((cx - r + rw / 2, cy - r + rw / 2, cx + r - rw / 2, cy + r - rw / 2),
               outline=_rgb(p, "barva_okraje", "#16252d"), width=int(rw))
-
-
-def _glass(img, vessel, cx, cy, R, surface):
-    """Sklenena koule: lesk hladiny, tmavnuti k okraji, mekky odlesk vlevo nahore."""
-    m = Image.new("L", img.size, 0)
-    ImageDraw.Draw(m).line(surface, fill=255, width=max(S, int(R * 0.03)))
-    SC._tint(img, ImageChops.multiply(m, vessel), SC.WHITE, 0.55)
-    sh = Image.new("L", img.size, 0)
-    sd = ImageDraw.Draw(sh)
-    ox, oy = cx - R * 0.16, cy - R * 0.24
-    for i in range(30, -1, -1):
-        t = i / 30
-        rr = R * 1.25 * t
-        sd.ellipse((ox - rr, oy - rr, ox + rr, oy + rr), fill=int(255 * SC._interp([(0, 0), (0.62, 0.12), (1, 0.8)], t)))
-    SC._tint(img, ImageChops.multiply(sh, vessel), SC.BLACK)
-    hl = Image.new("L", img.size, 0)
-    hd = ImageDraw.Draw(hl)
-    hx, hy, rx, ry = cx - R * 0.34, cy - R * 0.58, R * 0.42, R * 0.22
-    for i in range(16):
-        t = i / 15
-        hd.ellipse((hx - rx * (1 - t), hy - ry * (1 - t), hx + rx * (1 - t), hy + ry * (1 - t)), fill=int(150 * t ** 1.5))
-    SC._tint(img, ImageChops.multiply(hl, vessel), SC.WHITE)
-    ImageDraw.Draw(img).ellipse((cx - R, cy - R, cx + R, cy + R), outline=SC.BLACK, width=max(S, int(R * 0.015)))
 
 
 def clock_text(fmt, now):

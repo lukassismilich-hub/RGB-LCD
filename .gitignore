@@ -10,3 +10,8 @@ path_zaloha.txt
 config.zaloha.json
 config.poskozeny.json
 ikona_test.json
+
+# loga vyrobcu (ochranne znamky) - jen mistne
+obrazky/
+# zaloha git historie pred prepisem
+*.bundle

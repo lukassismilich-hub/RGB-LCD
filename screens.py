@@ -481,9 +481,10 @@ def _ring_shade(img, mask, cx, cy, r, thick, shade=TUBE):
         _tint(img, ImageChops.multiply(mask, _cached(key, make)), col)
 
 
-def _glow(img, layer, mask, radius, alpha=0.45):
-    """Mekka zare barevneho tvaru (layer = tvar na cernem, mask = tvar); kreslit pred tvarem."""
-    if not GLOW:
+def _glow(img, layer, mask, radius, alpha=0.45, force=False):
+    """Mekka zare barevneho tvaru (layer = tvar na cernem, mask = tvar); kreslit pred tvarem.
+    force = i pri vypnute zari (rozsvicena kontrolka)."""
+    if not (GLOW or force):
         return
     bb = mask.getbbox()
     if not bb or radius <= 0 or alpha <= 0:
@@ -1587,22 +1588,31 @@ def _area_chart(img, x, y, w, h, vals, lo, hi, cols, line_w=5, line_col=None, do
 
 
 def _ribbon_chart(img, x, y, w, h, vals, lo, hi, cols, line_col=None, depth=14):
-    """Plasticky graf: pasek vytlaceny do hloubky (zadni hrana vpravo nahore), horni plocha
-    z ctyruhelniku se svetlosti podle sklonu, predni stena s prechodem, kulicka na konci."""
-    X0, Y0, Wd, Hd = _u(x), _u(y), _u(w), _u(h)
-    T = _u(depth)
+    """Plasticky graf v souradnicich navrhu 480 (viz ribbon3d)."""
+    return ribbon3d(img, _u(x), _u(y), _u(w), _u(h), vals, lo, hi, cols, line_col, _u(depth))
+
+
+def ribbon3d(img, X0, Y0, Wd, Hd, vals, lo, hi, cols, line_col=None, T=None):
+    """Plasticky graf: pasek vytlaceny do hloubky T (zadni hrana vpravo nahore), horni plocha
+    z ctyruhelniku se svetlosti podle sklonu, predni stena s prechodem, kulicka na konci.
+    Souradnice platna (3x)."""
+    if len(vals) < 2:
+        return None
+    T = T or max(3 * S, min(Wd, Hd) * 0.07)
     dx, dy = T * 0.9, -T * 0.65
     n = len(vals)
-    pad = _u(5) - dy
-    right = Wd - dx - _u(8)
-    pts = [(X0 + right * i / (n - 1), Y0 + Hd - _u(5) - (Hd - pad - _u(5)) * _frac(v, lo, hi)) for i, v in enumerate(vals)]
+    m = max(S, T * 0.35)                                 # okraj pro caru a kulicku
+    pad = m - dy
+    right = Wd - dx - T * 0.6
+    pts = [(X0 + right * i / (n - 1), Y0 + Hd - m - (Hd - pad - m) * _frac(v, lo, hi)) for i, v in enumerate(vals)]
     top_col = line_col or cols[1]
+    lw = max(S, T * 0.2)
     # zare pod hranou
     gl = Image.new("RGB", img.size, BLACK)
     gm = Image.new("L", img.size, 0)
-    ImageDraw.Draw(gl).line(pts, fill=top_col, width=_u(10), joint="curve")
-    ImageDraw.Draw(gm).line(pts, fill=255, width=_u(10), joint="curve")
-    _glow(img, gl, gm, _u(8), 0.5)
+    ImageDraw.Draw(gl).line(pts, fill=top_col, width=int(lw * 3), joint="curve")
+    ImageDraw.Draw(gm).line(pts, fill=255, width=int(lw * 3), joint="curve")
+    _glow(img, gl, gm, lw * 2.5, 0.5)
     d = ImageDraw.Draw(img)
     for (xa, ya), (xb, yb) in zip(pts, pts[1:]):         # horni plocha pasku
         slope = (yb - ya) / max(1, xb - xa)
@@ -1614,11 +1624,12 @@ def _ribbon_chart(img, x, y, w, h, vals, lo, hi, cols, line_col=None, depth=14):
     face = Image.new("L", img.size, 0)
     ImageDraw.Draw(face).polygon(pts + [(pts[-1][0], Y0 + Hd), (pts[0][0], Y0 + Hd)], fill=255)
     stops = [(0, _dim(top_col, 0.75)), (0.5, _dim(cols[0], 0.3)), (1, (5, 6, 8))]
-    _paint(img, face, _grad(Wd, Hd + 1, stops), (X0, Y0))
-    d.line(pts, fill=_lerp(top_col, WHITE, 0.55), width=_u(3), joint="curve")
-    d.line([(px + dx, py + dy) for px, py in pts], fill=_lerp(top_col, WHITE, 0.25), width=_u(2), joint="curve")
+    _paint(img, face, _grad(Wd, Hd + 1, stops), (int(X0), int(Y0)))
+    d.line(pts, fill=_lerp(top_col, WHITE, 0.55), width=int(lw), joint="curve")
+    d.line([(px + dx, py + dy) for px, py in pts], fill=_lerp(top_col, WHITE, 0.25), width=int(lw * 0.67),
+           joint="curve")
     ex, ey = pts[-1]
-    _dome(img, ex + dx / 2, ey + dy / 2, _u(10), _lerp(top_col, WHITE, 0.2))
+    _dome(img, ex + dx / 2, ey + dy / 2, T * 0.7, _lerp(top_col, WHITE, 0.2))
     return pts
 
 
@@ -1825,9 +1836,15 @@ GLASS = [(0, (42, 48, 56)), (0.3, (20, 23, 28)), (0.75, (9, 10, 13)), (1, (26, 3
 
 def _cylinder(img, x, top, bottom, frac, cols, w=94, ry=12):
     """Sklenený valec s kapalinou (souradnice navrhu): hladina = elipsa, plast stinovany jako valec."""
+    cylinder3d(img, _u(x), _u(top), _u(x + w), _u(bottom), _u(ry), frac, cols)
+
+
+def cylinder3d(img, X0, T, X1, B, RY, frac, cols):
+    """Skleneny valec s kapalinou (souradnice platna): T/B = stredy horni a dolni elipsy, RY = jeji
+    polovysky; hladina = elipsa, plast stinovany jako valec, odlesk skla."""
     d = ImageDraw.Draw(img)
-    X0, X1, T, B, RY = _u(x), _u(x + w), _u(top), _u(bottom), _u(ry)
-    cx = (X0 + X1) / 2
+    X0, X1, T, B, RY = int(X0), int(X1), int(T), int(B), max(1, int(RY))
+    w = X1 - X0
     _paint(img, _rect_mask(img, (X0, T, X1, B)), _grad(X1 - X0, B - T, GLASS, vertical=False), (X0, T))
     d.ellipse((X0, B - RY, X1, B + RY), fill=(14, 16, 20))                  # dno skla
     d.ellipse((X0, T - RY, X1, T + RY), fill=(5, 6, 7))                     # vnitrek horniho okraje
@@ -1837,13 +1854,14 @@ def _cylinder(img, x, top, bottom, frac, cols, w=94, ry=12):
         ImageDraw.Draw(mask).ellipse((X0, B - RY, X1, B + RY), fill=255)
         layer = Image.new("RGB", img.size, BLACK)
         layer.paste(_vgrad(X1 - X0, B + RY - T + 1, cols[0], cols[1]), (X0, T))
-        _shape(img, layer, mask, (X0, T, X1, B + RY), across=True, shade=CYLINDER, glow_r=_u(12))
+        _shape(img, layer, mask, (X0, T, X1, B + RY), across=True, shade=CYLINDER, glow_r=w * 0.13)
         d.ellipse((X0, L - RY, X1, L + RY), fill=_lerp(cols[1], WHITE, 0.3), outline=_lerp(cols[1], WHITE, 0.65),
-                  width=_u(2))
-    hl = _rect_mask(img, (X0 + _u(18), T + _u(12), X0 + _u(27), B - _u(2)), r=_u(4.5))
+                  width=max(1, int(w * 0.021)))
+    hl = _rect_mask(img, (X0 + w * 0.19, T + RY, X0 + w * 0.29, B - RY * 0.2), r=int(w * 0.048))
     _tint(img, hl, WHITE, 0.16)                                             # odlesk skla
-    d.ellipse((X0, T - RY, X1, T + RY), outline=(86, 96, 107), width=_u(2.5))
-    d.arc((X0, B - RY, X1, B + RY), 0, 180, fill=(58, 66, 76), width=_u(2.5))
+    edge = max(1, int(w * 0.027))
+    d.ellipse((X0, T - RY, X1, T + RY), outline=(86, 96, 107), width=edge)
+    d.arc((X0, B - RY, X1, B + RY), 0, 180, fill=(58, 66, 76), width=edge)
 
 
 def _rect_mask(img, box, r=0):
@@ -2172,9 +2190,10 @@ def used_sensors(screens):
         for k, v in s.items():
             if k.startswith("senzor") and isinstance(v, str) and v:
                 out.add(v)
-        for p in s.get("prvky", []) if s.get("typ") == "volne" else []:
-            if p.get("senzor"):
-                out.add(p["senzor"])
+        if s.get("typ") == "volne":
+            import kraken_prvky
+            for p in s.get("prvky", []):
+                out.update(kraken_prvky.item_sensors(p))
     return out
 
 

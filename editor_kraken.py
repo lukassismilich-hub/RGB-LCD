@@ -216,14 +216,20 @@ class KrakenEditor(tk.Toplevel):
         V.card_title(head, "Prvky").grid(row=0, column=0, sticky="w")
         tpl = ttk.Menubutton(head, text="Šablona")
         tm = tk.Menu(tpl, tearoff=0)
+        self._from_menu = tk.Menu(tm, tearoff=0, postcommand=self._fill_from_menu)
+        tm.add_cascade(label="Z mé obrazovky (i se senzory a barvami)", menu=self._from_menu)
+        tm.add_separator()
         for name in K.templates():
             tm.add_command(label=name, command=lambda n=name: self.load_template(n))
         tpl["menu"] = tm
         tpl.grid(row=0, column=1, padx=(8, 0))
         add = ttk.Menubutton(head, text="+ Přidat")
         m = tk.Menu(add, tearoff=0)
-        for t, name in K.TYPES.items():
-            m.add_command(label=name, command=lambda t=t: self.add(t))
+        for group, types in K.GROUPS:
+            sub = tk.Menu(m, tearoff=0)
+            for t in types:
+                sub.add_command(label=K.TYPES[t], command=lambda t=t: self.add(t))
+            m.add_cascade(label=group, menu=sub)
         add["menu"] = m
         add.grid(row=0, column=2, padx=(8, 0))
         self.lst = V.listbox(lf, height=11)
@@ -311,13 +317,28 @@ class KrakenEditor(tk.Toplevel):
             p["skryty"] = not p.get("skryty")
             self._changed()
 
-    def load_template(self, name):
+    def load_template(self, name, items=None):
         if self.items and not messagebox.askyesno(
                 "Šablona", f"Nahradit prvky této obrazovky šablonou „{name}“?", parent=self):
             return
-        self.scr["prvky"] = copy.deepcopy(K.templates()[name])
+        self.scr["prvky"] = copy.deepcopy(K.templates()[name] if items is None else items)
         self.sel = None
         self._changed(rebuild=True)
+
+    def _fill_from_menu(self):
+        """Nabidka nastavenych obrazovek (krome teto) - prevod na prvky i se senzory a barvami."""
+        m = self._from_menu
+        m.delete(0, "end")
+        found = False
+        for s in self.app.cfg["obrazovky"]:
+            if s is self.scr:
+                continue
+            found = True
+            label = self.app._label(s).strip().lstrip("●○").strip()
+            m.add_command(label=label, command=lambda s=s, label=label: self.load_template(
+                label, K.from_screen(s)))
+        if not found:
+            m.add_command(label="(žádná další obrazovka)", state="disabled")
 
     def _changed(self, geometry=False, rebuild=False):
         if geometry and self.sel is not None:
@@ -397,6 +418,21 @@ class KrakenEditor(tk.Toplevel):
             return b
         v = tk.StringVar(value=str(p.get(key, self._default(p, key))))
         self._vars[key] = v
+        if kind == "template":                        # sablona textu + vlozeni senzoru na konec
+            box = ttk.Frame(f)
+            ttk.Entry(box, textvariable=v, width=34, font=V.FONT).pack(anchor="w")
+            row = ttk.Frame(box)
+            row.pack(anchor="w", pady=(4, 0))
+            pick = tk.StringVar()
+            cb = ttk.Combobox(row, textvariable=pick, values=self.app._sensor_names(), width=24, state="readonly")
+            cb.pack(side="left")
+            cb.bind("<<ComboboxSelected>>", lambda e: (v.set(v.get() + "{" + pick.get() + "}"), pick.set("")))
+            ttk.Label(row, text="← vložit senzor", style="Small.TLabel").pack(side="left", padx=(6, 0))
+            ttk.Label(box, style="Small.TLabel", justify="left", text=(
+                "{senzor|1000|1} = dělitel 1000, 1 desetinné místo.\n"
+                "[ … ] = část se skryje, když senzor v ní chybí.")).pack(anchor="w", pady=(4, 0))
+            v.trace_add("write", lambda *a: self._set(key, v.get(), kind))
+            return box
         if kind == "sensor":
             w = ttk.Combobox(f, textvariable=v, values=self.app._sensor_names() + K.TIME_SENSORS, width=30)
         elif kind == "unit":

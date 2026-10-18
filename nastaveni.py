@@ -1167,21 +1167,24 @@ class App(tk.Tk):
                 sample = True
         if scr.get("typ") == "volne":                      # prvky volneho rozvrzeni
             for q in scr.get("prvky", []):
-                name = q.get("senzor")
-                if not name or name in kraken_prvky.TIME_SENSORS or name.startswith("@pumpa") \
-                        or name.startswith("@ventil") or name == config.LIQUID:
-                    continue
-                try:
-                    lo, hi = float(q.get("min", 0)), float(q.get("max", 100))
-                    div = float(q.get("delitel", 1)) or 1
-                except (TypeError, ValueError):
-                    continue
-                if name not in data:
-                    data[name] = {"value": (lo + (hi - lo) * 0.6) * div, "unit": ""}
-                    sample = True
-                if q.get("typ") in kraken_prvky.HISTORY_TYPES and len(hist.get(name, [])) < 2:
-                    hist[name] = [(lo + (hi - lo) * (0.45 + 0.25 * math.sin(i / 7))) * div for i in range(90)]
-                    sample = True
+                for name in kraken_prvky.item_sensors(q):    # i senzory v sablone textu
+                    if name in kraken_prvky.TIME_SENSORS or name.startswith("@pumpa") \
+                            or name.startswith("@ventil") or name == config.LIQUID:
+                        continue
+                    try:
+                        lo, hi = float(q.get("min", 0)), float(q.get("max", 100))
+                        div = float(q.get("delitel", 1)) or 1
+                    except (TypeError, ValueError):
+                        continue
+                    if name != q.get("senzor"):                  # sablona: bez rozsahu, jen ukazkove cislo
+                        lo, hi, div = 0.0, 100.0, 1.0
+                    if name not in data:
+                        data[name] = {"value": (lo + (hi - lo) * 0.6) * div, "unit": ""}
+                        sample = True
+                    if q.get("typ") in kraken_prvky.HISTORY_TYPES and name == q.get("senzor") \
+                            and len(hist.get(name, [])) < 2:
+                        hist[name] = [(lo + (hi - lo) * (0.45 + 0.25 * math.sin(i / 7))) * div for i in range(90)]
+                        sample = True
         if scr.get("typ") in ("chlazeni", "chlazeni_radky", "hladina", "volne"):   # bez bezici aplikace nejsou data Krakenu
             for k, v in (("@kapalina", 31.4), ("@pumpa", 1720), ("@pumpa_vykon", 45),
                          ("@ventilatory", 650), ("@ventilatory_vykon", 30)):

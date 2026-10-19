@@ -243,13 +243,13 @@
           "w": 240,
           "h": 90,
           "delka_s": 60,
-          "styl": "sloupce",
-          "cara": 5,
+          "styl": "čára",
+          "cara": 1,
           "plocha": true,
-          "tecka": true,
-          "hloubka": 7,
+          "tecka": false,
+          "hloubka": 5,
           "pocet": 60,
-          "ramecek": true,
+          "ramecek": false,
           "mrizka": true,
           "barva_od": "#ffff00",
           "barva_do": "#ff0000",
@@ -390,19 +390,6 @@
           "barva_od": "#ff0000",
           "barva_do": "#ffff00",
           "typ": "text"
-        },
-        {
-          "x": 176,
-          "y": 228,
-          "w": 50,
-          "h": 10,
-          "text": "2 min",
-          "pismo": "Bold",
-          "velikost": 8,
-          "zarovnani": "vpravo",
-          "barva_od": "#8a929c",
-          "barva_do": "#8a929c",
-          "typ": "text"
         }
       ],
       "zapnuto": true,
@@ -478,10 +465,10 @@
           "w": 240,
           "h": 90,
           "delka_s": 60,
-          "styl": "sloupce",
-          "cara": 3,
+          "styl": "čára",
+          "cara": 1,
           "plocha": true,
-          "tecka": true,
+          "tecka": false,
           "hloubka": 7,
           "pocet": 60,
           "ramecek": true,
@@ -624,19 +611,6 @@
           "zarovnani": "vlevo",
           "barva_od": "#00ff00",
           "barva_do": "#ffff00",
-          "typ": "text"
-        },
-        {
-          "x": 176,
-          "y": 228,
-          "w": 50,
-          "h": 10,
-          "text": "2 min",
-          "pismo": "Bold",
-          "velikost": 8,
-          "zarovnani": "vpravo",
-          "barva_od": "#8a929c",
-          "barva_do": "#8a929c",
           "typ": "text"
         }
       ],
@@ -843,12 +817,16 @@
           20
         ],
         [
+          70,
+          25
+        ],
+        [
           80,
-          50
+          35
         ],
         [
           90,
-          75
+          45
         ],
         [
           95,

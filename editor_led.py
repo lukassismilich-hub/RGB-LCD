@@ -683,19 +683,62 @@ class LedEditor:
             ttk.Frame(f, height=8).grid(row=3, column=0)
             self._music_refresh()
             return
-        chips = ttk.Frame(f)
-        chips.grid(row=3, column=0, columnspan=3, sticky="ew", padx=20, pady=(4, 2))
-        sv = tk.StringVar(value=mc.get("styl", "pulz"))
+        sf = ttk.Frame(f)
+        sf.grid(row=3, column=0, columnspan=3, sticky="ew", padx=20, pady=(4, 2))
+        sf.columnconfigure(0, weight=1)
         alt = tk.BooleanVar(value=bool(mc.get("stridat")))
-        for i, (key, name) in enumerate(fx.MUSIC_STYLES.items()):
-            chips.columnconfigure(i % 3, weight=1, uniform="chip")
-            ttk.Radiobutton(chips, text=name, value=key, variable=sv, style="Chip.Toolbutton",
-                            command=lambda: (mc.__setitem__("styl", sv.get()), alt.set(False),
-                                             mc.__setitem__("stridat", False))).grid(
-                row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
-        ttk.Checkbutton(f, text="Jiný styl s každou skladbou", variable=alt,
-                        command=lambda: mc.__setitem__("stridat", alt.get())).grid(
-            row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 8))
+
+        def on_alt():
+            mc["stridat"] = alt.get()
+            self._build_music()
+        V.segmented(sf, alt, [(False, "Jeden styl"), (True, "Náhodně s každou skladbou")], command=on_alt).grid(
+            row=0, column=0, sticky="w", pady=(0, 6))
+        chips = ttk.Frame(sf)
+        chips.grid(row=1, column=0, sticky="ew")
+        if not alt.get():                                    # jeden styl: vyber jednoho
+            sv = tk.StringVar(value=mc.get("styl", "pulz"))
+            for i, (key, name) in enumerate(fx.MUSIC_STYLES.items()):
+                chips.columnconfigure(i % 3, weight=1, uniform="chip")
+                ttk.Radiobutton(chips, text=name, value=key, variable=sv, style="Chip.Toolbutton",
+                                command=lambda: mc.__setitem__("styl", sv.get())).grid(
+                    row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
+            row4 = None
+        else:                                                # nahodne: zaskrtnout, ze kterych stylu
+            pool = mc.setdefault("styly_stridat", list(fx.MUSIC_STYLES))
+            vars_ = {}
+
+            def on_pick(key):
+                sel = [k for k in fx.MUSIC_STYLES if vars_[k].get()]
+                if not sel:                                  # aspon jeden styl musi zustat
+                    vars_[key].set(True)
+                    sel = [key]
+                mc["styly_stridat"] = sel
+                count.config(text=f"vybráno {len(sel)} z {len(fx.MUSIC_STYLES)}")
+            for i, (key, name) in enumerate(fx.MUSIC_STYLES.items()):
+                chips.columnconfigure(i % 3, weight=1, uniform="chip")
+                vars_[key] = tk.BooleanVar(value=key in pool)
+                ttk.Checkbutton(chips, text=name, variable=vars_[key], style="Chip.Toolbutton",
+                                command=lambda k=key: on_pick(k)).grid(
+                    row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
+            bf = ttk.Frame(sf)
+            bf.grid(row=2, column=0, sticky="w", pady=(4, 0))
+
+            def select(all_):
+                for k, v in vars_.items():
+                    v.set(all_ or k == next(iter(fx.MUSIC_STYLES)))
+                on_pick(next(iter(fx.MUSIC_STYLES)))
+            ttk.Button(bf, text="Vybrat vše", command=lambda: select(True)).pack(side="left", padx=(0, 4))
+            ttk.Button(bf, text="Zrušit výběr", command=lambda: select(False)).pack(side="left", padx=(0, 10))
+            count = ttk.Label(bf, style="Small.TLabel")
+            count.pack(side="left")
+            on_pick(next((k for k in fx.MUSIC_STYLES if k in pool), "pulz"))
+            row4 = ("S každou novou skladbou se náhodně vybere jeden ze zaškrtnutých stylů (dvakrát po sobě "
+                    "stejný ne). V náhledu se styl mění každých 8 s.")
+        if row4:
+            ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=row4).grid(
+                row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 8))
+        else:
+            ttk.Frame(f, height=6).grid(row=4, column=0)
 
         def slider(row, text, key, lo, hi, res, fmt):
             ttk.Label(f, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10), pady=4)
@@ -1200,7 +1243,7 @@ class LedEditor:
             self._pl_update(info["i"] if info and self._pl_view == "vse" else None)
             snap = None
             if self._music_demo.get() and (lc.get("hudba") or {}).get("zapnuto"):   # simulovana hudba
-                snap = fx.music_demo(now - self.t0, self._music_palette())
+                snap = fx.music_demo(now - self.t0, self._music_palette(), track_n=int((now - self.t0) // 8))
                 info = None
             frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), music=snap)
             if snap is not None:

@@ -662,6 +662,74 @@ class Engine:
             st = self.state.setdefault(("hudba_klid", key), [0.0])
             st[0] += (level - st[0]) * min(1.0, dt / 0.6)
             out = [_scale(_cyclic(cols, i / max(1, n) + ph * 0.5), 0.15 + 0.85 * st[0]) for i in range(n)]
+        elif styl == "zablesky":                         # kazdy uder = kratky zablesk dalsi barvou, jinak tma
+            st = self.state.setdefault(("hudba_zab", key), [0.0, 0])
+            st[0] *= math.exp(-dt / 0.07)
+            for _bid, strength in new:
+                st[0], st[1] = max(st[0], strength), (st[1] + 1) % k
+            c = _mix(cols[st[1] % k], white, 0.35 * st[0])
+            out = [tuple(max(main[j] * 0.02, c[j] * st[0]) for j in range(3))] * n
+        elif styl == "vlny":                             # kazdy uder = vlna od spodku kruhu nahoru po obou stranach
+            st = self.state.setdefault(("hudba_vlny", key), [])
+            for _bid, strength in new:
+                st.append([0.0, rnd.randrange(k), strength])
+            for w in st:
+                w[0] += dt
+            st[:] = [w for w in st if w[0] < 0.6][-5:]
+            bg = _scale(main, 0.03 + 0.1 * bass)
+            out = [bg] * n
+            for i in range(n):
+                d = 0.0 if n == 1 else 1 - (_ring_y(i, n, eff) + 1) / 2     # 0 = dole, 1 = nahore
+                for age, ci, strength in st:
+                    front = age / 0.35                    # nahoru za 0,35 s
+                    kk = strength * max(0.0, 1 - abs(d - front) / 0.3) * max(0.0, 1 - age / 0.6)
+                    if n == 1:
+                        kk = strength * max(0.0, 1 - age / 0.3)
+                    if kk > 0:
+                        out[i] = tuple(max(out[i][j], cols[ci % k][j] * kk) for j in range(3))
+        elif styl == "vu":                               # ukazatel hlasitosti dokola od vrsku, spicka drzi
+            st = self.state.setdefault(("hudba_vu", key), [0.0, 0.0])
+            lv = max(level, bass)
+            st[0] += (lv - st[0]) * min(1.0, dt / 0.05)
+            st[1] = max(st[0], st[1] - dt * 0.4)
+            if n == 1:
+                out = [_scale(_gradient(cols, st[0]), 0.1 + 0.9 * st[0])]
+            else:
+                out = []
+                for i in range(n):
+                    u = ((2 * math.pi * i / n + math.radians(float(eff.get("otoceni", 0) or 0)) + math.pi / 2)
+                         / (2 * math.pi)) % 1.0            # 0 = nahore, po smeru hodin
+                    lit = max(0.0, min(1.0, (st[0] - u) * n + 0.5))
+                    c = _scale(_gradient(cols, u), 0.04 + 0.96 * lit)
+                    pk = max(0.0, 1 - abs(u - st[1]) * n) if st[1] > 0.05 else 0.0
+                    out.append(_mix(c, _mix(acc, white, 0.6), pk * 0.9))
+        elif styl == "stridani":                         # kazdy uder = cely ventilator dalsi barvou palety
+            st = self.state.setdefault(("hudba_strid", key), [0, 0, 1.0])
+            for _bid, _strength in new:
+                st[1], st[0], st[2] = st[0], (st[0] + 1) % k, 0.0
+            st[2] = min(1.0, st[2] + dt / 0.08)
+            c = _mix(cols[st[1] % k], cols[st[0] % k], st[2])
+            out = [_scale(c, min(1.0, 0.3 + 0.7 * max(bass, fl)))] * n
+        elif styl == "rotace":                           # vysece palety se toci, s uderem poskoci
+            st = self.state.setdefault(("hudba_rot", key), [0.0, 0.0])
+            for _bid, strength in new:
+                st[1] += 0.5 / k * (0.5 + strength)
+            st[1] += dt * (0.05 + 0.4 * bass)
+            st[0] += (st[1] - st[0]) * min(1.0, dt / 0.06)
+            kk = min(1.0, 0.25 + 0.75 * max(bass, fl))
+            out = [_scale(_cyclic(cols, i / max(1, n) + st[0], hard=True), kk) for i in range(n)]
+        elif styl == "plameny":                          # plameny zespodu, vyska podle basu
+            st = self.state.setdefault(("hudba_plam", key), [0.0, [0.6] * n])
+            if len(st[1]) != n:
+                st[1] = [0.6] * n
+            st[0] += (min(1.2, 0.25 + 0.9 * bass + 0.3 * fl) - st[0]) * min(1.0, dt / 0.06)
+            a = min(1.0, dt * 12)
+            out = []
+            for i in range(n):
+                st[1][i] += (rnd.uniform(0.5, 1.0) - st[1][i]) * a
+                h = 0.5 if n == 1 else 1 - (_ring_y(i, n, eff) + 1) / 2     # 0 = dole, 1 = nahore
+                lit = max(0.0, min(1.0, (st[0] * st[1][i] - h) * 3 + 0.5)) if n > 1 else st[0]
+                out.append(_scale(_gradient(cols, h), 0.03 + 0.97 * lit))
         else:                                             # "pulz": basy = jas, uder = zablesk vlnou, vysky = jiskry
             kk = min(1.0, 0.10 - 0.04 * e + (0.55 + 0.2 * e) * bass + (0.6 + 0.4 * e) * fl)
             out = []
@@ -705,18 +773,44 @@ MUSIC_STYLES = {
     "komety": "komety do rytmu",
     "jiskry": "jiskry do rytmu",
     "klidny": "klidné vlnění",
+    "zablesky": "záblesky na údery",
+    "vlny": "vlny od kopáku",
+    "vu": "ukazatel hlasitosti",
+    "stridani": "barvy do rytmu",
+    "rotace": "točení do rytmu",
+    "plameny": "plameny z basů",
 }
 MUSIC_WAVE_S = 0.25          # za jak dlouho uder probehne celou skrini (pri vlne)
 MUSIC_FPS = 50               # snimky za sekundu, kdyz hraje hudba (jinak FPS)
+_style_seq = {}              # (vyber stylu) -> [styl pro skladbu 0, 1, 2...] - nahodne bez opakovani
+
+
+def style_pool(eff):
+    """Styly, ze kterych se pri "stridat" nahodne vybira (vybrane uzivatelem, jinak vsechny)."""
+    pool = [s for s in (eff.get("styly_stridat") or []) if s in MUSIC_STYLES]
+    return pool or list(MUSIC_STYLES)
 
 
 def music_style(eff, snap):
-    """Styl vizualizeru; "stridat" = s kazdou skladbou jiny (podle poradi skladby)."""
-    if eff.get("stridat"):
-        keys = list(MUSIC_STYLES)
-        return keys[(int(snap.get("track_n", 0)) * 7 + 3) % len(keys)]
-    styl = eff.get("styl", "pulz")
-    return styl if styl in MUSIC_STYLES else "pulz"
+    """Styl vizualizeru; "stridat" = s kazdou skladbou nahodne jiny ze zvolenych stylu (styly_stridat),
+    dvakrat po sobe stejny ne. Poradi je pevne dane cislem skladby - vsechny ventilatory i nahled se shodnou."""
+    if not eff.get("stridat"):
+        styl = eff.get("styl", "pulz")
+        return styl if styl in MUSIC_STYLES else "pulz"
+    pool = style_pool(eff)
+    tn = max(0, int(snap.get("track_n", 0)))
+    seq = _style_seq.setdefault(tuple(pool), [])
+    if len(seq) > 5000:
+        seq.clear()
+    rng = random.Random(len(pool) * 7919)
+    while len(seq) <= tn:
+        i = len(seq)
+        rng.seed(i * 7919 + len(pool))
+        choice = rng.choice(pool)
+        if len(pool) > 1 and seq and choice == seq[-1]:
+            choice = rng.choice([s for s in pool if s != seq[-1]])
+        seq.append(choice)
+    return seq[tn]
 
 
 def bass_emphasis(eff):

@@ -194,9 +194,9 @@ def render_screen(cfg, data, hist, seen_max, rot, bad):
         scr = lst[rot["idx"]]
         key = json.dumps(scr, sort_keys=True, ensure_ascii=False)
         try:
-            return screens.render(scr, data, cfg["velikost_obsahu"], cfg["gama_grafiky"],
-                                  cfg.get("velikost_textu", 1.0), hist, cfg.get("plasticky_vzhled", True),
-                                  cfg.get("plasticka_zare", False))
+            return screens.render_cached(scr, data, cfg["velikost_obsahu"], cfg["gama_grafiky"],
+                                         cfg.get("velikost_textu", 1.0), hist, cfg.get("plasticky_vzhled", True),
+                                         cfg.get("plasticka_zare", False))
         except Exception as e:
             if scr.get("typ") not in screens.DRAW:
                 e = "tahle verze aplikace typ nezná - restartuj aplikaci"

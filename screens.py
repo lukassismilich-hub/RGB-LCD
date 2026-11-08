@@ -30,6 +30,7 @@ import colorsys
 import json
 import math
 import os
+import time
 from datetime import datetime
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
@@ -2145,6 +2146,7 @@ def _content_box(scr, data):
 
 def clear_cache():
     _boxes.clear()
+    _render_cache.clear()
 
 
 def _fit(big, box, fill):
@@ -2183,6 +2185,63 @@ def render(scr, data, fill=0.92, gamma=0.65, text_scale=1.0, history=None, plast
     if gamma and gamma != 1.0:
         lut = [round(255 * (i / 255) ** gamma) for i in range(256)]
         img = img.point(lut * 3)
+    return img
+
+
+# --------------------------------------------- cache vykresleni (setri CPU)
+# Obrazovka se kresli znovu, jen kdyz se zmeni neco, z ceho se kresli: nastaveni obrazovky, hodnoty
+# a historie jejich senzoru, nebo (u hodin, blikani) cela sekunda. Nic se nekresli castej nez 1x za
+# sekundu podle casu, takze sekunda staci. Senzory, ktere obrazovky ctou napevno, jsou v EXTRA_SENSORS.
+TIME_TYPES = {"hodiny", "hodiny_analog", "hodiny_datum", "hodiny_pod_sebou", "hodiny_stav"}
+TIME_ITEMS = {"hodiny", "rucicky", "kontrolka"}            # prvky volneho rozvrzeni zavisle na case
+_COOL = ("@pumpa_vykon", "@pumpa", "@ventilatory_vykon", "@ventilatory", "@kapalina")
+EXTRA_SENSORS = {"chlazeni": _COOL, "chlazeni_radky": _COOL, "hladina": ("@pumpa_vykon", "@pumpa")}
+_render_cache = {}
+
+
+def _timed(scr):
+    typ = scr.get("typ")
+    if typ in TIME_TYPES or typ not in DRAW:               # neznamy typ se kresli jako hodiny
+        return True
+    if typ == "volne":
+        import kraken_prvky
+        for p in scr.get("prvky", []):
+            if p.get("typ") in TIME_ITEMS or set(kraken_prvky.item_sensors(p)) & set(kraken_prvky.TIME_SENSORS):
+                return True
+    return False
+
+
+def _freeze(v):
+    if isinstance(v, dict):
+        return tuple(sorted((k, _freeze(x)) for k, x in v.items()))
+    if isinstance(v, (list, tuple)):
+        return tuple(_freeze(x) for x in v)
+    return v
+
+
+def render_key(scr, data, history=None, params=()):
+    """Vse, na cem zavisi vysledny obrazek obrazovky."""
+    typ = scr.get("typ")
+    names = used_sensors([scr]) | set(EXTRA_SENSORS.get(typ, ()))
+    if typ == "sit_disky":
+        names |= {n for n in data if n.startswith("@disk ")}
+    names = sorted(names)
+    vals = tuple((n, _freeze(data.get(n))) for n in names)
+    hist = tuple((n, tuple((history or {}).get(n) or ())) for n in names)
+    sec = int(time.time()) if _timed(scr) else None
+    return (json.dumps(scr, sort_keys=True, ensure_ascii=False), _freeze(params), vals, hist, sec)
+
+
+def render_cached(scr, data, fill=0.92, gamma=0.65, text_scale=1.0, history=None, plastic=None, glow=None):
+    """render(), ale kdyz se od minula nic nezmenilo, vrati minuly obrazek (stejny objekt)."""
+    key = render_key(scr, data, history, (fill, gamma, text_scale, plastic, glow))
+    hit = _render_cache.get(key[0])
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    img = render(scr, data, fill, gamma, text_scale, history, plastic, glow)
+    if len(_render_cache) > 64:
+        _render_cache.clear()
+    _render_cache[key[0]] = (key, img)
     return img
 
 

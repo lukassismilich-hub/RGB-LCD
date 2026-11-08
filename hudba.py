@@ -87,18 +87,24 @@ def _vivid(h, s, floor=0.75):
     return _hex((r * 255, g * 255, b * 255))
 
 
-def cover_palette(img, n=6, sens=5):
-    """Az n zivych barev z obalu alba, nejvyraznejsi prvni (hlavni barva, pak doplnkova).
-    Vynecha cernou, bilou, sedou a (pri nizsi citlivosti) hnedou - na LED vypadaji spatne.
-    sens = citlivost na barvy 1..10: vyssi = vezme i malo syte a tmave barvy, male plochy
-    (akcenty) a blizsi odstiny. Prazdny seznam = obal je cernobily / sedy (vychozi paleta)."""
+MAX_COVER_COLORS = 6
+MIN_HUE_DEG = 40.0          # kazde dve barvy z obalu se lisi aspon o tolik stupnu odstinu (kontrast)
+
+
+def cover_palette(img, n=MAX_COVER_COLORS, sens=5):
+    """Az n (nejvys 6) zivych barev z obalu alba, nejvyraznejsi prvni (hlavni barva, pak doplnkova).
+    Barvy jsou proti sobe v kontrastu: odstiny se lisi aspon o MIN_HUE_DEG (napr. ne dve podobne
+    modre). Vynecha cernou, bilou, sedou a (pri nizsi citlivosti) hnedou - na LED vypadaji spatne.
+    sens = citlivost na barvy 1..10: vyssi = vezme i malo syte a tmave barvy a male plochy
+    (akcenty), vernejsi sytost. Prazdny seznam = obal je cernobily / sedy (vychozi paleta)."""
     from PIL import Image
+    n = max(1, min(MAX_COVER_COLORS, int(n)))
     c = max(1.0, min(10.0, float(sens)))
     min_s = 0.36 - 0.026 * c                             # 5 -> 0,23, 10 -> 0,10
     min_v = 0.26 - 0.016 * c                             # 5 -> 0,18, 10 -> 0,10
-    min_dh = 0.10 - 0.007 * c                            # rozdil odstinu: 5 -> 0,065, 10 -> 0,03
     area = 1.0 - 0.06 * c                                # vaha velikosti plochy: 10 -> 0,4 (akcenty)
     floor = 0.85 - 0.03 * c                              # sytost na LED: vyssi citlivost = vernejsi odstin
+    min_dh = MIN_HUE_DEG / 360.0
     small = img.convert("RGB").resize((64, 64), Image.BILINEAR)
     q = small.quantize(colors=int(8 + 2 * c), method=Image.Quantize.MEDIANCUT)
     pal = q.getpalette()
@@ -115,20 +121,14 @@ def cover_palette(img, n=6, sens=5):
     hues, out = [], []
     for _score, h, s in cand:
         if any(min(abs(h - x), 1 - abs(h - x)) < min_dh for x in hues):
-            continue                                     # skoro stejny odstin uz je
+            continue                                     # podobny odstin uz je (malo kontrastni)
         hues.append(h)
         out.append(_vivid(h, s, floor))
         if len(out) >= n:
             break
-    if len(out) == 1:                                    # jednobarevny obal: doplnit odstiny
-        h, s = hues[0], cand[0][2]
-        shift = 0.09 * (10.0 - c) / 9.0                  # nizka citlivost: pribuzne odstiny vedle
-        if shift >= 0.03:
-            out += [_vivid(h + shift, s, floor), _vivid(h - shift, s, floor)]
-        else:                                            # vysoka: stejny odstin svetlejsi a tlumeny
-            for sat, val in ((0.45, 1.0), (1.0, 0.45)):
-                r, g, b = colorsys.hsv_to_rgb(h % 1.0, sat, val)
-                out.append(_hex((r * 255, g * 255, b * 255)))
+    if len(out) == 1:                                    # jednobarevny obal: k plne barve bleda (kontrast jasem)
+        r, g, b = colorsys.hsv_to_rgb(hues[0] % 1.0, 0.35, 1.0)
+        out.append(_hex((r * 255, g * 255, b * 255)))
     return out
 
 

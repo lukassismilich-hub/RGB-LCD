@@ -629,7 +629,7 @@ class Engine:
             out = [bg] * n
             if n == 1:
                 last = st[-1] if st else None
-                out = [_mix(bg, cols[last[2]], fl) if last else bg]
+                out = [_mix(bg, cols[last[2] % k], fl) if last else bg]
             else:
                 for head, vel, ci, strength, age in st:
                     life = strength * max(0.0, 1 - age / 1.3)
@@ -638,7 +638,7 @@ class Engine:
                         dd = ((head - i) if vel > 0 else (i - head)) % n
                         kk = max(0.0, 1 - dd / tail) ** 2 * life
                         if kk > 0:
-                            out[i] = tuple(max(out[i][j], cols[ci][j] * kk) for j in range(3))
+                            out[i] = tuple(max(out[i][j], cols[ci % k][j] * kk) for j in range(3))   # paleta se mohla zmenit
         elif styl == "jiskry":
             st = self.state.setdefault(("hudba_jiskry", key), [])
             if len(st) != n:

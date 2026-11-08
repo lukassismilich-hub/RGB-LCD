@@ -697,6 +697,7 @@ class LedWorker(threading.Thread):
         session, hw_key, t0 = None, None, time.monotonic()
         pl_key = None                            # zmena playlistu (po Ulozit) = playlist od zacatku
         snap, music_err, music_fps, frames, fps_t = None, None, None, 0, time.monotonic()
+        last_exc = None
         last_wall, last_force, prev, last_retry = time.time(), 0.0, time.monotonic(), time.monotonic()
         while not self._quit.is_set():
             with self._lock:
@@ -799,11 +800,15 @@ class LedWorker(threading.Thread):
                     frames, fps_t = 0, now
                 self._set_state(st)
             except Exception as e:
+                if str(e) != last_exc:                   # podrobny vypis do logu (jednou), at jde najit misto
+                    last_exc = str(e)
+                    log.error("LED: %s – podrobně:", e, exc_info=True)
                 if session:
                     session.close()
                     session = None
                 self._set_state({"stav": "chyba", "chyby": [str(e)]})
                 self._quit.wait(RETRY_S)
+                last_wall = time.time()                  # cekani po chybe neni probuzeni PC
                 continue
             if snap is not None:                         # hudba: plynulejsi (udery jsou kratke)
                 self._quit.wait(max(0.0, 1 / fx.MUSIC_FPS - (time.monotonic() - now)))

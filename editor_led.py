@@ -727,6 +727,15 @@ class LedEditor:
         V.segmented(f, bv, [("obal", "z obalu alba"), ("vlastni", "vlastní")], command=on_colors).grid(
             row=10, column=1, columnspan=2, sticky="w", pady=4)
         row = 11
+        if mc.get("barvy", "obal") == "obal":
+            slider(row, "Citlivost na barvy", "citlivost_barev", 1, 10, 1, lambda x: f"{x}")
+            self._cover_strip = tk.Canvas(f, height=22, bg=V.CARD, highlightthickness=0)
+            self._cover_strip.grid(row=row + 1, column=1, columnspan=2, sticky="ew", pady=(0, 2))
+            ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
+                "Vyšší = bere i méně syté a tmavší barvy, malé barevné plochy obalu a bližší odstiny, "
+                "věrnější odstín. Nižší = jen výrazné barvy, hodně syté. Změna se projeví po Uložit.")).grid(
+                row=row + 2, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
+            row += 3
         if mc.get("barvy") == "vlastni":
             cols = mc.setdefault("paleta", list(led.MUSIC_DEFAULT["paleta"]))
             ttk.Label(f, text="Počet barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),
@@ -793,6 +802,21 @@ class LedEditor:
                 if st.get("bpm"):
                     text += f" · {st['bpm']:.0f} BPM"
         lbl.config(text=text)
+        strip = getattr(self, "_cover_strip", None)          # barvy z obalu prave hrajici skladby
+        try:
+            if strip is not None and strip.winfo_exists():
+                strip.delete("all")
+                pal = st.get("paleta") or []
+                if not pal:
+                    strip.create_text(0, 11, anchor="w", fill=V.DIM, font=("Segoe UI", 8),
+                                      text="barvy z obalu uvidíš, až bude Spotify hrát")
+                for i, col in enumerate(pal):
+                    strip.create_rectangle(i * 34, 2, i * 34 + 30, 20, fill=col, outline="")
+                if pal:
+                    strip.create_text(len(pal) * 34 + 4, 11, anchor="w", fill=V.DIM, font=("Segoe UI", 8),
+                                      text="z obalu teď")
+        except tk.TclError:
+            pass
 
     # ------------------------------------------------------- graficka karta
     def _build_gpu(self):

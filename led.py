@@ -3,8 +3,8 @@
 #
 # Efekty pocita aplikace (led_efekty.py) a posila barvy kazde LED primo:
 #   - NZXT: kanaly led1 a led2 = po jednom F140 (8 LED), rezim "super-fixed" (barva po LED)
-#   - Gigabyte: ARGB hlavicka D_LED1 (0x58) - 2 ventilatory paralelne, kazdy 16 LED (sviti stejne);
-#     D_LED2 (0x59) - 1 ventilator, 16 LED. Primy rezim: registr 0x32 = maska vypnutych vestavenych efektu
+#   - Gigabyte: ARGB hlavicka D_LED1 (0x58) - 2 ventilatory paralelne, kazdy 14 LED (sviti stejne);
+#     D_LED2 (0x59) - 1 ventilator, 14 LED. Primy rezim: registr 0x32 = maska vypnutych vestavenych efektu
 #     (D_LED1 0x01, D_LED2 0x02), barvy po LED paketem [0xCC, hlavicka, offset 2 B, pocet bajtu,
 #     az 19 LED], poradi bajtu z kalibrace (GRB). Protokol podle OpenRGB.
 #   - ostatni zony desky (male LED, 12V RGB) = jen jedna barva / efekt cipu pres liquidctl
@@ -53,6 +53,7 @@ FUSION_SPEEDS = {"slowest": "nejpomaleji", "slower": "pomaleji", "normal": "norm
 ARGB_HEADERS = {"D_LED1": ("led6", 0x58, 0x01), "D_LED2": ("led7", 0x59, 0x02)}
 ARGB_ZONES = {v[0] for v in ARGB_HEADERS.values()}
 ARGB_MAX_LEDS = 32
+ARGB_FAN_LEDS = 14           # vychozi pocet LED ventilatoru na desce (8. 11. 2026 - LED 15 a 16 nesviti, drive 16)
 KEYBOARD = False             # klavesnice G815 zatim skryta (v okne i ve vlakne), kod zustava
 EXTRAS = ("grafika", "klavesnice")   # cile s jednou "LED" mimo ventilatory (bez natoceni)
 EXTRA_DEFAULT = {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffffff"}
@@ -67,13 +68,20 @@ MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "styly_strid
 MAX_REPEATS = 999
 MAX_FADE_S = 5.0
 
-# test natoceni z okna nastaveni: na kazdem ventilatoru sviti jen LED 1 (po natoceni), nebo jedna
-# LED pomalu obiha; okno posila natoceni i bez Ulozit a pozadavek obnovuje, jinak po TEST_TIMEOUT_S skonci
+# test natoceni z okna nastaveni: na kazdem ventilatoru sviti jen jedna LED - spodek ventilatoru, jak ho
+# vidi efekty (svisle efekty s otocenim 0: plameny zacinaji dole), nebo LED obiha od spodku po smeru hodin;
+# okno posila natoceni i bez Ulozit a pozadavek obnovuje, jinak po TEST_TIMEOUT_S skonci
 TEST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "led_test.json")
 TEST_TIMEOUT_S = 15
 TEST_TURN_S = 8.0                            # obihani: jedna otacka za 8 s (F140 1 LED/s, deska 2 LED/s)
 TEST_COLORS = {"f140_1": (255, 0, 0), "f140_2": (0, 255, 0), "D_LED1": (0, 80, 255), "D_LED2": (255, 200, 0)}
-TEST_MODES = {"stoji": "svítí LED 1", "obiha": "jedna LED obíhá"}
+TEST_MODES = {"dole": "svítí spodek", "obiha": "obíhá od spodku po směru hodin"}
+
+
+def bottom_pos(n):
+    """Pozice efektu (0..n-1), kterou efekty berou jako spodek ventilatoru: pozice 0 je vpravo,
+    cislovani po smeru hodin, takze spodek je ctvrt otacky dal (led_efekty._ring_y s otocenim 0)."""
+    return round(n / 4) % max(1, n)
 
 
 def rainbow(n):
@@ -110,9 +118,10 @@ def default_config():
         "nzxt": {"led1": {"nazev": "F140 (1)", "barvy": list(RAINBOW)},
                  "led2": {"nazev": "F140 (2)", "barvy": list(RAINBOW)}},
         "argb": {
-            "D_LED1": {"nazev": "2 ventilátory paralelně", "pocet_led": 16, "pouzito": True,
-                       "barvy": rainbow(16)},
-            "D_LED2": {"nazev": "1 ventilátor", "pocet_led": 16, "pouzito": True, "barvy": rainbow(16)},
+            "D_LED1": {"nazev": "2 ventilátory paralelně", "pocet_led": ARGB_FAN_LEDS, "pouzito": True,
+                       "barvy": rainbow(ARGB_FAN_LEDS)},
+            "D_LED2": {"nazev": "1 ventilátor", "pocet_led": ARGB_FAN_LEDS, "pouzito": True,
+                       "barvy": rainbow(ARGB_FAN_LEDS)},
         },
         "fusion": zones,
         # grafika a klavesnice: rizeni z aplikace, efekt "f140" / "deska" (jako ventilatory) / "vlastni",
@@ -155,7 +164,7 @@ def targets(lcfg):
     for name in ARGB_HEADERS:
         h = lcfg.get("argb", {}).get(name, {})
         if h.get("pouzito", name == "D_LED1"):
-            n = max(1, min(ARGB_MAX_LEDS, int(h.get("pocet_led", 16))))
+            n = max(1, min(ARGB_MAX_LEDS, int(h.get("pocet_led", ARGB_FAN_LEDS))))
             out.append((name, n, "deska", h.get("barvy", rainbow(n))))
     for key in EXTRAS:                                     # grafika / klavesnice = jedna "LED"
         if extra_on(lcfg, key) or (key == "grafika" and gpu_zones(lcfg)):   # i kvuli zonam "jako grafika"
@@ -367,19 +376,23 @@ def _test_orient(lcfg, test):
     return out
 
 
-def test_frame(lcfg, test, t):
+def test_frame(lcfg, test, t, orient=True):
     """Snimek testu natoceni: na kazdem ventilatoru jedna LED v jeho barve (TEST_COLORS).
-    "stoji" = pozice 1 efektu (LED 1 po natoceni), "obiha" = LED pomalu obiha ve smeru efektu.
+    "dole" = spodek ventilatoru (kde zacinaji plameny), "obiha" = LED obiha od spodku po smeru
+    hodin (spodek -> vlevo -> nahore -> vpravo). orient=False (nahled) = jak to ma vypadat.
     Grafika / klavesnice zhasnute."""
     lc = _test_orient(lcfg, test)
-    mode = (test or {}).get("rezim", "stoji")
+    mode = (test or {}).get("rezim", "dole")
     out = {}
     for key, n, group, _c in targets(lc):
         cols = [[0, 0, 0] for _ in range(n)]
         if group not in EXTRAS:
-            pos = int(max(0.0, t) / TEST_TURN_S * n) % n if mode == "obiha" else 0
+            pos = bottom_pos(n)
+            if mode == "obiha":
+                pos = (pos + int(max(0.0, t) / TEST_TURN_S * n)) % n
             cols[pos] = list(TEST_COLORS.get(key, (255, 255, 255)))
-            cols = _orient(cols, *orientation(lc, key))
+            if orient:
+                cols = _orient(cols, *orientation(lc, key))
         out[key] = cols
     return out
 
@@ -650,7 +663,6 @@ class Session:
                 speed = "normal"                    # v liquidctl 1.16 preklep v nazvu rychlosti
             self.fusion.set_color(name, mode, cols, speed=speed)
         self.fdev.send_feature_report([0xCC, 0x32, 0x03] + [0] * 61)       # liquidctl mohl masku zmenit
-
     def send(self, frame, force=False):
         """Poslat jen to, co se zmenilo (force = vse). Chyba jednoho radice nezastavi druhy."""
         f1, f2 = frame.get("f140_1"), frame.get("f140_2")

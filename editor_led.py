@@ -1,7 +1,7 @@
 # editor_led.py - stranka LED v okne nastaveni
 #   - jas vsech ventilatoru + vyrovnani F140 / ventilatory na desce
 #   - efekt pro vsechny ventilatory (nebo zvlast F140 a deska), rychlost, smer, barvy, vlna
-#   - vlastni barvy LED (kruh 8 / 16 LED) - pro efekt "vlastni barvy LED" a klidny stav po ukonceni
+#   - vlastni barvy LED (kruh 8 / 14 LED) - pro efekt "vlastni barvy LED" a klidny stav po ukonceni
 #   - natoceni ventilatoru (posun LED 1, obraceny smer) - aby se efekt na vsech tocil stejne
 #   - zivy animovany nahled (stejny vypocet jako ve vlakne LED)
 #   - sbalene: ARGB hlavicky (pocet LED, D_LED2) a ostatni zony desky
@@ -91,7 +91,7 @@ class LedEditor:
         ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu. "
                                                  "Na ventilátorech se změna projeví po Uložit.",
                   wraplength=PREVIEW_W).pack(anchor="w", padx=16, pady=(4, 14))
-        self._test = tk.StringVar(value="")                # test natoceni: "" / "stoji" / "obiha"
+        self._test = tk.StringVar(value="")                # test natoceni: "" / "dole" / "obiha"
         self._test_t0 = self.t0
         self._test_job = None
         self.sync = V.card(right)                          # natoceni hned pod nahledem
@@ -605,7 +605,7 @@ class LedEditor:
         for name in led.ARGB_HEADERS:                      # kazda zapojena ARGB hlavicka desky zvlast
             h = self.lcfg["argb"].get(name, {})
             if h.get("pouzito", name == "D_LED1"):
-                rings.append((f"Deska – {name}", h, max(1, min(led.ARGB_MAX_LEDS, int(h.get("pocet_led", 16)))),
+                rings.append((f"Deska – {name}", h, max(1, min(led.ARGB_MAX_LEDS, int(h.get("pocet_led", led.ARGB_FAN_LEDS)))),
                               None))
         for i, (title, ch, n, front) in enumerate(rings):   # po dvou do radku, at karta nezuzi levy sloupec
             row, col = 3 + i // 2, i % 2
@@ -1127,10 +1127,11 @@ class LedEditor:
                                                       pady=(14, 0))
         ttk.Label(f, style="Small.TLabel", wraplength=PREVIEW_W, justify="left",
                   text="Test: na každém ventilátoru svítí jen jedna LED v jeho barvě (tečka u názvu). "
-                       "„Svítí LED 1“ – posouvej LED, dokud nesvítí na všech ventilátorech na stejném místě. "
-                       "„LED obíhá“ – jedna LED pomalu obíhá (otáčka za 8 s); kde obíhá opačně, zaškrtni "
-                       "obrácený směr. Změny se v testu projeví hned (do 3 s), natrvalo až po Uložit. "
-                       "Náhled natočení zohledňuje (LED 1 vpravo, číslování po směru hodin).").grid(
+                       "„Svítí spodek“ – LED, kde efekty mají spodek ventilátoru (tam začínají plameny, "
+                       "hladina…); posouvej LED, dokud nesvítí na každém ventilátoru dole. "
+                       "„Obíhá“ – LED jde od spodku po směru hodin (dole → vlevo → nahoře → vpravo); "
+                       "kde jde opačně, zaškrtni obrácený směr. Změny se v testu projeví do 3 s, "
+                       "natrvalo až po Uložit. Po srovnání mají svislé efekty správně otočení 0°.").grid(
             row=1, column=0, columnspan=5, sticky="w", padx=16, pady=(2, 6))
         tf = tk.Frame(f, bg=V.CARD)
         tf.grid(row=2, column=0, columnspan=5, sticky="w", padx=16, pady=(0, 8))
@@ -1234,20 +1235,24 @@ class LedEditor:
         af = ttk.LabelFrame(inner, text="ARGB hlavičky desky")
         af.pack(anchor="w", fill="x", pady=4)
         for r, name in enumerate(led.ARGB_HEADERS):
-            h = self.lcfg["argb"].setdefault(name, {"pocet_led": 16, "pouzito": False})
+            h = self.lcfg["argb"].setdefault(name, {"pocet_led": led.ARGB_FAN_LEDS, "pouzito": False})
             used = tk.BooleanVar(value=h.get("pouzito", name == "D_LED1"))
             ttk.Checkbutton(af, text=f"{name} – {h.get('nazev', '')}", variable=used,
                             command=lambda h=h, used=used: self._set_used(h, used.get())).grid(
                 row=r, column=0, sticky="w", padx=4, pady=2)
             ttk.Label(af, text="počet LED", style="Muted.TLabel").grid(row=r, column=1, padx=(10, 4))
-            pv = tk.StringVar(value=str(h.get("pocet_led", 16)))
+            pv = tk.StringVar(value=str(h.get("pocet_led", led.ARGB_FAN_LEDS)))
             ttk.Spinbox(af, textvariable=pv, from_=1, to=led.ARGB_MAX_LEDS, width=4).grid(row=r, column=2)
 
             def on_count(*a, h=h, pv=pv):
                 try:
-                    h["pocet_led"] = max(1, min(led.ARGB_MAX_LEDS, int(pv.get())))
+                    n = max(1, min(led.ARGB_MAX_LEDS, int(pv.get())))
                 except ValueError:
-                    pass
+                    return
+                if n != h.get("pocet_led", led.ARGB_FAN_LEDS):
+                    h["pocet_led"] = n
+                    self._build_custom()                    # kruh barev a rozsah posunu podle poctu LED
+                    self._build_sync()
             pv.trace_add("write", on_count)
         ttk.Label(af, style="Small.TLabel", text="Nezaškrtnutá hlavička zůstane zhasnutá.").grid(
             row=2, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 4))
@@ -1328,10 +1333,10 @@ class LedEditor:
                 snap = fx.music_demo(now - self.t0, self._music_palette(), track_n=int((now - self.t0) // 8))
                 info = None
             if self._test.get():                                # test natoceni: jen jedna LED
-                frame = led.test_frame(lc, {"rezim": self._test.get()}, now - self._test_t0)
+                frame = led.test_frame(lc, {"rezim": self._test.get()}, now - self._test_t0, orient=False)
                 snap = info = None
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
-                              text="Test natočení: " + led.TEST_MODES[self._test.get()])
+                              text="Test: " + led.TEST_MODES[self._test.get()] + " – takhle to má vypadat")
             else:
                 frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), music=snap)
             if snap is not None:

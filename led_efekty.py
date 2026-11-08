@@ -5,7 +5,7 @@
 # Diky tomu je jas pod kontrolou a efekty jsou stejne a synchronni na vsech ventilatorech.
 # Ciste vypocty bez hardwaru - pouziva je vlakno LED (led.py) i zivy nahled v nastaveni.
 #
-# Ventilator ("cil") = (klic, pocet LED, skupina): F140 maji 8 LED, ventilatory na desce 16 LED.
+# Ventilator ("cil") = (klic, pocet LED, skupina): F140 maji 8 LED, ventilatory na desce 14 LED.
 # Vlna: kazdy ventilator dostane posun faze (led.wave_offsets podle rozmisteni ve skrini).
 
 import colorsys

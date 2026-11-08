@@ -734,6 +734,14 @@ class LedEditor:
             on_pick(next((k for k in fx.MUSIC_STYLES if k in pool), "pulz"))
             row4 = ("S každou novou skladbou se náhodně vybere jeden ze zaškrtnutých stylů (dvakrát po sobě "
                     "stejný ne). V náhledu se styl mění každých 8 s.")
+        of = ttk.Frame(sf)                                   # kde je "dole" (plameny, spektrum, vlny...)
+        of.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(of, text="Otočení", style="Muted.TLabel").pack(side="left", padx=(0, 10))
+        ov = tk.IntVar(value=int(mc.get("otoceni", 0)) % 360)
+        V.segmented(of, ov, [(0, "0°"), (90, "90°"), (180, "180°"), (270, "270°")],
+                    command=lambda: mc.__setitem__("otoceni", ov.get())).pack(side="left")
+        ttk.Label(of, style="Small.TLabel", text="  když „dole“ (plameny, spektrum, vlny…) není dole").pack(
+            side="left")
         if row4:
             ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=row4).grid(
                 row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 8))

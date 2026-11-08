@@ -62,7 +62,7 @@ PLAYLIST_DEFAULT = {"zapnuto": False, "polozky": [], "prolinani": 1.0}
 MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "styly_stridat": list(fx.MUSIC_STYLES),
                  "citlivost": 5, "basy": 7, "jas": 100,
                  "barvy": "obal", "citlivost_barev": 7, "paleta": ["#ff2a6d", "#7b2cff", "#05d9e8"],
-                 "zpozdeni_ms": 180, "navrat_s": 3}
+                 "zpozdeni_ms": 180, "navrat_s": 3, "otoceni": 0}
 MAX_REPEATS = 999
 MAX_FADE_S = 5.0
 

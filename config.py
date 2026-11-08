@@ -157,6 +157,11 @@ def load():
     lc = cfg["led"]
     for k, v in DEFAULTS["led"].items():               # doplneni novych klicu LED
         lc.setdefault(k, json.loads(json.dumps(v)))
+    if "otoceni" not in lc["hudba"]:                   # otoceni svislych efektu: jako u beznych efektu
+        effs = [lc.get(k) for k in ("efekt", "efekt_f140", "efekt_deska")] + list(
+            (lc.get("playlist") or {}).get("polozky", []))
+        lc["hudba"]["otoceni"] = next((e["otoceni"] for e in effs if isinstance(e, dict) and "otoceni" in e
+                                       and e.get("typ") in led.fx.VERTICAL), 0)
     for k, v in DEFAULTS["led"]["hudba"].items():      # hudebni vizualizer
         lc["hudba"].setdefault(k, json.loads(json.dumps(v)))
     for group in ("nzxt", "fusion", "argb"):

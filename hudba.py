@@ -186,6 +186,12 @@ class Analyzer:
             self.drops = collections.deque(maxlen=8)      # (t, poradi)
             self.beat_n = self.drop_n = 0
 
+    def new_track(self):
+        """Nova skladba: tempo a dlouhodoby prumer (drop) pocitat znovu, at se neprenesou z predchozi."""
+        self.ibi.clear()
+        self.long_db.clear()
+        self.short_db.clear()
+
     def _db(self, p, r):
         return 10 * math.log10(float(p[r[0]:r[1]].sum()) / self.norm + 1e-12)     # vykon pasma, plna sinusovka ~0 dB
 
@@ -404,6 +410,8 @@ class Music:
             tr["n"] = self._track_n
             await self._load_cover(props, tr)
             log.info("Hudba: %s – %s", artist, title)
+            if self.analyzer is not None:
+                self.analyzer.new_track()
             if not first and playing:
                 self._show(tr, now)
         elif playing and not was_playing and not first and self.lcd_cfg.get("po_pauze") and paused_for > PAUSE_SHOW_S:

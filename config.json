@@ -1864,7 +1864,7 @@
         "obraceny_smer": false,
         "nazev": "F140 (2)",
         "obracene": false,
-        "posun": 6
+        "posun": 5
       },
       "led3": {
         "nazev": "nepřipojeno",
@@ -1990,7 +1990,7 @@
     "stejne_pro_vse": true,
     "vlna": true,
     "efekt": {
-      "typ": "stirani",
+      "typ": "hladina",
       "barvy": [
         "#ffffff",
         "#ff0000",
@@ -2078,6 +2078,212 @@
       "senzor": "CPU (Tctl/Tdie)",
       "min": 40,
       "max": 90
+    },
+    "playlist": {
+      "zapnuto": true,
+      "polozky": [
+        {
+          "typ": "stirani",
+          "barvy": [
+            "#ffffff",
+            "#ff0000",
+            "#df7000",
+            "#f4f400",
+            "#00ff00",
+            "#00ffff",
+            "#0000d9",
+            "#7400e8"
+          ],
+          "rychlost": 2,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 60.0,
+          "max": 90,
+          "pocet_barev": 8,
+          "otoceni": 270,
+          "pauza": 0.5,
+          "barvy_rezim": "barvy",
+          "opakovani": 1
+        },
+        {
+          "typ": "dychani",
+          "barvy": [
+            "#ff0000",
+            "#0060ff",
+            "#00ff40",
+            "#ffb000",
+            "#b000ff",
+            "#00e5ff",
+            "#ff0080",
+            "#ffffff"
+          ],
+          "rychlost": 2,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 2,
+          "pocet_barev": 8,
+          "pauza": 1.0
+        },
+        {
+          "typ": "duha_toceni",
+          "barvy": [
+            "#ff0000",
+            "#0060ff",
+            "#00ff40"
+          ],
+          "rychlost": 2,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 16
+        },
+        {
+          "typ": "plazma",
+          "barvy": [
+            "#ff0000",
+            "#0060ff",
+            "#00ff40"
+          ],
+          "rychlost": 2,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 4
+        },
+        {
+          "typ": "blesky",
+          "barvy": [
+            "#0000ff",
+            "#ffffff",
+            "#00ff40"
+          ],
+          "rychlost": 4,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 10
+        },
+        {
+          "typ": "vlneni",
+          "barvy": [
+            "#ff0000",
+            "#0060ff",
+            "#00ff40",
+            "#ffb000",
+            "#b000ff",
+            "#00e5ff",
+            "#ff0080",
+            "#ffffff"
+          ],
+          "rychlost": 2,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 3,
+          "pocet_barev": 8
+        },
+        {
+          "typ": "duhovy_trpyt",
+          "barvy": [
+            "#ffffff",
+            "#00ff00",
+            "#00ff40"
+          ],
+          "rychlost": 3,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 10
+        },
+        {
+          "typ": "ohnostroj",
+          "barvy": [
+            "#ff0000",
+            "#0060ff",
+            "#00ff40"
+          ],
+          "rychlost": 4,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 12
+        },
+        {
+          "typ": "kapky",
+          "barvy": [
+            "#ff0000",
+            "#0060ff",
+            "#00ff40",
+            "#ffb000",
+            "#b000ff",
+            "#00e5ff",
+            "#ff0080",
+            "#ffffff"
+          ],
+          "rychlost": 3,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 12,
+          "pocet_barev": 8
+        },
+        {
+          "typ": "polarni_zare",
+          "barvy": [
+            "#ff0000",
+            "#0060ff",
+            "#00ff40"
+          ],
+          "rychlost": 4,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 7
+        }
+      ],
+      "prolinani": 1.0
+    },
+    "hudba": {
+      "zapnuto": true,
+      "styl": "plameny",
+      "stridat": true,
+      "citlivost": 6,
+      "jas": 100,
+      "barvy": "obal",
+      "paleta": [
+        "#ff0000",
+        "#0000ff",
+        "#ff0000",
+        "#0060ff",
+        "#00ff40"
+      ],
+      "zpozdeni_ms": 100,
+      "navrat_s": 3,
+      "citlivost_barev": 10,
+      "basy": 10,
+      "styly_stridat": [
+        "pulz",
+        "spektrum",
+        "ekvalizer",
+        "komety",
+        "jiskry",
+        "zablesky",
+        "vlny",
+        "stridani",
+        "plameny"
+      ],
+      "otoceni": 270,
+      "doplnit_barvy": false
     }
   },
   "ikona_programu": {
@@ -2090,5 +2296,13 @@
     "zare": true
   },
   "plasticky_vzhled": true,
-  "plasticka_zare": true
+  "plasticka_zare": true,
+  "hudba": {
+    "zapnuto": true,
+    "doba_s": 10,
+    "po_pauze": true,
+    "rozvrzeni": "cely",
+    "prubeh": true,
+    "zare": true
+  }
 }

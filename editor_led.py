@@ -1,15 +1,15 @@
 # editor_led.py - stranka LED v okne nastaveni
-#   - jas vsech ventilatoru + vyrovnani F140 / ventilatory na desce
-#   - efekt pro vsechny ventilatory (nebo zvlast F140 a deska), rychlost, smer, barvy, vlna
-#   - vlastni barvy LED (kruh 8 / 14 LED) - pro efekt "vlastni barvy LED" a klidny stav po ukonceni
-#   - natoceni ventilatoru (posun LED 1, obraceny smer) - aby se efekt na vsech tocil stejne
-#   - zivy animovany nahled (stejny vypocet jako ve vlakne LED)
-#   - sbalene: ARGB hlavicky (pocet LED, D_LED2) a ostatni zony desky
-#   - graficka karta RTX 5070: svetelny pasek z aplikace (efekt jako F140 / deska / vlastni, jas,
-#     klidna barva)
-#   - klavesnice Logitech G815 (zatim skryta, led.KEYBOARD): integrovana pamet zapnout / vypnout,
-#     zaloha pameti (jen cteni), barva z aplikace pres LED SDK z G HUB
-# Zmeny se na ventilatorech projevi po Ulozit.
+#   pevne nahore: rizeni LED z aplikace, stav, hlavni jas; vpravo zivy nahled (neroluje se)
+#   zalozky (roluje se jen jejich obsah):
+#   - Efekt: jeden efekt / playlist, stejny pro vse / zvlast F140 a deska, efekty ve skupinach
+#     (FX_GROUPS), vlastni barvy LED (jen kdyz se efekt "vlastni barvy LED" pouziva)
+#   - Hudba: vizualizer Spotify v blocich (zapnuti, styl, reakce, barvy)
+#   - Synchronizace: synchronne / vlna, smer, F140 jako jeden, poradi vlny ve skrini
+#   - Dalsi zarizeni: graficka karta RTX 5070, dalsi zony desky, klavesnice G815 (zatim skryta,
+#     led.KEYBOARD)
+#   - Zapojeni: ARGB hlavicky, ktery F140 je vpredu, natoceni ventilatoru + test, vyrovnani jasu,
+#     otoceni svislych efektu a hudby (spolecne pro vsechny efekty), klidny stav po ukonceni
+# Zmeny se na ventilatorech projevi po Ulozit. Format config.json se nemeni.
 
 import copy
 import math
@@ -24,8 +24,35 @@ import vzhled as V
 
 PREVIEW_MS = 40
 PREVIEW_W, PREVIEW_H = 470, 180
+WRAP = 450                    # zalomeni textu v kartach zalozek (sirka leveho sloupce)
 PLAYLIST_ITEM_S = 20          # nova polozka playlistu trva asi tolik sekund (pocet opakovani podle delky)
 _contrast = V.contrast
+
+TABS = [("efekt", "Efekt"), ("hudba", "Hudba"), ("synchro", "Synchronizace"),
+        ("zarizeni", "Další zařízení"), ("zapojeni", "⚙ Zapojení")]
+# skupiny efektu v okne (jen vzhled stranky; efekt, ktery v zadne skupine neni, pujde do "Ostatni")
+FX_GROUPS = [
+    ("Klidné", ("vypnuto", "barva", "vlastni", "staticky_prechod", "prechod", "dychani", "duhove_dychani",
+                "dychajici_paleta", "stridani", "tep")),
+    ("Duha a palety", ("duha_toceni", "duha_prelevani", "plazma", "paleta", "vysece", "vlneni",
+                       "polarni_zare", "stirani")),
+    ("Pohyb", ("kometa", "dvojita_kometa", "divadlo", "odraz", "majak", "policie", "pretahovana")),
+    ("Částice", ("trpyt", "duhovy_trpyt", "konfety", "ohnostroj", "blesky", "blikani", "stroboskop", "kapky")),
+    ("Zespodu", ("ohen", "plamen", "vodopad")),
+    ("Senzor", ("teplota", "hladina")),
+]
+FAN_NAMES = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2",
+             "grafika": "grafika", "klavesnice": "klávesnice"}
+
+
+def fx_groups():
+    """[(nazev skupiny, [klice efektu])] - jen existujici efekty, zbytek ve skupine Ostatni."""
+    groups = [(n, [k for k in keys if k in fx.EFFECTS]) for n, keys in FX_GROUPS]
+    seen = {k for _n, keys in groups for k in keys}
+    rest = [k for k in fx.EFFECTS if k not in seen]
+    if rest:
+        groups.append(("Ostatní", rest))
+    return [(n, keys) for n, keys in groups if keys]
 
 
 def _dur(s):
@@ -37,6 +64,8 @@ def _dur(s):
 
 
 class LedEditor:
+    last_tab = "efekt"            # vybrana zalozka (zachova se pri "Vratit ulozene" - okno se postavi znovu)
+
     def __init__(self, parent, app):
         self.app = app
         self.engine = fx.Engine(seed=7)
@@ -46,65 +75,90 @@ class LedEditor:
         self._pl_sel = 0                          # vybrana polozka playlistu
         self._pl_view = "vse"                     # nahled: "vse" = cely playlist, "polozka" = jen vybrana
         self._pl_ui = None
-        parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=0)
-
-        top = V.card(parent)
-        top.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 16))
-        v = tk.BooleanVar(value=self.lcfg.get("zapnuto", True))
-        ttk.Checkbutton(top, text="Řídit LED z aplikace", variable=v,
-                        command=lambda: self.lcfg.__setitem__("zapnuto", v.get())).pack(
-            side="left", padx=16, pady=10)
-        self.status = ttk.Label(top, font=V.FONT_B)
-        self.status.pack(side="left", padx=16)
-
-        left = tk.Frame(parent, bg=V.BG)
-        left.grid(row=1, column=0, sticky="nsew")
-        left.columnconfigure(0, weight=1)
-        right = tk.Frame(parent, bg=V.BG)
-        right.grid(row=1, column=1, sticky="n", padx=(16, 0))
-
-        self._build_brightness(left)
-        self.fx_frame = V.card(left)
-        self.fx_frame.grid(row=1, column=0, sticky="nsew", pady=(16, 0))
-        self._build_effects()
-        self._music_demo = tk.BooleanVar(value=False)       # nahled: simulovana hudba
-        self.music = V.card(left)
-        self.music.grid(row=2, column=0, sticky="nsew", pady=(16, 0))
-        self._build_music()
-        self.gpu = V.card(left)
-        self.gpu.grid(row=3, column=0, sticky="nsew", pady=(16, 0))
-        self._build_gpu()
-        self._kb_job = None                       # bezici prace s klavesnici (vlakno) a jeji vysledek
-        self._kb_mode = None
-        if led.KEYBOARD:                          # klavesnice zatim skryta
-            self.kb = V.card(left)
-            self.kb.grid(row=4, column=0, sticky="nsew", pady=(16, 0))
-            self._build_keyboard()
-            self._kb_run(self._kb_read_mode)      # aktualni rezim klavesnice
-
-        pv = V.card(right)
-        pv.pack(fill="x")
-        V.card_title(pv, "Živý náhled").pack(anchor="w", padx=16, pady=(14, 6))
-        self.preview = tk.Canvas(pv, width=PREVIEW_W, height=PREVIEW_H, bg=V.CARD, highlightthickness=0)
-        self.preview.pack(padx=12)
-        ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu, a ukazuje, "
-                                                 "jak má vypadat na srovnaných ventilátorech (spodek dole). "
-                                                 "Na ventilátorech se změna projeví po Uložit.",
-                  wraplength=PREVIEW_W).pack(anchor="w", padx=16, pady=(4, 14))
-        self._test = tk.StringVar(value="")                # test natoceni: "" / "dole" / "obiha"
+        self._test = tk.StringVar(value="")       # test natoceni: "" / "dole" / "obiha"
         self._test_t0 = self.t0
         self._test_job = None
-        self.sync = V.card(right)                          # natoceni hned pod nahledem
-        self.sync.pack(fill="x", pady=(16, 0))
+        self._kb_job = None                       # bezici prace s klavesnici (vlakno) a jeji vysledek
+        self._kb_mode = None
+        self._custom_hosts = []                   # karty s kruhy vlastnich barev LED (Efekt, Zapojeni)
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=0)
+        parent.rowconfigure(2, weight=1)
+
+        self._build_top(parent)
+        keys = [k for k, _t in TABS]
+        self._tab = tk.StringVar(value=LedEditor.last_tab if LedEditor.last_tab in keys else keys[0])
+        tb = tk.Frame(parent, bg=V.BG)
+        tb.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+        V.segmented(tb, self._tab, TABS, command=self._show_tab, style="Tab.Toolbutton").pack(side="left")
+        self.scroll = V.ScrollFrame(parent)
+        self.scroll.grid(row=2, column=0, sticky="nsew")
+        body = self.scroll.inner
+        body.columnconfigure(0, weight=1)
+        self.tabs = {}
+        for key in keys:
+            f = tk.Frame(body, bg=V.BG)
+            f.columnconfigure(0, weight=1)
+            self.tabs[key] = f
+        right = tk.Frame(parent, bg=V.BG)                  # nahled se neroluje - je videt na kazde zalozce
+        right.grid(row=1, column=1, rowspan=2, sticky="n", padx=(16, 0))
+        self._build_preview(right)
+
+        # Efekt
+        t = self.tabs["efekt"]
+        self.fx_frame = V.card(t)
+        self.fx_frame.grid(row=0, column=0, sticky="ew")
+        self.custom_fx = V.card(t)                         # jen kdyz se efekt "vlastni barvy LED" pouziva
+        self._custom_hosts.append((self.custom_fx, "Vlastní barvy LED",
+                                   "Barvy jednotlivých LED pro efekt „vlastní barvy LED“. Stejné barvy svítí "
+                                   "i jako klidný stav po ukončení aplikace. Klik na LED = změna barvy."))
+        # Hudba
+        self.music = tk.Frame(self.tabs["hudba"], bg=V.BG)
+        self.music.grid(row=0, column=0, sticky="ew")
+        self.music.columnconfigure(0, weight=1)
+        # Synchronizace
+        self.wave = V.card(self.tabs["synchro"])
+        self.wave.grid(row=0, column=0, sticky="ew")
+        # Dalsi zarizeni
+        t = self.tabs["zarizeni"]
+        self.gpu = V.card(t)
+        self.gpu.grid(row=0, column=0, sticky="ew")
+        self.zones = V.card(t)
+        self.zones.grid(row=1, column=0, sticky="ew", pady=(16, 0))
+        if led.KEYBOARD:                                   # klavesnice zatim skryta
+            self.kb = V.card(t)
+            self.kb.grid(row=2, column=0, sticky="ew", pady=(16, 0))
+        # Zapojeni
+        t = self.tabs["zapojeni"]
+        self.fans = V.card(t)
+        self.fans.grid(row=0, column=0, sticky="ew")
+        self.sync = V.card(t)
+        self.sync.grid(row=1, column=0, sticky="ew", pady=(16, 0))
         self.sync.bind("<Destroy>", lambda e: led.stop_test() if self._test.get() else None)
+        self.balance = V.card(t)
+        self.balance.grid(row=2, column=0, sticky="ew", pady=(16, 0))
+        self.rotation = V.card(t)
+        self.rotation.grid(row=3, column=0, sticky="ew", pady=(16, 0))
+        self.custom_idle = V.card(t)
+        self.custom_idle.grid(row=4, column=0, sticky="ew", pady=(16, 0))
+        self._custom_hosts.append((self.custom_idle, "Klidný stav po ukončení",
+                                   "Takhle ventilátory svítí po ukončení aplikace a při vypnutém řízení LED; "
+                                   "stejné barvy používá efekt „vlastní barvy LED“. Klik na LED = změna barvy."))
+
+        self._build_effects()
+        self._build_music()
+        self._build_wave()
+        self._build_gpu()
+        self._build_zones_card()
+        if led.KEYBOARD:
+            self._build_keyboard()
+            self._kb_run(self._kb_read_mode)               # aktualni rezim klavesnice
+        self._build_fans()
         self._build_sync()
-        self.custom = V.card(right)
-        self.custom.pack(fill="x", pady=(16, 0))
+        self._build_balance()
+        self._build_rotation()
         self._build_custom()
-        self.hw = V.card(right)
-        self.hw.pack(fill="x", pady=(16, 0))
-        self._build_hw()
+        self._show_tab()
         self.refresh()
         self._animate()
 
@@ -112,30 +166,71 @@ class LedEditor:
     def lcfg(self):
         return self.app.cfg["led"]
 
-    # ---------------------------------------------------------------- jas
-    def _build_brightness(self, parent):
-        f = V.card(parent)
-        f.grid(row=0, column=0, sticky="ew")
-        V.card_title(f, "Jas").grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(14, 4))
-        f.columnconfigure(1, weight=1)
-        for row, (key, text, lo) in enumerate((("jas", "Všechny ventilátory", 0),
-                                              ("jas_f140", "Vyrovnání F140", 20),
-                                              ("jas_deska", "Vyrovnání desky", 20)), start=1):
-            last = row == 3
-            ttk.Label(f, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(16, 12),
-                                                               pady=(4, 16 if last else 4))
-            v = tk.IntVar(value=int(self.lcfg.get(key, 100 if key != "jas" else 80)))
-            val = ttk.Label(f, width=5, text=f"{v.get()} %", font=V.MONO, anchor="e")
-            val.grid(row=row, column=2, sticky="e", padx=(8, 16), pady=(4, 16 if last else 4))
+    # ------------------------------------------------------- horni lista a zalozky
+    def _build_top(self, parent):
+        """Rizeni LED z aplikace, stav a hlavni jas - pevne nad zalozkami."""
+        top = V.card(parent)
+        top.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        top.columnconfigure(1, weight=1)
+        v = tk.BooleanVar(value=self.lcfg.get("zapnuto", True))
+        ttk.Checkbutton(top, text="Řídit LED z aplikace", variable=v,
+                        command=lambda: self.lcfg.__setitem__("zapnuto", v.get())).grid(
+            row=0, column=0, sticky="w", padx=16, pady=10)
+        self.status = ttk.Label(top, font=V.FONT_B, wraplength=520, justify="left")
+        self.status.grid(row=0, column=1, sticky="w", padx=8)
+        ttk.Label(top, text="Jas", style="Muted.TLabel").grid(row=0, column=2, sticky="e", padx=(16, 8))
+        jv = tk.IntVar(value=int(self.lcfg.get("jas", 80)))
+        val = ttk.Label(top, width=5, text=f"{jv.get()} %", font=V.MONO, anchor="e")
+        val.grid(row=0, column=4, sticky="e", padx=(8, 16))
 
-            def on(_e=None, key=key, v=v, val=val):
-                self.lcfg[key] = int(v.get())
-                val.config(text=f"{int(v.get())} %")
-            V.scale(f, variable=v, from_=lo, to=100, resolution=5, length=140, command=on).grid(
-                row=row, column=1, sticky="ew", pady=(4, 16 if last else 4))
+        def on(_e=None):
+            self.lcfg["jas"] = int(jv.get())
+            val.config(text=f"{int(jv.get())} %")
+        V.scale(top, variable=jv, from_=0, to=100, resolution=5, length=170, command=on).grid(row=0, column=3)
+
+    def _show_tab(self):
+        key = self._tab.get()
+        LedEditor.last_tab = key
+        if key == "synchro":                               # poradi vlny podle aktualnich cilu (grafika, D_LED2)
+            self._build_wave()
+        for k, f in self.tabs.items():
+            if k == key:
+                f.grid(row=0, column=0, sticky="nsew")
+            else:
+                f.grid_forget()
+        self.scroll.canvas.yview_moveto(0)
+        self._refit()
+        if key != "zapojeni" and self._test.get():         # test natoceni jen na zalozce Zapojeni
+            self._test.set("")
+            self._test_changed()
+
+    def _refit(self):
+        """Po zmene obsahu zalozky prepocitat rolovani (kratsi obsah = bez posuvniku a prazdna mista)."""
+        def fit():
+            try:
+                self.scroll.inner.update_idletasks()
+                self.scroll._fit()
+            except tk.TclError:
+                pass
+        self.scroll.after_idle(fit)
+
+    def _build_preview(self, right):
+        pv = V.card(right)
+        pv.pack(fill="x")
+        V.card_title(pv, "Živý náhled").pack(anchor="w", padx=16, pady=(14, 6))
+        self.preview = tk.Canvas(pv, width=PREVIEW_W, height=PREVIEW_H, bg=V.CARD, highlightthickness=0)
+        self.preview.pack(padx=12)
+        self._music_demo = tk.BooleanVar(value=False)       # nahled: simulovana hudba
+        ttk.Checkbutton(pv, text="Simulovaná hudba (120 úderů za minutu) – když je zapnutý vizualizér",
+                        variable=self._music_demo).pack(anchor="w", padx=16, pady=(6, 0))
+        ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu, a ukazuje, "
+                                                 "jak má vypadat na srovnaných ventilátorech (spodek dole). "
+                                                 "Na ventilátorech se změna projeví po Uložit.",
+                  wraplength=PREVIEW_W).pack(anchor="w", padx=16, pady=(4, 14))
 
     # -------------------------------------------------------------- efekty
     def _build_effects(self):
+        self._refit()
         f = self.fx_frame
         for w in f.winfo_children():
             w.destroy()
@@ -157,27 +252,21 @@ class LedEditor:
         head = ttk.Frame(f)
         head.grid(row=0, column=0, columnspan=2, sticky="ew", padx=20, pady=(14, 4))
         head.columnconfigure(0, weight=1)
-        V.card_title(head, "Efekt").grid(row=0, column=0, sticky="w")
+        V.card_title(head, "Efekt ventilátorů").grid(row=0, column=0, sticky="w")
         V.segmented(head, mode, [(False, "Jeden efekt"), (True, "Playlist")], command=on_mode).grid(row=0, column=1)
-        wave = tk.BooleanVar(value=self.lcfg.get("vlna", False))
         wf = ttk.Frame(f)
-        wf.grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 6))
-
-        def on_wave():
-            self.lcfg["vlna"] = wave.get()
-            self._build_effects()                               # volby vlny jen pri vlne
+        wf.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 10))
+        wave = "vlna – " + ("zepředu dozadu" if self.lcfg.get("vlna_smer", "dozadu") == "dozadu"
+                            else "zezadu dopředu") if self.lcfg.get("vlna") else "synchronně"
         if not mode.get():
             ttk.Label(wf, text="Ventilátory", style="Muted.TLabel").grid(row=0, column=0, sticky="w",
                                                                          padx=(0, 10), pady=3)
             V.segmented(wf, same, [(True, "Stejný efekt pro všechny"), (False, "Zvlášť F140 a deska")],
                         command=on_same).grid(row=0, column=1, sticky="w", pady=3)
-        ttk.Label(wf, text="Mezi ventilátory", style="Muted.TLabel").grid(row=1, column=0, sticky="w",
-                                                                          padx=(0, 10), pady=3)
-        V.segmented(wf, wave, [(False, "Synchronně"), (True, "Vlna (posunutě)")], command=on_wave).grid(
-            row=1, column=1, sticky="w", pady=3)
-        if wave.get():
-            self._wave_options(f)
+        ttk.Label(wf, style="Small.TLabel", text=f"Mezi ventilátory: {wave} (záložka Synchronizace)").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
         f.columnconfigure(0, weight=1)
+        self._custom_visibility()
         if mode.get():
             self._build_playlist(f, pl)
             return
@@ -205,6 +294,9 @@ class LedEditor:
     def _pl_new(self, eff):
         e = copy.deepcopy(dict(eff))
         e["opakovani"] = self._pl_reps_for(e)
+        rot = self._rotation()                              # spolecne otoceni (zalozka Zapojeni)
+        if rot:
+            e["otoceni"] = rot
         return e
 
     def _build_playlist(self, f, pl):
@@ -379,52 +471,91 @@ class LedEditor:
             e = items[self._pl_sel]
             ui["reps"].config(text=f"× {_dur(fx.cycle_s(e, span))} = {_dur(led.item_duration(e, span))}")
 
-    def _wave_options(self, f):
-        """Smer vlny ve skrini (D_LED1 vpredu, 2x F140 uprostred, D_LED2 vzadu) a chovani F140."""
+    # -------------------------------------------------------- synchronizace
+    def _build_wave(self):
+        """Synchronne / vlna, smer vlny, F140 jako jeden a vysledne poradi ventilatoru ve vlne."""
+        self._refit()
+        f = self.wave
+        for w in f.winfo_children():
+            w.destroy()
         lc = self.lcfg
-        of = ttk.Frame(f)
-        of.grid(row=2, column=0, columnspan=2, sticky="w", padx=20, pady=(4, 10))
-        ttk.Label(of, text="Směr vlny", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=3)
-        sv = tk.StringVar(value=lc.get("vlna_smer", "dozadu"))
-        V.segmented(of, sv, [("dozadu", "zepředu dozadu"), ("dopredu", "zezadu dopředu")],
-                    command=lambda: lc.__setitem__("vlna_smer", sv.get())).grid(row=0, column=1, sticky="w", pady=3)
-        together = tk.BooleanVar(value=lc.get("vlna_f140_spolu", True))
-        ttk.Label(of, text="F140", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=3)
-        V.segmented(of, together, [(True, "jako jeden (oba stejně)"), (False, "postupně")],
-                    command=lambda: lc.__setitem__("vlna_f140_spolu", together.get())).grid(
-            row=1, column=1, sticky="w", pady=3)
-        front = tk.StringVar(value=lc.get("f140_vpredu", "led1"))
-        ttk.Label(of, text="Blíž předku", style="Muted.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 10),
-                                                                     pady=3)
-        V.segmented(of, front, [("led1", "F140 (1)"), ("led2", "F140 (2)")],
-                    command=lambda: lc.__setitem__("f140_vpredu", front.get())).grid(row=2, column=1, sticky="w",
-                                                                                     pady=3)
-        ttk.Label(of, style="Small.TLabel", wraplength=440, justify="left",
-                  text="Ve skříni: D_LED1 vpředu, 2× F140 uprostřed, D_LED2 vzadu, grafika pod F140 (ve vlně "
-                       "za D_LED2 – vlna oběhne skříň dokola). Který F140 je vpředu, poznáš "
-                       "s efektem „blikání“ a F140 postupně: vlna musí jít plynule jedním směrem – když F140 "
-                       "bliknou obráceně, přepni „Blíž předku“.").grid(row=3, column=0, columnspan=2, sticky="w",
-                                                                         pady=(4, 0))
+        f.columnconfigure(1, weight=1)
+        V.card_title(f, "Synchronizace ventilátorů").grid(row=0, column=0, columnspan=2, sticky="w", padx=20,
+                                                         pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Jak se efekt šíří mezi ventilátory. Platí pro jeden efekt, playlist i hudbu ze Spotify.")).grid(
+            row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 8))
 
-    def _effect_panel(self, f, eff, chip_cols=3, rebuild=None):
+        def setter(key, var, rebuild=True):
+            def on():
+                lc[key] = var.get()
+                if rebuild:
+                    self._build_wave()
+                    self._build_effects()                       # souhrn vlny v karte efektu, delky playlistu
+            return on
+        wave = tk.BooleanVar(value=lc.get("vlna", False))
+        rows = [("Mezi ventilátory", wave, [(False, "Synchronně"), (True, "Vlna (posunutě)")], "vlna")]
+        if wave.get():
+            rows += [("Směr vlny", tk.StringVar(value=lc.get("vlna_smer", "dozadu")),
+                      [("dozadu", "zepředu dozadu"), ("dopredu", "zezadu dopředu")], "vlna_smer"),
+                     ("F140", tk.BooleanVar(value=lc.get("vlna_f140_spolu", True)),
+                      [(True, "jako jeden (oba stejně)"), (False, "postupně")], "vlna_f140_spolu")]
+        for r, (text, var, opts, key) in enumerate(rows, start=2):
+            ttk.Label(f, text=text, style="Muted.TLabel").grid(row=r, column=0, sticky="w", padx=(20, 10), pady=3)
+            V.segmented(f, var, opts, command=setter(key, var)).grid(row=r, column=1, sticky="w", pady=3)
+        r = 2 + len(rows)
+        keys = [k for k, _n, _g, _c in led.targets(lc) if k not in led.NO_WAVE]
+        if wave.get():
+            offs = led.wave_offsets(lc, keys)[0]
+            steps = []                                          # vlna jde od vetsiho posunu k mensimu
+            for o in sorted({round(v, 6) for v in offs.values()}, reverse=True):
+                steps.append(" + ".join(FAN_NAMES.get(k, k) for k in keys if round(offs[k], 6) == o))
+            order = "  →  ".join(f"{i + 1}. {s}" for i, s in enumerate(steps))
+            note = ("Pak vlna naváže znovu na začátek. Ve skříni: D_LED1 vpředu, 2× F140 uprostřed, D_LED2 "
+                    "vzadu, grafika pod F140 (ve vlně za D_LED2 – vlna oběhne skříň dokola). Který F140 je "
+                    "vpředu, se nastavuje v záložce Zapojení.")
+        else:
+            order = "všechny najednou: " + ", ".join(FAN_NAMES.get(k, k) for k in keys)
+            note = "Všechny ventilátory i grafika mají stejnou fázi efektu."
+        ttk.Label(f, text="Pořadí", style="Muted.TLabel").grid(row=r, column=0, sticky="nw", padx=(20, 10),
+                                                               pady=(8, 3))
+        ttk.Label(f, text=order, font=V.FONT_B, wraplength=WRAP - 120, justify="left").grid(
+            row=r, column=1, sticky="w", pady=(8, 3), padx=(0, 20))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=note).grid(
+            row=r + 1, column=0, columnspan=2, sticky="w", padx=20, pady=(4, 16))
+
+    def _effect_panel(self, f, eff, chip_cols=3, rebuild=None, custom_note=True):
+        """Vyber efektu (skupiny FX_GROUPS + cipy efektu ve skupine) a nastaveni vybraneho efektu."""
         rebuild = rebuild or self._build_effects           # po zmene prekreslit svou kartu
         typ = eff.get("typ", "duha_toceni")
         _n, ncolors, has_speed, has_dir = fx.EFFECTS.get(typ, fx.EFFECTS["vypnuto"])
         tv = tk.StringVar(value=typ if typ in fx.EFFECTS else "vypnuto")
+        groups = fx_groups()
+        gv = tk.StringVar(value=next((n for n, keys in groups if tv.get() in keys), groups[0][0]))
         chips = ttk.Frame(f)
-        chips.grid(row=1, column=0, columnspan=2, sticky="ew")
 
         def on_typ():
             eff["typ"] = tv.get()
             rebuild()
-        for i, (key, spec) in enumerate(fx.EFFECTS.items()):
-            chips.columnconfigure(i % chip_cols, weight=1, uniform="chip")
-            ttk.Radiobutton(chips, text=spec[0], value=key, variable=tv, command=on_typ,
-                            style="Chip.Toolbutton").grid(row=i // chip_cols, column=i % chip_cols,
-                                                          sticky="ew", padx=2, pady=2)
-        ttk.Separator(f).grid(row=2, column=0, columnspan=2, sticky="ew", pady=12)
+
+        def fill():                                         # cipy efektu vybrane skupiny (bez prestavby karty)
+            for w in chips.winfo_children():
+                w.destroy()
+            for i, key in enumerate(dict(groups)[gv.get()]):
+                ttk.Radiobutton(chips, text=fx.EFFECTS[key][0], value=key, variable=tv, command=on_typ,
+                                style="Chip.Toolbutton").grid(row=i // chip_cols, column=i % chip_cols,
+                                                              sticky="ew", padx=2, pady=2)
+        V.segmented(f, gv, [(n, n) for n, _k in groups], command=fill, style="SegSmall.Toolbutton").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        for c in range(chip_cols):
+            chips.columnconfigure(c, weight=1, uniform="chip")
+        chips.grid(row=2, column=0, columnspan=2, sticky="ew")
+        fill()
+        ttk.Separator(f).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(12, 8))
+        ttk.Label(f, text=fx.EFFECTS.get(tv.get(), ("?",))[0], style="Bold.TLabel").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(0, 4))
         f.columnconfigure(1, weight=1)
-        row = 3
+        row = 5
         if has_speed:
             ttk.Label(f, text="Rychlost", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
             sv = tk.IntVar(value=int(eff.get("rychlost", 4)))
@@ -488,14 +619,9 @@ class LedEditor:
                 b.config(command=lambda i=i, b=b: self._pick_list(cols, i, b))
                 b.pack(side="left", padx=(0, 6), ipady=4)
             row += 1
-        if typ in fx.VERTICAL:                              # kde je u efektu "dole"
-            ttk.Label(f, text="Otočení", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
-            ov = tk.IntVar(value=int(eff.get("otoceni", 0)) % 360)
-            of = ttk.Frame(f)
-            of.grid(row=row, column=1, sticky="w", padx=8, pady=4)
-            V.segmented(of, ov, [(0, "0°"), (90, "90°"), (180, "180°"), (270, "270°")],
-                        command=lambda: eff.__setitem__("otoceni", ov.get())).pack(side="left")
-            ttk.Label(of, style="Small.TLabel", text="  když „dole“ efektu není dole na ventilátoru").pack(side="left")
+        if typ in fx.VERTICAL and int(eff.get("otoceni", 0)) % 360:   # otoceni se nastavuje v Zapojeni
+            ttk.Label(f, style="Small.TLabel", text=f"Otočení {int(eff['otoceni']) % 360}° (záložka Zapojení)").grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=4)
             row += 1
         if typ in fx.SENSOR_EFFECTS:
             ttk.Label(f, text="Senzor", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
@@ -520,8 +646,8 @@ class LedEditor:
                         pass
                 v.trace_add("write", on)
             row += 1
-        if typ == "vlastni":
-            ttk.Label(f, style="Small.TLabel", text="Barvy jednotlivých LED nastavíš vpravo ve Vlastních barvách.").grid(
+        if typ == "vlastni" and custom_note:
+            ttk.Label(f, style="Small.TLabel", text="Barvy jednotlivých LED nastavíš níže ve Vlastních barvách LED.").grid(
                 row=row, column=0, columnspan=2, sticky="w", pady=4)
 
     def _palette_editor(self, f, eff, typ, row, rebuild=None):
@@ -584,8 +710,31 @@ class LedEditor:
             V.set_swatch(b, c)
 
     # ------------------------------------------------------ vlastni barvy LED
+    def _uses_custom(self):
+        """Pouziva nektery efekt ventilatoru (jeden efekt / zvlast / playlist) "vlastni barvy LED"?"""
+        lc = self.lcfg
+        pl = lc.get("playlist") or {}
+        if pl.get("zapnuto"):
+            effs = pl.get("polozky", [])
+        elif lc.get("stejne_pro_vse", True):
+            effs = [lc.get("efekt") or {}]
+        else:
+            effs = [lc.get("efekt_f140") or {}, lc.get("efekt_deska") or {}]
+        return any(e.get("typ") == "vlastni" for e in effs)
+
+    def _custom_visibility(self):
+        if self._uses_custom():
+            self.custom_fx.grid(row=1, column=0, sticky="ew", pady=(16, 0))
+        else:
+            self.custom_fx.grid_remove()
+
     def _build_custom(self):
-        f = self.custom
+        """Kruhy vlastnich barev LED - stejne v zalozce Efekt (jen kdyz se pouzivaji) i v Zapojeni."""
+        self._refit()
+        for host in self._custom_hosts:
+            self._build_custom_card(*host)
+
+    def _build_custom_card(self, f, title, text):
         for w in f.winfo_children():
             w.destroy()
         same = tk.BooleanVar(value=self.lcfg.get("nzxt_stejne", True))
@@ -593,12 +742,11 @@ class LedEditor:
         def on_same():
             self.lcfg["nzxt_stejne"] = same.get()
             self._build_custom()
-        V.card_title(f, "Vlastní barvy LED").grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(14, 0))
-        ttk.Label(f, style="Small.TLabel", wraplength=PREVIEW_W,
-                  text="Pro efekt „vlastní barvy LED“ a klidný stav po ukončení aplikace. "
-                       "Klik na LED = změna barvy.").grid(row=1, column=0, columnspan=3, sticky="w", padx=16)
+        V.card_title(f, title).grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 0))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=text).grid(
+            row=1, column=0, columnspan=3, sticky="w", padx=20)
         ttk.Checkbutton(f, text="Oba F140 stejně", variable=same, command=on_same).grid(
-            row=2, column=0, columnspan=3, sticky="w", padx=16, pady=(6, 0))
+            row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(6, 0))
         rings = [("F140 (1)" if not same.get() else "F140", self.lcfg["nzxt"]["led1"], led.LEDS_PER_FAN,
                   "čelo PC ▸")]
         if not same.get():
@@ -608,11 +756,11 @@ class LedEditor:
             if h.get("pouzito", name == "D_LED1"):
                 rings.append((f"Deska – {name}", h, max(1, min(led.ARGB_MAX_LEDS, int(h.get("pocet_led", led.ARGB_FAN_LEDS)))),
                               None))
-        for i, (title, ch, n, front) in enumerate(rings):   # po dvou do radku, at karta nezuzi levy sloupec
+        for i, (name, ch, n, front) in enumerate(rings):    # po dvou do radku (tri se do sloupce nevejdou)
             row, col = 3 + i // 2, i % 2
             fr = ttk.Frame(f)
-            fr.grid(row=row, column=col, sticky="nw", padx=(16 if col == 0 else 4, 4), pady=(6, 16))
-            ttk.Label(fr, text=title, style="Bold.TLabel").pack(anchor="w")
+            fr.grid(row=row, column=col, sticky="nw", padx=(20 if col == 0 else 4, 4), pady=(6, 16))
+            ttk.Label(fr, text=name, style="Bold.TLabel").pack(anchor="w")
             self._ring(fr, ch, n, front)
 
     def _ring(self, parent, ch, n, front):
@@ -655,7 +803,7 @@ class LedEditor:
             ttk.Button(bf, text=text, command=cmd, width=5).pack(side="left", padx=(0, 3))
 
     def _pick_led(self, ch, i):
-        col = colorchooser.askcolor(color=ch["barvy"][i], parent=self.custom)[1]
+        col = colorchooser.askcolor(color=ch["barvy"][i], parent=self.fx_frame)[1]
         if col:
             ch["barvy"][i] = col
             self._build_custom()
@@ -664,32 +812,70 @@ class LedEditor:
         h["pouzito"] = used
         self._build_custom()                                # kruhy barev a natoceni podle zapojenych hlavicek
         self._build_sync()
+        self._build_balance()
 
     # ------------------------------------------------------- hudba ze Spotify
     def _build_music(self):
-        f = self.music
-        for w in f.winfo_children():
+        """Zalozka Hudba: zapnuti a stav, styl, reakce na hudbu, barvy - kazdy blok ve vlastni karte."""
+        self._refit()
+        host = self.music
+        for w in host.winfo_children():
             w.destroy()
+        self._cover_strip = None
         mc = self.lcfg.setdefault("hudba", copy.deepcopy(led.MUSIC_DEFAULT))
         for key, v in led.MUSIC_DEFAULT.items():
             mc.setdefault(key, copy.deepcopy(v))
-        f.columnconfigure(1, weight=1)
-        V.card_title(f, "Hudba ze Spotify").grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 4))
+
+        def card(row, title):
+            c = V.card(host)
+            c.grid(row=row, column=0, sticky="ew", pady=(16 if row else 0, 0))
+            c.columnconfigure(1, weight=1)
+            V.card_title(c, title).grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 4))
+            return c
+
+        def note(f, row, text, pady=(0, 4)):
+            ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=text).grid(
+                row=row, column=0, columnspan=3, sticky="w", padx=20, pady=pady)
+
+        def slider(f, row, text, key, lo, hi, res, fmt, last=False):
+            ttk.Label(f, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),
+                                                               pady=(4, 16 if last else 4))
+            v = tk.DoubleVar(value=float(mc.get(key, lo)))
+            lbl = ttk.Label(f, width=8, font=V.MONO, anchor="e")
+            lbl.grid(row=row, column=2, sticky="e", padx=(8, 20), pady=(4, 16 if last else 4))
+
+            def on(_e=None):
+                x = round(float(v.get()) / res) * res
+                mc[key] = int(x) if float(res).is_integer() else round(x, 2)
+                lbl.config(text=fmt(mc[key]))
+            V.scale(f, variable=v, from_=lo, to=hi, resolution=res, length=160, command=on).grid(
+                row=row, column=1, sticky="ew", pady=(4, 16 if last else 4))
+            on()
+
+        # 1) zapnuti, stav, navrat po pauze
+        a = card(0, "Hudba ze Spotify")
         on = tk.BooleanVar(value=bool(mc.get("zapnuto")))
 
         def on_toggle():
             mc["zapnuto"] = on.get()
             self._build_music()
-        ttk.Checkbutton(f, text="Když hraje Spotify, přepnout na hudební vizualizér", variable=on,
+        ttk.Checkbutton(a, text="Když hraje Spotify, přepnout na hudební vizualizér", variable=on,
                         command=on_toggle).grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 2))
-        self._music_lbl = ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left")
+        self._music_lbl = ttk.Label(a, style="Small.TLabel", wraplength=WRAP, justify="left")
         self._music_lbl.grid(row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 6))
+        intro = ("Reaguje jen na zvuk Spotify – hra, Discord ani upozornění ne. Má přednost před efektem "
+                 "i playlistem; po pauze se za zvolenou dobu vrátí. Údery jdou při vlně skříní od předku dozadu.")
         if not mc.get("zapnuto"):
-            ttk.Frame(f, height=8).grid(row=3, column=0)
+            note(a, 3, intro, pady=(0, 16))
             self._music_refresh()
             return
-        sf = ttk.Frame(f)
-        sf.grid(row=3, column=0, columnspan=3, sticky="ew", padx=20, pady=(4, 2))
+        slider(a, 3, "Návrat po pauze", "navrat_s", 0, 30, 1, lambda x: f"{x} s")
+        note(a, 4, intro, pady=(0, 16))
+
+        # 2) styl
+        b = card(1, "Styl")
+        sf = ttk.Frame(b)
+        sf.grid(row=1, column=0, columnspan=3, sticky="ew", padx=20, pady=(2, 2))
         sf.columnconfigure(0, weight=1)
         alt = tk.BooleanVar(value=bool(mc.get("stridat")))
 
@@ -700,6 +886,7 @@ class LedEditor:
             row=0, column=0, sticky="w", pady=(0, 6))
         chips = ttk.Frame(sf)
         chips.grid(row=1, column=0, sticky="ew")
+        tip = None
         if not alt.get():                                    # jeden styl: vyber jednoho
             sv = tk.StringVar(value=mc.get("styl", "pulz"))
             for i, (key, name) in enumerate(fx.MUSIC_STYLES.items()):
@@ -707,7 +894,6 @@ class LedEditor:
                 ttk.Radiobutton(chips, text=name, value=key, variable=sv, style="Chip.Toolbutton",
                                 command=lambda: mc.__setitem__("styl", sv.get())).grid(
                     row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
-            row4 = None
         else:                                                # nahodne: zaskrtnout, ze kterych stylu
             pool = mc.setdefault("styly_stridat", list(fx.MUSIC_STYLES))
             vars_ = {}
@@ -737,75 +923,50 @@ class LedEditor:
             count = ttk.Label(bf, style="Small.TLabel")
             count.pack(side="left")
             on_pick(next((k for k in fx.MUSIC_STYLES if k in pool), "pulz"))
-            row4 = ("S každou novou skladbou se náhodně vybere jeden ze zaškrtnutých stylů (dvakrát po sobě "
-                    "stejný ne). V náhledu se styl mění každých 8 s.")
-        of = ttk.Frame(sf)                                   # kde je "dole" (plameny, spektrum, vlny...)
-        of.grid(row=3, column=0, sticky="w", pady=(8, 0))
-        ttk.Label(of, text="Otočení", style="Muted.TLabel").pack(side="left", padx=(0, 10))
-        ov = tk.IntVar(value=int(mc.get("otoceni", 0)) % 360)
-        V.segmented(of, ov, [(0, "0°"), (90, "90°"), (180, "180°"), (270, "270°")],
-                    command=lambda: mc.__setitem__("otoceni", ov.get())).pack(side="left")
-        ttk.Label(of, style="Small.TLabel", text="  když „dole“ (plameny, spektrum, vlny…) není dole").pack(
-            side="left")
-        if row4:
-            ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=row4).grid(
-                row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 8))
-        else:
-            ttk.Frame(f, height=6).grid(row=4, column=0)
+            tip = ("S každou novou skladbou se náhodně vybere jeden ze zaškrtnutých stylů (dvakrát po sobě "
+                   "stejný ne). V náhledu se styl mění každých 8 s.")
+        rot = int(mc.get("otoceni", 0)) % 360
+        if rot:
+            tip = (tip + " " if tip else "") + f"Otočení svislých stylů {rot}° (záložka Zapojení)."
+        note(b, 2, tip or "", pady=(6, 14))
 
-        def slider(row, text, key, lo, hi, res, fmt):
-            ttk.Label(f, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10), pady=4)
-            v = tk.DoubleVar(value=float(mc.get(key, lo)))
-            lbl = ttk.Label(f, width=8, font=V.MONO, anchor="e")
-            lbl.grid(row=row, column=2, sticky="e", padx=(8, 20))
+        # 3) reakce na hudbu
+        c = card(2, "Reakce na hudbu")
+        slider(c, 1, "Důraz na basy", "basy", 0, 10, 1, lambda x: f"{x}")
+        note(c, 2, "Vyšší = světla pumpují s basy: mezi údery ztmavnou, s kopákem se rozsvítí, záblesk úderu je "
+                   "silnější a delší; středy a výšky (třpyt, přelévání barev) mají menší vliv. 0 = reaguje na vše "
+                   "stejně.")
+        slider(c, 3, "Citlivost na údery", "citlivost", 1, 10, 1, lambda x: f"{x}")
+        slider(c, 4, "Jas", "jas", 10, 100, 5, lambda x: f"{x} %")
+        slider(c, 5, "Zpoždění světel", "zpozdeni_ms", 0, 500, 10, lambda x: f"{x} ms")
+        note(c, 6, "Bluetooth sluchátka hrají o 150–250 ms později než reproduktory – o tolik zpozdi světla, "
+                   "aby údery seděly. S kabelem / reproduktory 0 ms.", pady=(0, 16))
 
-            def on(_e=None):
-                x = round(float(v.get()) / res) * res
-                mc[key] = int(x) if float(res).is_integer() else round(x, 2)
-                lbl.config(text=fmt(mc[key]))
-            V.scale(f, variable=v, from_=lo, to=hi, resolution=res, length=160, command=on).grid(
-                row=row, column=1, sticky="ew", pady=4)
-            on()
-        slider(5, "Důraz na basy", "basy", 0, 10, 1, lambda x: f"{x}")
-        ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
-            "Vyšší = světla pumpují s basy: mezi údery ztmavnou, s kopákem se rozsvítí, záblesk úderu je "
-            "silnější a delší; středy a výšky (třpyt, přelévání barev) mají menší vliv. 0 = reaguje na vše stejně.")).grid(
-            row=6, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
-        slider(7, "Citlivost na údery", "citlivost", 1, 10, 1, lambda x: f"{x}")
-        slider(8, "Jas", "jas", 10, 100, 5, lambda x: f"{x} %")
-        slider(9, "Zpoždění světel", "zpozdeni_ms", 0, 500, 10, lambda x: f"{x} ms")
-        ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
-            "Bluetooth sluchátka hrají o 150–250 ms později než reproduktory – o tolik zpozdi světla, "
-            "aby údery seděly. S kabelem / reproduktory 0 ms.")).grid(
-            row=10, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
-        slider(11, "Návrat po pauze", "navrat_s", 0, 30, 1, lambda x: f"{x} s")
-        ttk.Label(f, text="Barvy", style="Muted.TLabel").grid(row=12, column=0, sticky="w", padx=(20, 10), pady=4)
+        # 4) barvy
+        d = card(3, "Barvy")
         bv = tk.StringVar(value=mc.get("barvy", "obal"))
 
         def on_colors():
             mc["barvy"] = bv.get()
             self._build_music()
-        V.segmented(f, bv, [("obal", "z obalu alba"), ("vlastni", "vlastní")], command=on_colors).grid(
-            row=12, column=1, columnspan=2, sticky="w", pady=4)
-        row = 13
+        ttk.Label(d, text="Zdroj", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(20, 10), pady=4)
+        V.segmented(d, bv, [("obal", "z obalu alba"), ("vlastni", "vlastní")], command=on_colors).grid(
+            row=1, column=1, columnspan=2, sticky="w", pady=4)
         if mc.get("barvy", "obal") == "obal":
-            slider(row, "Citlivost na barvy", "citlivost_barev", 1, 10, 1, lambda x: f"{x}")
-            self._cover_strip = tk.Canvas(f, height=22, bg=V.CARD, highlightthickness=0)
-            self._cover_strip.grid(row=row + 1, column=1, columnspan=2, sticky="ew", pady=(0, 2))
+            slider(d, 2, "Citlivost na barvy", "citlivost_barev", 1, 10, 1, lambda x: f"{x}")
+            self._cover_strip = tk.Canvas(d, height=22, bg=V.CARD, highlightthickness=0)
+            self._cover_strip.grid(row=3, column=1, columnspan=2, sticky="ew", pady=(0, 2))
             fv = tk.BooleanVar(value=bool(mc.get("doplnit_barvy", True)))
-            ttk.Checkbutton(f, text="Doplnit kontrastní barvy, když jich obal má málo", variable=fv,
+            ttk.Checkbutton(d, text="Doplnit kontrastní barvy, když jich obal má málo", variable=fv,
                             command=lambda: mc.__setitem__("doplnit_barvy", fv.get())).grid(
-                row=row + 2, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 0))
-            ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
-                "Nejvýš 6 plně sytých barev, každé dvě se liší aspoň o 40° odstínu (žádné dvě podobné modré). "
-                "Vyšší citlivost = bere i méně syté a tmavší barvy a malé plochy obalu a chce víc barev "
-                "(1 → 2, 4 → 3, 7 → 4, 10 → 5). Když je obal nemá, doplní se odstíny co nejdál od barev obalu "
-                "(jde vypnout). Změna se projeví po Uložit.")).grid(
-                row=row + 3, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
-            row += 4
-        if mc.get("barvy") == "vlastni":
+                row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 0))
+            note(d, 5, "Nejvýš 6 plně sytých barev, každé dvě se liší aspoň o 40° odstínu (žádné dvě podobné "
+                       "modré). Vyšší citlivost = bere i méně syté a tmavší barvy a malé plochy obalu a chce víc "
+                       "barev (1 → 2, 4 → 3, 7 → 4, 10 → 5). Když je obal nemá, doplní se odstíny co nejdál od "
+                       "barev obalu (jde vypnout). Změna se projeví po Uložit.", pady=(0, 16))
+        else:
             cols = mc.setdefault("paleta", list(led.MUSIC_DEFAULT["paleta"]))
-            ttk.Label(f, text="Počet barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),
+            ttk.Label(d, text="Počet barev", style="Muted.TLabel").grid(row=2, column=0, sticky="w", padx=(20, 10),
                                                                        pady=4)
             nv = tk.IntVar(value=max(2, min(5, len(cols))))
 
@@ -815,23 +976,15 @@ class LedEditor:
                     cols.append(next(c for c in fx.DEFAULT_PALETTE if c not in cols))
                 del cols[n:]
                 self._build_music()
-            V.segmented(f, nv, [(k, str(k)) for k in range(2, 6)], command=on_count).grid(
-                row=row, column=1, columnspan=2, sticky="w", pady=4)
-            row += 1
-            bf = ttk.Frame(f)
-            bf.grid(row=row, column=1, columnspan=2, sticky="w", pady=4)
+            V.segmented(d, nv, [(k, str(k)) for k in range(2, 6)], command=on_count).grid(
+                row=2, column=1, columnspan=2, sticky="w", pady=4)
+            bf = ttk.Frame(d)
+            bf.grid(row=3, column=1, columnspan=2, sticky="w", pady=(4, 16))
             for i in range(len(cols)):
-                b = V.swatch(bf, cols[i], None, text="hlavní" if i == 0 else ("doplňková" if i == 1 else str(i + 1)),
-                             width=9)
-                b.config(command=lambda i=i, b=b: self._pick_list(cols, i, b))
-                b.pack(side="left", padx=(0, 6), ipady=4)
-            row += 1
-        ttk.Checkbutton(f, text="Náhled vpravo: simulovaná hudba (120 úderů za minutu)", variable=self._music_demo).grid(
-            row=row, column=0, columnspan=3, sticky="w", padx=20, pady=(8, 2))
-        ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
-            "Reaguje jen na zvuk Spotify – hra, Discord ani upozornění ne. Má přednost před efektem "
-            "i playlistem; po pauze se za zvolenou dobu vrátí. Údery jdou při vlně skříní od předku dozadu.")).grid(
-            row=row + 1, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 16))
+                b2 = V.swatch(bf, cols[i], None, text="hlavní" if i == 0 else ("doplňková" if i == 1 else str(i + 1)),
+                              width=9)
+                b2.config(command=lambda i=i, b2=b2: self._pick_list(cols, i, b2))
+                b2.pack(side="left", padx=(0, 6), ipady=4)
         self._music_refresh()
 
     def _music_palette(self):
@@ -887,6 +1040,7 @@ class LedEditor:
 
     # ------------------------------------------------------- graficka karta
     def _build_gpu(self):
+        self._refit()
         f = self.gpu
         for w in f.winfo_children():
             w.destroy()
@@ -906,7 +1060,7 @@ class LedEditor:
         zones = led.gpu_zones(self.lcfg)
         if zones:
             ttk.Label(f, style="Small.TLabel", foreground=V.OK, text=(
-                "S grafikou svítí i zóna desky: " + ", ".join(zones) + " (režim „jako grafika“ v Hardware).")).grid(
+                "S grafikou svítí i zóna desky: " + ", ".join(zones) + " (režim „jako grafika“ v kartě Další zóny desky níže).")).grid(
                 row=7, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 12))
         if not gc.get("zapnuto") and not zones:
             ttk.Label(f, style="Small.TLabel", wraplength=440, justify="left", text=(
@@ -953,7 +1107,7 @@ class LedEditor:
             eff = self.lcfg.setdefault("efekt_grafika", dict(fx.DEFAULT_EFFECT))
             pf = ttk.Frame(f)
             pf.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=20, pady=(4, 16))
-            self._effect_panel(pf, eff, 3, rebuild=self._build_gpu)
+            self._effect_panel(pf, eff, 3, rebuild=self._build_gpu, custom_note=False)
         else:
             ttk.Frame(f, height=12).grid(row=6, column=0)
 
@@ -1047,7 +1201,7 @@ class LedEditor:
             eff = self.lcfg.setdefault("efekt_klavesnice", dict(fx.DEFAULT_EFFECT))
             pf = ttk.Frame(f)
             pf.grid(row=9, column=0, columnspan=3, sticky="nsew", padx=20, pady=(4, 16))
-            self._effect_panel(pf, eff, 3, rebuild=self._build_keyboard)
+            self._effect_panel(pf, eff, 3, rebuild=self._build_keyboard, custom_note=False)
         else:
             ttk.Label(f, style="Small.TLabel", text="Celá klávesnice jednou barvou – efekt se počítá jako pro "
                                                     "jeden ventilátor.").grid(row=9, column=0, columnspan=3,
@@ -1126,7 +1280,7 @@ class LedEditor:
             w.destroy()
         V.card_title(f, "Natočení ventilátorů").grid(row=0, column=0, columnspan=5, sticky="w", padx=16,
                                                       pady=(14, 0))
-        ttk.Label(f, style="Small.TLabel", wraplength=PREVIEW_W, justify="left",
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left",
                   text="Test: na každém ventilátoru svítí jen jedna LED v jeho barvě (tečka u názvu). "
                        "„Svítí spodek“ – LED, kde efekty mají spodek ventilátoru (tam začínají plameny, "
                        "hladina…); posouvej LED, dokud nesvítí na každém ventilátoru dole. "
@@ -1139,7 +1293,7 @@ class LedEditor:
         ttk.Label(tf, text="Test", style="Muted.TLabel").pack(side="left", padx=(0, 10))
         V.segmented(tf, self._test, [("", "vypnuto")] + list(led.TEST_MODES.items()),
                     command=self._test_changed).pack(side="left")
-        self.test_msg = ttk.Label(f, style="Small.TLabel", wraplength=PREVIEW_W, justify="left")
+        self.test_msg = ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left")
         self.test_msg.grid(row=3, column=0, columnspan=5, sticky="w", padx=16)
         names = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2"}
         fans = [t for t in led.targets(self.lcfg) if t[0] not in led.EXTRAS]   # grafika/klavesnice = 1 LED
@@ -1225,25 +1379,29 @@ class LedEditor:
             msg.config(text="Test běží na ventilátorech (efekty i hudba stojí). Po vypnutí testu "
                             "nebo zavření okna se efekt vrátí.", foreground=V.OK)
 
-    # -------------------------------------------------------------- hardware
-    def _build_hw(self):
-        f = self.hw
-        show = tk.BooleanVar(value=False)
-        inner = ttk.Frame(f)
-        ttk.Checkbutton(f, text="Hardware – ARGB hlavičky a další zóny desky", variable=show,
-                        command=lambda: inner.pack(anchor="w", padx=16, pady=(0, 14)) if show.get()
-                        else inner.pack_forget()).pack(anchor="w", padx=16, pady=10)
-        af = ttk.LabelFrame(inner, text="ARGB hlavičky desky")
-        af.pack(anchor="w", fill="x", pady=4)
-        for r, name in enumerate(led.ARGB_HEADERS):
-            h = self.lcfg["argb"].setdefault(name, {"pocet_led": led.ARGB_FAN_LEDS, "pouzito": False})
+    # -------------------------------------------------------------- zapojeni
+    def _build_fans(self):
+        """ARGB hlavicky desky (zapojeno, pocet LED) a ktery F140 je blize predku skrine."""
+        f = self.fans
+        for w in f.winfo_children():
+            w.destroy()
+        lc = self.lcfg
+        V.card_title(f, "Zapojení ventilátorů").grid(row=0, column=0, columnspan=4, sticky="w", padx=20,
+                                                    pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "F140 jsou na řadiči NZXT (kanály led1 a led2, 8 LED). Ventilátory na desce jsou na ARGB "
+            "hlavičkách – nezaškrtnutá hlavička zůstane zhasnutá.")).grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=20, pady=(0, 6))
+        for r, name in enumerate(led.ARGB_HEADERS, start=2):
+            h = lc["argb"].setdefault(name, {"pocet_led": led.ARGB_FAN_LEDS, "pouzito": False})
             used = tk.BooleanVar(value=h.get("pouzito", name == "D_LED1"))
-            ttk.Checkbutton(af, text=f"{name} – {h.get('nazev', '')}", variable=used,
+            ttk.Checkbutton(f, text=f"{name} – {h.get('nazev', '')}", variable=used,
                             command=lambda h=h, used=used: self._set_used(h, used.get())).grid(
-                row=r, column=0, sticky="w", padx=4, pady=2)
-            ttk.Label(af, text="počet LED", style="Muted.TLabel").grid(row=r, column=1, padx=(10, 4))
+                row=r, column=0, sticky="w", padx=(20, 4), pady=2)
+            ttk.Label(f, text="počet LED", style="Muted.TLabel").grid(row=r, column=1, padx=(10, 4))
             pv = tk.StringVar(value=str(h.get("pocet_led", led.ARGB_FAN_LEDS)))
-            ttk.Spinbox(af, textvariable=pv, from_=1, to=led.ARGB_MAX_LEDS, width=4).grid(row=r, column=2)
+            ttk.Spinbox(f, textvariable=pv, from_=1, to=led.ARGB_MAX_LEDS, width=4).grid(row=r, column=2,
+                                                                                       sticky="w")
 
             def on_count(*a, h=h, pv=pv):
                 try:
@@ -1255,14 +1413,99 @@ class LedEditor:
                     self._build_custom()                    # kruh barev a rozsah posunu podle poctu LED
                     self._build_sync()
             pv.trace_add("write", on_count)
-        ttk.Label(af, style="Small.TLabel", text="Nezaškrtnutá hlavička zůstane zhasnutá.").grid(
-            row=2, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 4))
-        zf = ttk.LabelFrame(inner, text="Další zóny desky (malé LED, 12V RGB) – jen celá zóna")
-        zf.pack(anchor="w", fill="x", pady=4)
+        r = 2 + len(led.ARGB_HEADERS)
+        ttk.Label(f, text="Blíž předku skříně", style="Muted.TLabel").grid(row=r, column=0, sticky="w",
+                                                                          padx=(20, 4), pady=(10, 3))
+        front = tk.StringVar(value=lc.get("f140_vpredu", "led1"))
+        V.segmented(f, front, [("led1", "F140 (1)"), ("led2", "F140 (2)")],
+                    command=lambda: lc.__setitem__("f140_vpredu", front.get())).grid(
+            row=r, column=1, columnspan=3, sticky="w", padx=(10, 0), pady=(10, 3))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Který F140 je vpředu, poznáš s efektem „blikání“, vlnou a F140 postupně (záložka Synchronizace): "
+            "vlna musí jít plynule jedním směrem – když F140 bliknou obráceně, přepni.")).grid(
+            row=r + 1, column=0, columnspan=4, sticky="w", padx=20, pady=(2, 16))
+
+    def _build_balance(self):
+        """Vyrovnani jasu F140 a ventilatoru na desce (hlavni jas je v horni liste)."""
+        f = self.balance
+        for w in f.winfo_children():
+            w.destroy()
+        f.columnconfigure(1, weight=1)
+        V.card_title(f, "Vyrovnání jasu").grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Když F140 a ventilátory na desce svítí při stejném nastavení různě jasně, ztlum ten jasnější. "
+            "Hlavní jas je nahoře v liště.")).grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
+        for row, (key, text) in enumerate((("jas_f140", "F140"), ("jas_deska", "Ventilátory na desce")), start=2):
+            last = row == 3
+            pad = (4, 16 if last else 4)
+            ttk.Label(f, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 12), pady=pad)
+            v = tk.IntVar(value=int(self.lcfg.get(key, 100)))
+            val = ttk.Label(f, width=5, text=f"{v.get()} %", font=V.MONO, anchor="e")
+            val.grid(row=row, column=2, sticky="e", padx=(8, 20), pady=pad)
+
+            def on(_e=None, key=key, v=v, val=val):
+                self.lcfg[key] = int(v.get())
+                val.config(text=f"{int(v.get())} %")
+            V.scale(f, variable=v, from_=20, to=100, resolution=5, length=160, command=on).grid(
+                row=row, column=1, sticky="ew", pady=pad)
+
+    def _rotation_targets(self):
+        """Efekty, ktere nesou "otoceni": efekt (i zvlast F140 / deska), polozky playlistu, hudba."""
+        lc = self.lcfg
+        out = [lc[k] for k in ("efekt", "efekt_f140", "efekt_deska") if isinstance(lc.get(k), dict)]
+        out += (lc.get("playlist") or {}).get("polozky", [])
+        if isinstance(lc.get("hudba"), dict):
+            out.append(lc["hudba"])
+        return out
+
+    def _rotation(self):
+        """Spolecne otoceni (0/90/180/270), nebo None, kdyz se u efektu lisi."""
+        vals = {int(e.get("otoceni", 0)) % 360 for e in self._rotation_targets()}
+        return vals.pop() if len(vals) == 1 else (0 if not vals else None)
+
+    def _build_rotation(self):
+        f = self.rotation
+        for w in f.winfo_children():
+            w.destroy()
+        V.card_title(f, "Otočení svislých efektů a hudby").grid(row=0, column=0, columnspan=2, sticky="w",
+                                                               padx=20, pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Kde je „dole“ u svislých efektů (plamen, vodopád, hladina, přetahovaná) a stylů hudby (plameny, "
+            "spektrum, vlny…). Po srovnání natočení ventilátorů patří 0°; jiné otočení jen když chceš efekt "
+            "celý otočit (např. plamen shora). Platí pro všechny efekty, playlist i hudbu.")).grid(
+            row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 6))
+        cur = self._rotation()
+        ov = tk.IntVar(value=-1 if cur is None else cur)
+
+        def on():
+            for e in self._rotation_targets():
+                e["otoceni"] = ov.get()
+            self._build_rotation()
+            self._build_effects()                               # poznamka o otoceni u efektu
+            self._build_music()
+        ttk.Label(f, text="Otočení", style="Muted.TLabel").grid(row=2, column=0, sticky="w", padx=(20, 10),
+                                                               pady=(4, 16))
+        of = ttk.Frame(f)
+        of.grid(row=2, column=1, sticky="w", pady=(4, 16))
+        V.segmented(of, ov, [(0, "0°"), (90, "90°"), (180, "180°"), (270, "270°")], command=on).pack(side="left")
+        if cur is None:
+            ttk.Label(of, style="Small.TLabel", foreground=V.WARN,
+                      text="  teď se u efektů liší – výběr nastaví všem stejně").pack(side="left")
+
+    def _build_zones_card(self):
+        f = self.zones
+        for w in f.winfo_children():
+            w.destroy()
+        V.card_title(f, "Další zóny desky").grid(row=0, column=0, sticky="w", padx=20, pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Malé LED a 12V RGB na desce – jen celá zóna, vestavěné režimy řadiče. Režim „jako grafika“ = zóna "
+            "svítí stejně jako pásek grafické karty.")).grid(row=1, column=0, sticky="w", padx=20, pady=(0, 6))
+        zf = ttk.Frame(f)
+        zf.grid(row=2, column=0, sticky="w", padx=16)
         self._build_zones(zf)
-        ttk.Label(inner, style="Small.TLabel", justify="left", text=(
-            "LED desky jinak ovládá Gigabyte Control Center (GCC) – pokud běží,\n"
-            "nastavení desky přepíše (autostart_zapnout.bat ho vypne).")).pack(anchor="w", pady=(4, 0))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "LED desky jinak ovládá Gigabyte Control Center (GCC) – pokud běží, nastavení desky přepíše "
+            "(autostart_zapnout.bat ho vypne).")).grid(row=3, column=0, sticky="w", padx=20, pady=(6, 16))
 
     def _build_zones(self, f):
         names = {k: v[0] for k, v in led.FUSION_MODES.items()}
@@ -1297,7 +1540,7 @@ class LedEditor:
             self._build_gpu()                                # karta grafiky ukazuje zony "jako grafika"
 
     def _pick_zone(self, z, b):
-        col = colorchooser.askcolor(color=z.get("barva", "#ffffff"), parent=self.hw)[1]
+        col = colorchooser.askcolor(color=z.get("barva", "#ffffff"), parent=self.zones)[1]
         if col:
             z["barva"] = col
             V.set_swatch(b, col)

@@ -196,7 +196,7 @@ def load_data():
 
 PAGES = [("lcd", "Kraken LCD", "Obrazovky displeje 240 × 240 a jejich rotace"),
          ("cool", "Chlazení", "Pumpa a ventilátory Krakenu"),
-         ("led", "LED ventilátorů", "2× F140 RGB Core (NZXT) a ventilátory na ARGB hlavičce desky"),
+         ("led", "LED ventilátorů", "2× F140 RGB Core (NZXT), ventilátory na desce, grafická karta a zóny desky"),
          ("alpha", "Alphacool LCD", "Monochromatický displej 240 × 128 – editor rozvržení")]
 
 
@@ -262,10 +262,8 @@ class App(tk.Tk):
         cool_scroll = V.ScrollFrame(self.pages["cool"])
         cool_scroll.pack(fill="both", expand=True)
         self._build_cool_page(cool_scroll.inner)
-        led_scroll = V.ScrollFrame(self.pages["led"])
-        led_scroll.pack(fill="both", expand=True)
-        from editor_led import LedEditor
-        self.leds = LedEditor(led_scroll.inner, self)
+        from editor_led import LedEditor               # roluje si jen obsah zalozek, nahled zustava
+        self.leds = LedEditor(self.pages["led"], self)
         alpha_scroll = V.ScrollFrame(self.pages["alpha"])
         alpha_scroll.pack(fill="both", expand=True)
         from editor_alphacool import AlphaEditor

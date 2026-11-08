@@ -87,12 +87,15 @@ def apply(root):
               indicatorbackground=[("selected", ACCENT), ("pressed", SEL)],
               upperbordercolor=[("selected", ACCENT)], lowerbordercolor=[("selected", ACCENT)])
 
-    # prepinac v rade (segmenty) a "cipy" efektu
-    s.configure("Seg.Toolbutton", background=FIELD, foreground=MUTED, padding=(14, 5), relief="flat",
-                borderwidth=0, lightcolor=FIELD, darkcolor=FIELD, bordercolor=FIELD, focuscolor=FIELD)
-    s.map("Seg.Toolbutton", background=[("selected", SEG_ON), ("active", BTN)],
-          foreground=[("selected", TEXT), ("active", TEXT)],
-          lightcolor=[("selected", SEG_ON)], darkcolor=[("selected", SEG_ON)], bordercolor=[("selected", SEG_ON)])
+    # prepinac v rade (segmenty), mensi varianta (skupiny efektu), zalozky stranky a "cipy" efektu
+    for name, pad, fnt, sel_fg in (("Seg.Toolbutton", (14, 5), FONT, TEXT),
+                                   ("SegSmall.Toolbutton", (9, 4), SMALL, TEXT),
+                                   ("Tab.Toolbutton", (18, 7), FONT_B, ACCENT)):
+        s.configure(name, background=FIELD, foreground=MUTED, padding=pad, relief="flat", font=fnt,
+                    borderwidth=0, lightcolor=FIELD, darkcolor=FIELD, bordercolor=FIELD, focuscolor=FIELD)
+        s.map(name, background=[("selected", SEG_ON), ("active", BTN)],
+              foreground=[("selected", sel_fg), ("active", TEXT)],
+              lightcolor=[("selected", SEG_ON)], darkcolor=[("selected", SEG_ON)], bordercolor=[("selected", SEG_ON)])
     s.configure("Chip.Toolbutton", background="#13161a", foreground="#c3c9d0", padding=(10, 6), relief="solid",
                 borderwidth=1, bordercolor="#262b33", lightcolor="#13161a", darkcolor="#13161a",
                 font=SMALL, anchor="w", focuscolor="#13161a")
@@ -140,12 +143,12 @@ def scale(parent, **kw):
     return tk.Scale(parent, **opts)
 
 
-def segmented(parent, var, options, command=None, bg=CARD):
-    """Prepinac v rade: options = [(hodnota, text), ...]."""
+def segmented(parent, var, options, command=None, bg=CARD, style="Seg.Toolbutton"):
+    """Prepinac v rade: options = [(hodnota, text), ...]. style: Seg / SegSmall / Tab.Toolbutton."""
     outer = tk.Frame(parent, bg=FIELD, highlightthickness=1, highlightbackground=LINE, bd=0)
     for i, (value, text) in enumerate(options):
         ttk.Radiobutton(outer, text=text, value=value, variable=var, command=command,
-                        style="Seg.Toolbutton").grid(row=0, column=i, padx=2, pady=2, sticky="ew")
+                        style=style).grid(row=0, column=i, padx=2, pady=2, sticky="ew")
         outer.columnconfigure(i, weight=1)
     return outer
 

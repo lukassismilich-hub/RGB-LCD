@@ -1841,7 +1841,7 @@
         "rychlost": "slowest",
         "obraceny_smer": false,
         "nazev": "F140 (1)",
-        "posun": 5,
+        "posun": 1,
         "obracene": false
       },
       "led2": {
@@ -1864,7 +1864,7 @@
         "obraceny_smer": false,
         "nazev": "F140 (2)",
         "obracene": false,
-        "posun": 5
+        "posun": 1
       },
       "led3": {
         "nazev": "nepřipojeno",
@@ -1928,7 +1928,7 @@
     "argb": {
       "D_LED1": {
         "nazev": "2 ventilátory paralelně",
-        "pocet_led": 16,
+        "pocet_led": 14,
         "rezim": "fixed",
         "barvy": [
           "#ff0000",
@@ -1944,19 +1944,17 @@
           "#0040ff",
           "#2000ff",
           "#8000ff",
-          "#df00ff",
-          "#ff00bf",
-          "#ff0060"
+          "#df00ff"
         ],
         "barva": "#ffffff",
         "rychlost": "slowest",
         "obraceny_smer": false,
-        "posun": 5,
+        "posun": 1,
         "obracene": false
       },
       "D_LED2": {
         "nazev": "1 ventilátor",
-        "pocet_led": 16,
+        "pocet_led": 14,
         "rezim": "off",
         "barvy": [
           "#ff0000",
@@ -1972,16 +1970,14 @@
           "#0040ff",
           "#2000ff",
           "#8000ff",
-          "#df00ff",
-          "#ff00bf",
-          "#ff0060"
+          "#df00ff"
         ],
         "barva": "#ffffff",
         "rychlost": "normal",
         "obraceny_smer": false,
         "pouzito": true,
         "obracene": false,
-        "posun": 5
+        "posun": 1
       }
     },
     "jas": 100,
@@ -1990,7 +1986,7 @@
     "stejne_pro_vse": true,
     "vlna": true,
     "efekt": {
-      "typ": "hladina",
+      "typ": "plamen",
       "barvy": [
         "#ffffff",
         "#ff0000",
@@ -2007,7 +2003,7 @@
       "min": 60.0,
       "max": 90,
       "pocet_barev": 8,
-      "otoceni": 270,
+      "otoceni": 0,
       "pauza": 0.5,
       "barvy_rezim": "barvy"
     },
@@ -2100,7 +2096,7 @@
           "min": 60.0,
           "max": 90,
           "pocet_barev": 8,
-          "otoceni": 270,
+          "otoceni": 0,
           "pauza": 0.5,
           "barvy_rezim": "barvy",
           "opakovani": 1
@@ -2256,7 +2252,7 @@
     "hudba": {
       "zapnuto": true,
       "styl": "plameny",
-      "stridat": true,
+      "stridat": false,
       "citlivost": 6,
       "jas": 100,
       "barvy": "obal",
@@ -2282,7 +2278,7 @@
         "stridani",
         "plameny"
       ],
-      "otoceni": 270,
+      "otoceni": 0,
       "doplnit_barvy": false
     }
   },

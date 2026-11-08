@@ -88,7 +88,9 @@ def _vivid(h, s, floor=0.75):
 
 
 MAX_COVER_COLORS = 6
-MIN_HUE_DEG = 40.0          # kazde dve barvy z obalu se lisi aspon o tolik stupnu odstinu (kontrast)
+# kontrast barev z obalu: nejmensi rozdil odstinu (stupne HSV) pri citlivosti 1 a 10 - mezi nimi
+# primka (svetle modra a tyrkysova = 23 stupnu uzivatel vidi jako podobne, proto ne pod 25)
+MIN_HUE_DEG = (45.0, 25.0)
 
 
 def cover_palette(img, n=MAX_COVER_COLORS, sens=5):
@@ -96,7 +98,9 @@ def cover_palette(img, n=MAX_COVER_COLORS, sens=5):
     Barvy jsou proti sobe v kontrastu: odstiny se lisi aspon o MIN_HUE_DEG (napr. ne dve podobne
     modre). Vynecha cernou, bilou, sedou a (pri nizsi citlivosti) hnedou - na LED vypadaji spatne.
     sens = citlivost na barvy 1..10: vyssi = vezme i malo syte a tmave barvy a male plochy
-    (akcenty), vernejsi sytost. Prazdny seznam = obal je cernobily / sedy (vychozi paleta)."""
+    (akcenty), mensi povoleny rozdil odstinu, vernejsi sytost; kdyz obal nema dost ruznych
+    odstinu, doplni blede tony vybranych barev (kontrast sytosti, na LED belave) - pri citlivosti
+    10 aspon 5 barev. Prazdny seznam = obal je cernobily / sedy (vychozi paleta)."""
     from PIL import Image
     n = max(1, min(MAX_COVER_COLORS, int(n)))
     c = max(1.0, min(10.0, float(sens)))
@@ -104,7 +108,9 @@ def cover_palette(img, n=MAX_COVER_COLORS, sens=5):
     min_v = 0.26 - 0.016 * c                             # 5 -> 0,18, 10 -> 0,10
     area = 1.0 - 0.06 * c                                # vaha velikosti plochy: 10 -> 0,4 (akcenty)
     floor = 0.85 - 0.03 * c                              # sytost na LED: vyssi citlivost = vernejsi odstin
-    min_dh = MIN_HUE_DEG / 360.0
+    lo_deg, hi_deg = MIN_HUE_DEG
+    min_dh = (lo_deg + (hi_deg - lo_deg) * (c - 1) / 9.0) / 360.0     # 1 -> 45, 7 -> 32, 10 -> 25 stupnu
+    want = min(n, 2 + round((c - 1) / 3))                # aspon tolik barev: 1 -> 2, 4 -> 3, 7 -> 4, 10 -> 5
     small = img.convert("RGB").resize((64, 64), Image.BILINEAR)
     q = small.quantize(colors=int(8 + 2 * c), method=Image.Quantize.MEDIANCUT)
     pal = q.getpalette()
@@ -119,15 +125,23 @@ def cover_palette(img, n=MAX_COVER_COLORS, sens=5):
         cand.append((count ** area * (0.25 + s) * (0.35 + v), h, s))
     cand.sort(reverse=True)
     hues, out = [], []
-    for _score, h, s in cand:
-        if any(min(abs(h - x), 1 - abs(h - x)) < min_dh for x in hues):
-            continue                                     # podobny odstin uz je (malo kontrastni)
-        hues.append(h)
-        out.append(_vivid(h, s, floor))
-        if len(out) >= n:
+    # 1. kolo: plny kontrast; 2. kolo (jen kdyz je barev malo, citlivost 9-10): mirnejsi rozdil
+    # odstinu, aspon 18 stupnu - porad barvy z obalu, jen bliz u sebe (do 8 zustava prisny kontrast)
+    passes = [min_dh] + ([max(18.0 / 360.0, min_dh * 0.7)] if c >= 9 else [])
+    for dh in passes:
+        if len(out) >= want:
             break
-    if len(out) == 1:                                    # jednobarevny obal: k plne barve bleda (kontrast jasem)
-        r, g, b = colorsys.hsv_to_rgb(hues[0] % 1.0, 0.35, 1.0)
+        for _score, h, s in cand:
+            if len(out) >= (n if dh == min_dh else want):
+                break
+            if any(min(abs(h - x), 1 - abs(h - x)) < dh for x in hues):
+                continue                                 # podobny odstin uz je (malo kontrastni)
+            hues.append(h)
+            out.append(_vivid(h, s, floor))
+    for h in list(hues):                                 # malo ruznych odstinu: blede tony vybranych barev
+        if len(out) >= max(2, want):
+            break
+        r, g, b = colorsys.hsv_to_rgb(h % 1.0, 0.35, 1.0)
         out.append(_hex((r * 255, g * 255, b * 255)))
     return out
 

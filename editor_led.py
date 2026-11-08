@@ -737,9 +737,9 @@ class LedEditor:
             self._cover_strip = tk.Canvas(f, height=22, bg=V.CARD, highlightthickness=0)
             self._cover_strip.grid(row=row + 1, column=1, columnspan=2, sticky="ew", pady=(0, 2))
             ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
-                "Nejvýš 6 barev a vždy navzájem v kontrastu (odstíny aspoň 40° od sebe – ne dvě podobné "
-                "modré). Vyšší = bere i méně syté a tmavší barvy a malé barevné plochy obalu, věrnější "
-                "sytost. Nižší = jen výrazné barvy, hodně syté. Změna se projeví po Uložit.")).grid(
+                "Nejvýš 6 barev navzájem v kontrastu. Vyšší = víc barev: i méně syté a tmavší barvy a malé "
+                "plochy obalu, menší rozdíl odstínů (1: 45°, 8: 29°; 9–10 dovolí i bližší odstíny až 18°, "
+                "když je barev málo). Chybějící doplní bledé tóny vybraných barev. Změna se projeví po Uložit.")).grid(
                 row=row + 2, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
             row += 3
         if mc.get("barvy") == "vlastni":

@@ -577,11 +577,19 @@ class Engine:
         bass, mid, high = (float(snap.get(x, 0.0)) for x in ("bass", "mid", "high"))
         level, ph = float(snap.get("level", 0.0)), float(snap.get("phase", 0.0))
         bands = list(snap.get("bands") or [0.0] * 16)
+        # duraz na basy 0..1: kontrast basu (mezi udery tma, kopak naplno), silnejsi zablesk uderu,
+        # slabsi vliv stredu a vysek; v pasmech se vyssi frekvence utlumi
+        e = bass_emphasis(eff)
+        bass = _contrast(bass, e)
+        high *= 1 - 0.8 * e
+        nb = max(1, len(bands) - 1)
+        bands = [_contrast(v, e) * (1 - 0.55 * e * i / nb) for i, v in enumerate(bands)]
+        level = (1 - e) * level + e * bass
         fl = 0.0                                          # zablesk uderu (s vlnou skrini)
         for b in snap.get("beats", ()):
             a = b[0] - lag
             if a >= 0:
-                fl = max(fl, b[1] * math.exp(-a / 0.14))
+                fl = max(fl, b[1] * math.exp(-a / (0.14 + 0.06 * e)))
         new = self._new_beats(key, snap, lag)
         rnd = self.rng
 
@@ -655,11 +663,11 @@ class Engine:
             st[0] += (level - st[0]) * min(1.0, dt / 0.6)
             out = [_scale(_cyclic(cols, i / max(1, n) + ph * 0.5), 0.15 + 0.85 * st[0]) for i in range(n)]
         else:                                             # "pulz": basy = jas, uder = zablesk vlnou, vysky = jiskry
-            kk = min(1.0, 0.10 + 0.55 * bass + 0.6 * fl)
+            kk = min(1.0, 0.10 - 0.04 * e + (0.55 + 0.2 * e) * bass + (0.6 + 0.4 * e) * fl)
             out = []
             for i in range(n):
                 m = (1 + math.sin(2 * math.pi * (i / max(1, n) + ph))) / 2
-                c = _mix(_mix(main, acc, 0.65 * m), white, 0.3 * fl * fl)
+                c = _mix(_mix(main, acc, 0.65 * (1 - 0.6 * e) * m), white, 0.3 * fl * fl)
                 out.append(_scale(c, kk))
             if n > 1:
                 st = self.state.setdefault(("hudba_jiskry", key), [])
@@ -709,6 +717,22 @@ def music_style(eff, snap):
         return keys[(int(snap.get("track_n", 0)) * 7 + 3) % len(keys)]
     styl = eff.get("styl", "pulz")
     return styl if styl in MUSIC_STYLES else "pulz"
+
+
+def bass_emphasis(eff):
+    """Duraz na basy 0..1 z nastaveni "basy" 0-10 (vychozi 7)."""
+    try:
+        return max(0.0, min(1.0, float(eff.get("basy", 7)) / 10.0))
+    except (TypeError, ValueError):
+        return 0.7
+
+
+def _contrast(v, e):
+    """Kontrast urovne podle durazu na basy: pod prahem tma, nad nim strme nahoru."""
+    if e <= 0:
+        return v
+    lo = 0.1 + 0.35 * e
+    return max(0.0, min(1.0, (v - lo) / (1 - lo))) ** (1 + 1.5 * e)
 
 
 def _band_at(bands, x):

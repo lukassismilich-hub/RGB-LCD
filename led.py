@@ -59,7 +59,7 @@ EXTRA_DEFAULT = {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffff
 
 PLAYLIST_DEFAULT = {"zapnuto": False, "polozky": [], "prolinani": 1.0}
 # hudebni vizualizer (stejne jako hudba.LED_DEFAULTS - led.py hudbu nenacita, at nezavisi na numpy)
-MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "citlivost": 5, "jas": 100,
+MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "citlivost": 5, "basy": 7, "jas": 100,
                  "barvy": "obal", "citlivost_barev": 7, "paleta": ["#ff2a6d", "#7b2cff", "#05d9e8"],
                  "zpozdeni_ms": 180, "navrat_s": 3}
 MAX_REPEATS = 999

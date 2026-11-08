@@ -710,23 +710,28 @@ class LedEditor:
             V.scale(f, variable=v, from_=lo, to=hi, resolution=res, length=160, command=on).grid(
                 row=row, column=1, sticky="ew", pady=4)
             on()
-        slider(5, "Citlivost", "citlivost", 1, 10, 1, lambda x: f"{x}")
-        slider(6, "Jas", "jas", 10, 100, 5, lambda x: f"{x} %")
-        slider(7, "Zpoždění světel", "zpozdeni_ms", 0, 500, 10, lambda x: f"{x} ms")
+        slider(5, "Důraz na basy", "basy", 0, 10, 1, lambda x: f"{x}")
+        ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
+            "Vyšší = světla pumpují s basy: mezi údery ztmavnou, s kopákem se rozsvítí, záblesk úderu je "
+            "silnější a delší; středy a výšky (třpyt, přelévání barev) mají menší vliv. 0 = reaguje na vše stejně.")).grid(
+            row=6, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
+        slider(7, "Citlivost na údery", "citlivost", 1, 10, 1, lambda x: f"{x}")
+        slider(8, "Jas", "jas", 10, 100, 5, lambda x: f"{x} %")
+        slider(9, "Zpoždění světel", "zpozdeni_ms", 0, 500, 10, lambda x: f"{x} ms")
         ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
             "Bluetooth sluchátka hrají o 150–250 ms později než reproduktory – o tolik zpozdi světla, "
             "aby údery seděly. S kabelem / reproduktory 0 ms.")).grid(
-            row=8, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
-        slider(9, "Návrat po pauze", "navrat_s", 0, 30, 1, lambda x: f"{x} s")
-        ttk.Label(f, text="Barvy", style="Muted.TLabel").grid(row=10, column=0, sticky="w", padx=(20, 10), pady=4)
+            row=10, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
+        slider(11, "Návrat po pauze", "navrat_s", 0, 30, 1, lambda x: f"{x} s")
+        ttk.Label(f, text="Barvy", style="Muted.TLabel").grid(row=12, column=0, sticky="w", padx=(20, 10), pady=4)
         bv = tk.StringVar(value=mc.get("barvy", "obal"))
 
         def on_colors():
             mc["barvy"] = bv.get()
             self._build_music()
         V.segmented(f, bv, [("obal", "z obalu alba"), ("vlastni", "vlastní")], command=on_colors).grid(
-            row=10, column=1, columnspan=2, sticky="w", pady=4)
-        row = 11
+            row=12, column=1, columnspan=2, sticky="w", pady=4)
+        row = 13
         if mc.get("barvy", "obal") == "obal":
             slider(row, "Citlivost na barvy", "citlivost_barev", 1, 10, 1, lambda x: f"{x}")
             self._cover_strip = tk.Canvas(f, height=22, bg=V.CARD, highlightthickness=0)

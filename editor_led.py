@@ -91,8 +91,12 @@ class LedEditor:
         ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu. "
                                                  "Na ventilátorech se změna projeví po Uložit.",
                   wraplength=PREVIEW_W).pack(anchor="w", padx=16, pady=(4, 14))
+        self._test = tk.StringVar(value="")                # test natoceni: "" / "stoji" / "obiha"
+        self._test_t0 = self.t0
+        self._test_job = None
         self.sync = V.card(right)                          # natoceni hned pod nahledem
         self.sync.pack(fill="x", pady=(16, 0))
+        self.sync.bind("<Destroy>", lambda e: led.stop_test() if self._test.get() else None)
         self._build_sync()
         self.custom = V.card(right)
         self.custom.pack(fill="x", pady=(16, 0))
@@ -1119,40 +1123,105 @@ class LedEditor:
         f = self.sync
         for w in f.winfo_children():
             w.destroy()
-        V.card_title(f, "Natočení ventilátorů").grid(row=0, column=0, columnspan=4, sticky="w", padx=16,
+        V.card_title(f, "Natočení ventilátorů").grid(row=0, column=0, columnspan=5, sticky="w", padx=16,
                                                       pady=(14, 0))
         ttk.Label(f, style="Small.TLabel", wraplength=PREVIEW_W, justify="left",
-                  text="Když se efekt na skutečných ventilátorech točí posunutě nebo opačně: zvol efekt "
-                       "„kometa“, pomalou rychlost a Synchronně, ulož a posouvej LED 1 / obracej směr, "
-                       "dokud nejsou hlavy komet na všech ventilátorech na stejném místě a neběží stejným "
-                       "směrem. Náhled natočení zohledňuje (LED 1 vpravo, číslování po směru hodin).").grid(
-            row=1, column=0, columnspan=4, sticky="w", padx=16, pady=(2, 6))
+                  text="Test: na každém ventilátoru svítí jen jedna LED v jeho barvě (tečka u názvu). "
+                       "„Svítí LED 1“ – posouvej LED, dokud nesvítí na všech ventilátorech na stejném místě. "
+                       "„LED obíhá“ – jedna LED pomalu obíhá (otáčka za 8 s); kde obíhá opačně, zaškrtni "
+                       "obrácený směr. Změny se v testu projeví hned (do 3 s), natrvalo až po Uložit. "
+                       "Náhled natočení zohledňuje (LED 1 vpravo, číslování po směru hodin).").grid(
+            row=1, column=0, columnspan=5, sticky="w", padx=16, pady=(2, 6))
+        tf = tk.Frame(f, bg=V.CARD)
+        tf.grid(row=2, column=0, columnspan=5, sticky="w", padx=16, pady=(0, 8))
+        ttk.Label(tf, text="Test", style="Muted.TLabel").pack(side="left", padx=(0, 10))
+        V.segmented(tf, self._test, [("", "vypnuto")] + list(led.TEST_MODES.items()),
+                    command=self._test_changed).pack(side="left")
+        self.test_msg = ttk.Label(f, style="Small.TLabel", wraplength=PREVIEW_W, justify="left")
+        self.test_msg.grid(row=3, column=0, columnspan=5, sticky="w", padx=16)
         names = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2"}
         fans = [t for t in led.targets(self.lcfg) if t[0] not in led.EXTRAS]   # grafika/klavesnice = 1 LED
-        for r, (key, n, _g, _c) in enumerate(fans, start=2):
+        for r, (key, n, _g, _c) in enumerate(fans, start=4):
             if key.startswith("f140_"):
                 ch = self.lcfg["nzxt"].setdefault("led" + key[-1], {})
             else:
                 ch = self.lcfg["argb"].setdefault(key, {})
-            last = r == 1 + len(fans)
+            last = r == 3 + len(fans)
             pad = (2, 14 if last else 2)
-            ttk.Label(f, text=names.get(key, key), style="Muted.TLabel").grid(row=r, column=0, sticky="w",
-                                                                              padx=(16, 12), pady=pad)
-            ttk.Label(f, text="posun LED", style="Small.TLabel").grid(row=r, column=1, sticky="e", pady=pad)
+            dot = "#%02x%02x%02x" % led.TEST_COLORS.get(key, (255, 255, 255))
+            tk.Label(f, text="●", fg=dot, bg=V.CARD, font=V.FONT_B).grid(row=r, column=0, sticky="w",
+                                                                       padx=(16, 4), pady=pad)
+            ttk.Label(f, text=names.get(key, key), style="Muted.TLabel").grid(row=r, column=1, sticky="w",
+                                                                              padx=(0, 12), pady=pad)
+            ttk.Label(f, text="posun LED", style="Small.TLabel").grid(row=r, column=2, sticky="e", pady=pad)
             sv = tk.StringVar(value=str(int(ch.get("posun", 0)) % n))
             ttk.Spinbox(f, textvariable=sv, from_=0, to=n - 1, width=4, wrap=True).grid(
-                row=r, column=2, padx=(6, 12), pady=pad)
+                row=r, column=3, padx=(6, 12), pady=pad)
 
             def on_shift(*a, ch=ch, sv=sv, n=n):
                 try:
                     ch["posun"] = int(sv.get()) % n
                 except ValueError:
-                    pass
+                    return
+                self._test_send()
             sv.trace_add("write", on_shift)
             rv = tk.BooleanVar(value=bool(ch.get("obracene", False)))
-            ttk.Checkbutton(f, text="obrácený směr", variable=rv,
-                            command=lambda ch=ch, rv=rv: ch.__setitem__("obracene", rv.get())).grid(
-                row=r, column=3, sticky="w", padx=(0, 16), pady=pad)
+
+            def on_rev(ch=ch, rv=rv):
+                ch["obracene"] = rv.get()
+                self._test_send()
+            ttk.Checkbutton(f, text="obrácený směr", variable=rv, command=on_rev).grid(
+                row=r, column=4, sticky="w", padx=(0, 16), pady=pad)
+        self._test_show()
+
+    # test natoceni: pozadavek pro bezici aplikaci (led_test.json), obnovuje se kazde 3 s,
+    # po zavreni okna aplikace test sama ukonci (led.TEST_TIMEOUT_S)
+    def _test_changed(self):
+        self._test_t0 = time.monotonic()
+        if self._test_job is not None:
+            try:
+                self.sync.after_cancel(self._test_job)
+            except tk.TclError:
+                pass
+            self._test_job = None
+        if self._test.get():
+            self._test_beat()
+        else:
+            led.stop_test()
+        self._test_show()
+
+    def _test_beat(self):
+        self._test_job = None
+        if not self._test.get():
+            return
+        self._test_send()
+        try:
+            self._test_job = self.sync.after(3000, self._test_beat)
+        except tk.TclError:
+            pass
+
+    def _test_send(self):
+        if not self._test.get():
+            return
+        try:
+            led.request_test(self.lcfg, self._test.get())
+        except OSError as e:
+            self.test_msg.config(text=f"Test nejde spustit: {e}", foreground=V.ERR)
+
+    def _test_show(self):
+        msg = getattr(self, "test_msg", None)
+        if msg is None or not msg.winfo_exists():
+            return
+        if not self._test.get():
+            msg.config(text="")
+        elif not self.app.running:
+            msg.config(text="Aplikace neběží – test uvidíš jen v náhledu.", foreground=V.WARN)
+        elif not self.lcfg.get("zapnuto", True):
+            msg.config(text="Řízení LED je vypnuté – zapni ho a ulož, jinak se test na ventilátorech "
+                            "neukáže.", foreground=V.WARN)
+        else:
+            msg.config(text="Test běží na ventilátorech (efekty i hudba stojí). Po vypnutí testu "
+                            "nebo zavření okna se efekt vrátí.", foreground=V.OK)
 
     # -------------------------------------------------------------- hardware
     def _build_hw(self):
@@ -1258,7 +1327,13 @@ class LedEditor:
             if self._music_demo.get() and (lc.get("hudba") or {}).get("zapnuto"):   # simulovana hudba
                 snap = fx.music_demo(now - self.t0, self._music_palette(), track_n=int((now - self.t0) // 8))
                 info = None
-            frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), music=snap)
+            if self._test.get():                                # test natoceni: jen jedna LED
+                frame = led.test_frame(lc, {"rezim": self._test.get()}, now - self._test_t0)
+                snap = info = None
+                c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
+                              text="Test natočení: " + led.TEST_MODES[self._test.get()])
+            else:
+                frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), music=snap)
             if snap is not None:
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
                               text="♪ simulovaná hudba · " + fx.MUSIC_STYLES[fx.music_style(lc["hudba"], snap)])
@@ -1334,7 +1409,9 @@ class LedEditor:
         elif s in ("běží", "nastaveno"):
             text, color = "● LED běží", V.OK
             p = st.get("playlist")
-            if st.get("hudba"):
+            if st.get("test"):
+                text += " · test natočení: " + led.TEST_MODES.get(st["test"], "?")
+            elif st.get("hudba"):
                 text += " · ♪ hudba: " + fx.MUSIC_STYLES.get(st["hudba"].get("styl"), "?")
             elif p:
                 text += (f" · playlist {p.get('i', 0) + 1}/{p.get('pocet', '?')}: "
@@ -1346,4 +1423,5 @@ class LedEditor:
         else:
             text, color = "Stav LED uvidíš, až poběží aplikace (nová verze).", V.MUTED
         self.status.config(text=text, foreground=color)
+        self._test_show()
         self._music_refresh()

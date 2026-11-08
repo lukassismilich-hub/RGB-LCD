@@ -16,3 +16,5 @@ hudba_test.json
 obrazky/
 # zaloha git historie pred prepisem
 *.bundle
+
+led_test.json

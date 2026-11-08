@@ -22,6 +22,7 @@
 import copy
 import json
 import logging
+import os
 import threading
 import time
 
@@ -65,6 +66,14 @@ MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "styly_strid
                  "zpozdeni_ms": 180, "navrat_s": 3, "otoceni": 0}
 MAX_REPEATS = 999
 MAX_FADE_S = 5.0
+
+# test natoceni z okna nastaveni: na kazdem ventilatoru sviti jen LED 1 (po natoceni), nebo jedna
+# LED pomalu obiha; okno posila natoceni i bez Ulozit a pozadavek obnovuje, jinak po TEST_TIMEOUT_S skonci
+TEST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "led_test.json")
+TEST_TIMEOUT_S = 15
+TEST_TURN_S = 8.0                            # obihani: jedna otacka za 8 s (F140 1 LED/s, deska 2 LED/s)
+TEST_COLORS = {"f140_1": (255, 0, 0), "f140_2": (0, 255, 0), "D_LED1": (0, 80, 255), "D_LED2": (255, 200, 0)}
+TEST_MODES = {"stoji": "svítí LED 1", "obiha": "jedna LED obíhá"}
 
 
 def rainbow(n):
@@ -339,6 +348,75 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None):
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(f"jas_{group}", 100)) / 100.0
         out[key] = fx.apply_brightness(cols, k)
     return out
+
+
+# ----------------------------------------------------------------- test natoceni
+
+def _test_orient(lcfg, test):
+    """Konfigurace s natocenim z pozadavku testu (z okna, i neulozene)."""
+    out = dict(lcfg)
+    for grp in ("nzxt", "argb"):
+        src = (test or {}).get(grp)
+        if not isinstance(src, dict):
+            continue
+        merged = dict(lcfg.get(grp, {}))
+        for ch, o in src.items():
+            if isinstance(o, dict):
+                merged[ch] = dict(merged.get(ch, {}), posun=o.get("posun", 0), obracene=bool(o.get("obracene")))
+        out[grp] = merged
+    return out
+
+
+def test_frame(lcfg, test, t):
+    """Snimek testu natoceni: na kazdem ventilatoru jedna LED v jeho barve (TEST_COLORS).
+    "stoji" = pozice 1 efektu (LED 1 po natoceni), "obiha" = LED pomalu obiha ve smeru efektu.
+    Grafika / klavesnice zhasnute."""
+    lc = _test_orient(lcfg, test)
+    mode = (test or {}).get("rezim", "stoji")
+    out = {}
+    for key, n, group, _c in targets(lc):
+        cols = [[0, 0, 0] for _ in range(n)]
+        if group not in EXTRAS:
+            pos = int(max(0.0, t) / TEST_TURN_S * n) % n if mode == "obiha" else 0
+            cols[pos] = list(TEST_COLORS.get(key, (255, 255, 255)))
+            cols = _orient(cols, *orientation(lc, key))
+        out[key] = cols
+    return out
+
+
+def request_test(lcfg, mode):
+    """Pozadat bezici aplikaci o test natoceni (okno ho obnovuje, jinak po TEST_TIMEOUT_S skonci)."""
+    req = {"rezim": mode, "do": time.time() + TEST_TIMEOUT_S,
+           "nzxt": {k: {"posun": v.get("posun", 0), "obracene": bool(v.get("obracene"))}
+                    for k, v in lcfg.get("nzxt", {}).items() if isinstance(v, dict)},
+           "argb": {k: {"posun": v.get("posun", 0), "obracene": bool(v.get("obracene"))}
+                    for k, v in lcfg.get("argb", {}).items() if isinstance(v, dict)}}
+    tmp = TEST_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(req, f)
+    os.replace(tmp, TEST_FILE)
+
+
+def stop_test():
+    try:
+        os.remove(TEST_FILE)
+    except OSError:
+        pass
+
+
+def read_test():
+    """Platny pozadavek testu natoceni, nebo None (prosly se smaze)."""
+    if not os.path.exists(TEST_FILE):
+        return None
+    try:
+        with open(TEST_FILE, encoding="utf-8") as f:
+            req = json.load(f)
+        if float(req.get("do", 0)) > time.time() and req.get("rezim") in TEST_MODES:
+            return req
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None                              # okno zrovna zapisuje - priste znovu
+    stop_test()
+    return None
 
 
 # ----------------------------------------------------------------- hardware
@@ -699,6 +777,7 @@ class LedWorker(threading.Thread):
         pl_key = None                            # zmena playlistu (po Ulozit) = playlist od zacatku
         snap, music_err, music_fps, frames, fps_t = None, None, None, 0, time.monotonic()
         last_exc = None
+        test_mode, test_t0 = None, 0.0           # bezici test natoceni (rezim) a jeho zacatek
         last_wall, last_force, prev, last_retry = time.time(), 0.0, time.monotonic(), time.monotonic()
         while not self._quit.is_set():
             with self._lock:
@@ -770,6 +849,29 @@ class LedWorker(threading.Thread):
                     hw_key, last_force = key, 0.0
                 dt, prev = now - prev, now
                 snap = None
+                test = read_test()
+                if test is not None:                     # test natoceni z okna: jen jedna LED
+                    if test_mode is None:
+                        log.info("LED: test natočení (%s).", TEST_MODES[test["rezim"]])
+                        test_t0 = now
+                    elif test["rezim"] != test_mode:
+                        test_t0 = now
+                    test_mode = test["rezim"]
+                    force = now - last_force > REFRESH_S
+                    session.send(test_frame(lcfg, test, now - test_t0), force)
+                    if force:
+                        last_force = now
+                    if not session.running:
+                        raise RuntimeError("; ".join(session.error_text()))
+                    st = {"stav": "běží", "test": test_mode}
+                    if session.errors:
+                        st["chyby"] = session.error_text()
+                    self._set_state(st)
+                    self._quit.wait(0.1)
+                    continue
+                if test_mode is not None:
+                    test_mode = None
+                    log.info("LED: test natočení skončil.")
                 if self.music is not None:
                     try:
                         snap = self.music.led_snapshot(lcfg.get("hudba"))

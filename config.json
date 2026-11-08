@@ -2252,7 +2252,7 @@
     "hudba": {
       "zapnuto": true,
       "styl": "plameny",
-      "stridat": false,
+      "stridat": true,
       "citlivost": 6,
       "jas": 100,
       "barvy": "obal",

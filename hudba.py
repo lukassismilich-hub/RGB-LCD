@@ -88,29 +88,33 @@ def _vivid(h, s, floor=0.75):
 
 
 MAX_COVER_COLORS = 6
-# kontrast barev z obalu: nejmensi rozdil odstinu (stupne HSV) pri citlivosti 1 a 10 - mezi nimi
-# primka (svetle modra a tyrkysova = 23 stupnu uzivatel vidi jako podobne, proto ne pod 25)
-MIN_HUE_DEG = (45.0, 25.0)
+# kontrast barev: kazde dve barvy palety se lisi aspon o tolik stupnu odstinu (HSV). Uzivatel vidi
+# jako podobne i 23-25 stupnu (svetle modra / tyrkysova, modra 200 / 225) a stejny odstin bledy
+# a plny (na LED bledy = belavy) - proto pevne 40 stupnu, bez bledych tonu.
+MIN_HUE_DEG = 40.0
+LED_SATURATION = 0.85        # sytost barev na LED aspon tolik - mene syte na LED vypadaji skoro bile
 
 
-def cover_palette(img, n=MAX_COVER_COLORS, sens=5):
+def _hue_gap(h, hues):
+    return min((min(abs(h - x), 1 - abs(h - x)) for x in hues), default=1.0)
+
+
+def cover_palette(img, n=MAX_COVER_COLORS, sens=5, fill=True):
     """Az n (nejvys 6) zivych barev z obalu alba, nejvyraznejsi prvni (hlavni barva, pak doplnkova).
-    Barvy jsou proti sobe v kontrastu: odstiny se lisi aspon o MIN_HUE_DEG (napr. ne dve podobne
-    modre). Vynecha cernou, bilou, sedou a (pri nizsi citlivosti) hnedou - na LED vypadaji spatne.
-    sens = citlivost na barvy 1..10: vyssi = vezme i malo syte a tmave barvy a male plochy
-    (akcenty), mensi povoleny rozdil odstinu, vernejsi sytost; kdyz obal nema dost ruznych
-    odstinu, doplni blede tony vybranych barev (kontrast sytosti, na LED belave) - pri citlivosti
-    10 aspon 5 barev. Prazdny seznam = obal je cernobily / sedy (vychozi paleta)."""
+    Kazde dve barvy se lisi aspon o MIN_HUE_DEG stupnu odstinu a jsou plne syte (LED_SATURATION).
+    Vynecha cernou, bilou, sedou a (pri nizsi citlivosti) hnedou - na LED vypadaji spatne.
+    sens = citlivost na barvy 1..10: vyssi = vezme i malo syte a tmave barvy obalu a male plochy
+    (akcenty) a chce vic barev (1 -> 2, 4 -> 3, 7 -> 4, 10 -> 5). fill = kdyz obal tolik ruznych
+    odstinu nema, doplni kontrastni odstiny co nejdal od tech z obalu. Prazdny seznam = obal je
+    cernobily / sedy (vychozi paleta)."""
     from PIL import Image
     n = max(1, min(MAX_COVER_COLORS, int(n)))
     c = max(1.0, min(10.0, float(sens)))
     min_s = 0.36 - 0.026 * c                             # 5 -> 0,23, 10 -> 0,10
     min_v = 0.26 - 0.016 * c                             # 5 -> 0,18, 10 -> 0,10
     area = 1.0 - 0.06 * c                                # vaha velikosti plochy: 10 -> 0,4 (akcenty)
-    floor = 0.85 - 0.03 * c                              # sytost na LED: vyssi citlivost = vernejsi odstin
-    lo_deg, hi_deg = MIN_HUE_DEG
-    min_dh = (lo_deg + (hi_deg - lo_deg) * (c - 1) / 9.0) / 360.0     # 1 -> 45, 7 -> 32, 10 -> 25 stupnu
-    want = min(n, 2 + round((c - 1) / 3))                # aspon tolik barev: 1 -> 2, 4 -> 3, 7 -> 4, 10 -> 5
+    min_dh = MIN_HUE_DEG / 360.0
+    want = min(n, 2 + round((c - 1) / 3))
     small = img.convert("RGB").resize((64, 64), Image.BILINEAR)
     q = small.quantize(colors=int(8 + 2 * c), method=Image.Quantize.MEDIANCUT)
     pal = q.getpalette()
@@ -125,24 +129,19 @@ def cover_palette(img, n=MAX_COVER_COLORS, sens=5):
         cand.append((count ** area * (0.25 + s) * (0.35 + v), h, s))
     cand.sort(reverse=True)
     hues, out = [], []
-    # 1. kolo: plny kontrast; 2. kolo (jen kdyz je barev malo, citlivost 9-10): mirnejsi rozdil
-    # odstinu, aspon 18 stupnu - porad barvy z obalu, jen bliz u sebe (do 8 zustava prisny kontrast)
-    passes = [min_dh] + ([max(18.0 / 360.0, min_dh * 0.7)] if c >= 9 else [])
-    for dh in passes:
-        if len(out) >= want:
+    for _score, h, s in cand:
+        if len(out) >= n:
             break
-        for _score, h, s in cand:
-            if len(out) >= (n if dh == min_dh else want):
-                break
-            if any(min(abs(h - x), 1 - abs(h - x)) < dh for x in hues):
-                continue                                 # podobny odstin uz je (malo kontrastni)
-            hues.append(h)
-            out.append(_vivid(h, s, floor))
-    for h in list(hues):                                 # malo ruznych odstinu: blede tony vybranych barev
-        if len(out) >= max(2, want):
+        if _hue_gap(h, hues) < min_dh:
+            continue                                     # podobny odstin uz je (malo kontrastni)
+        hues.append(h)
+        out.append(_vivid(h, s, LED_SATURATION))
+    while fill and hues and len(out) < want:             # doplnit odstin co nejdal od vsech dosavadnich
+        best = max((i / 72.0 for i in range(72)), key=lambda h: _hue_gap(h, hues))
+        if _hue_gap(best, hues) < min_dh:
             break
-        r, g, b = colorsys.hsv_to_rgb(h % 1.0, 0.35, 1.0)
-        out.append(_hex((r * 255, g * 255, b * 255)))
+        hues.append(best)
+        out.append(_vivid(best, 1.0, LED_SATURATION))
     return out
 
 
@@ -351,14 +350,17 @@ class Music:
     def color_sens(self):
         return _num(self.led_cfg.get("citlivost_barev"), 7.0, 1.0, 10.0)
 
+    def color_fill(self):
+        return bool(self.led_cfg.get("doplnit_barvy", True))
+
     def update(self, lcd_cfg, led_cfg):
-        old = self.color_sens()
+        old = (self.color_sens(), self.color_fill())
         self.lcd_cfg = lcd_settings(lcd_cfg)
         self.led_cfg = led_settings(led_cfg)
         tr = self.player.track
-        if self.color_sens() != old and tr is not None and tr.get("obal") is not None:
+        if (self.color_sens(), self.color_fill()) != old and tr is not None and tr.get("obal") is not None:
             try:                                                # jina citlivost na barvy: paleta znovu
-                tr["paleta"] = cover_palette(tr["obal"], sens=self.color_sens())
+                tr["paleta"] = cover_palette(tr["obal"], sens=self.color_sens(), fill=self.color_fill())
             except Exception as e:
                 self._err("paleta z obalu", e)
         if not self.lcd_cfg.get("zapnuto"):
@@ -446,7 +448,7 @@ class Music:
             self._track_n += 1
             tr["n"] = self._track_n
             await self._load_cover(props, tr)
-            log.info("Hudba: %s – %s", artist, title)
+            log.info("Hudba: %s – %s (barvy z obalu: %s)", artist, title, " ".join(tr["paleta"]) or "žádné")
             if self.analyzer is not None:
                 self.analyzer.new_track()
             if not first and playing:
@@ -461,7 +463,7 @@ class Music:
 
     async def _load_cover(self, props, tr):
         try:
-            if not await _read_cover(props, tr, self.color_sens()):
+            if not await _read_cover(props, tr, self.color_sens(), self.color_fill()):
                 return
             cur = self.current
             if cur is not None and cur.get("track") is tr:
@@ -638,7 +640,7 @@ class Music:
         return out
 
 
-async def _read_cover(props, tr, sens=5):
+async def _read_cover(props, tr, sens=5, fill=True):
     """Nacist obal alba do tr (obal, obal_id, paleta). True = obal je novy."""
     if props.thumbnail is None:
         return False
@@ -658,7 +660,7 @@ async def _read_cover(props, tr, sens=5):
     img.load()
     tr["obal"] = img.convert("RGB")
     tr["obal_id"] = ident
-    tr["paleta"] = cover_palette(tr["obal"], sens=sens)
+    tr["paleta"] = cover_palette(tr["obal"], sens=sens, fill=fill)
     return True
 
 
@@ -673,7 +675,7 @@ SAMPLE_TRACK = {"nazev": "Ukázková skladba", "interpret": "Interpret", "album"
                 "paleta": list(DEFAULT_PALETTE)}
 
 
-def current_track(timeout=3.0, sens=7):
+def current_track(timeout=3.0, sens=7, fill=True):
     """Pro okno nastaveni: (skladba, (pozice s, delka s) nebo None) ze Spotify, nebo (None, None).
     Bezi v pomocnem vlakne (WinRT v MTA), nejvys timeout sekund."""
     res = {}
@@ -694,7 +696,7 @@ def current_track(timeout=3.0, sens=7):
                     return
                 tr = {"nazev": props.title.strip(), "interpret": (props.artist or "").strip(),
                       "album": (props.album_title or "").strip(), "obal": None, "obal_id": None, "paleta": []}
-                await _read_cover(props, tr, sens)
+                await _read_cover(props, tr, sens, fill)
                 res["tr"] = tr
                 tl = sess.get_timeline_properties()
                 end = tl.end_time.total_seconds()

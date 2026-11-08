@@ -787,12 +787,17 @@ class LedEditor:
             slider(row, "Citlivost na barvy", "citlivost_barev", 1, 10, 1, lambda x: f"{x}")
             self._cover_strip = tk.Canvas(f, height=22, bg=V.CARD, highlightthickness=0)
             self._cover_strip.grid(row=row + 1, column=1, columnspan=2, sticky="ew", pady=(0, 2))
+            fv = tk.BooleanVar(value=bool(mc.get("doplnit_barvy", True)))
+            ttk.Checkbutton(f, text="Doplnit kontrastní barvy, když jich obal má málo", variable=fv,
+                            command=lambda: mc.__setitem__("doplnit_barvy", fv.get())).grid(
+                row=row + 2, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 0))
             ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
-                "Nejvýš 6 barev navzájem v kontrastu. Vyšší = víc barev: i méně syté a tmavší barvy a malé "
-                "plochy obalu, menší rozdíl odstínů (1: 45°, 8: 29°; 9–10 dovolí i bližší odstíny až 18°, "
-                "když je barev málo). Chybějící doplní bledé tóny vybraných barev. Změna se projeví po Uložit.")).grid(
-                row=row + 2, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
-            row += 3
+                "Nejvýš 6 plně sytých barev, každé dvě se liší aspoň o 40° odstínu (žádné dvě podobné modré). "
+                "Vyšší citlivost = bere i méně syté a tmavší barvy a malé plochy obalu a chce víc barev "
+                "(1 → 2, 4 → 3, 7 → 4, 10 → 5). Když je obal nemá, doplní se odstíny co nejdál od barev obalu "
+                "(jde vypnout). Změna se projeví po Uložit.")).grid(
+                row=row + 3, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
+            row += 4
         if mc.get("barvy") == "vlastni":
             cols = mc.setdefault("paleta", list(led.MUSIC_DEFAULT["paleta"]))
             ttk.Label(f, text="Počet barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),

@@ -1147,7 +1147,8 @@ class App(tk.Tk):
         import hudba_lcd
         hc = hudba.lcd_settings(self.cfg.get("hudba"))
         try:
-            tr, prog = hudba.current_track(sens=(self.cfg["led"].get("hudba") or {}).get("citlivost_barev", 7))
+            mh = self.cfg["led"].get("hudba") or {}
+            tr, prog = hudba.current_track(sens=mh.get("citlivost_barev", 7), fill=mh.get("doplnit_barvy", True))
         except Exception as e:
             tr, prog = None, None
             self.src_lbl.config(text=f"Spotify nejde přečíst: {e}")

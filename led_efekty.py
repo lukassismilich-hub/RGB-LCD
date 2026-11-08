@@ -733,9 +733,9 @@ class Engine:
         else:                                             # "pulz": basy = jas, uder = zablesk vlnou, vysky = jiskry
             kk = min(1.0, 0.10 - 0.04 * e + (0.55 + 0.2 * e) * bass + (0.6 + 0.4 * e) * fl)
             out = []
-            for i in range(n):
-                m = (1 + math.sin(2 * math.pi * (i / max(1, n) + ph))) / 2
-                c = _mix(_mix(main, acc, 0.65 * (1 - 0.6 * e) * m), white, 0.3 * fl * fl)
+            rot = cols[d % k:] + cols[:d % k]             # drop posune paletu (hlavni barva = prvni)
+            for i in range(n):                        # cela paleta po obvodu, otaci se se stredy
+                c = _mix(_cyclic(rot, i / max(1, n) + ph), white, 0.3 * fl * fl)
                 out.append(_scale(c, kk))
             if n > 1:
                 st = self.state.setdefault(("hudba_jiskry", key), [])

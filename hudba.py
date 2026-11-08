@@ -142,6 +142,8 @@ def cover_palette(img, n=MAX_COVER_COLORS, sens=5, fill=True):
             break
         hues.append(best)
         out.append(_vivid(best, 1.0, LED_SATURATION))
+    if len(out) == 1 and not fill and c >= 10:           # jedina barva obalu, bez doplnovani: druha bila
+        out.append("#ffffff")
     return out
 
 

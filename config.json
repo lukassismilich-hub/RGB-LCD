@@ -796,11 +796,11 @@
         ],
         [
           80,
-          55
+          80
         ],
         [
           85,
-          75
+          90
         ],
         [
           90,
@@ -818,18 +818,14 @@
         ],
         [
           70,
-          25
+          30
         ],
         [
           80,
-          35
+          60
         ],
         [
           90,
-          45
-        ],
-        [
-          95,
           100
         ]
       ]
@@ -1996,23 +1992,23 @@
     "efekt": {
       "typ": "stirani",
       "barvy": [
+        "#ffffff",
         "#ff0000",
-        "#ffff00",
+        "#df7000",
+        "#f4f400",
         "#00ff00",
         "#00ffff",
-        "#0000ff",
-        "#ff00ff",
-        "#ffffff",
-        "#ff00bf"
+        "#0000d9",
+        "#7400e8"
       ],
-      "rychlost": 1,
+      "rychlost": 4,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
       "max": 90,
-      "pocet_barev": 7,
+      "pocet_barev": 8,
       "otoceni": 270,
-      "pauza": 2.0,
+      "pauza": 0.5,
       "barvy_rezim": "barvy"
     },
     "efekt_f140": {

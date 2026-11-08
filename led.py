@@ -58,6 +58,9 @@ EXTRA_DEFAULT = {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffff
 
 
 PLAYLIST_DEFAULT = {"zapnuto": False, "polozky": [], "prolinani": 1.0}
+# hudebni vizualizer (stejne jako hudba.LED_DEFAULTS - led.py hudbu nenacita, at nezavisi na numpy)
+MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "citlivost": 5, "jas": 100,
+                 "barvy": "obal", "paleta": ["#ff2a6d", "#7b2cff", "#05d9e8"], "zpozdeni_ms": 180, "navrat_s": 3}
 MAX_REPEATS = 999
 MAX_FADE_S = 5.0
 
@@ -110,6 +113,8 @@ def default_config():
         # playlist efektu: polozky = efekty (jako "efekt") + "opakovani"; strida se dokola v poradi,
         # plati pro vsechny ventilatory (a grafiku / klavesnici s efektem "jako F140 / deska")
         "playlist": copy.deepcopy(PLAYLIST_DEFAULT),
+        # hudebni vizualizer: kdyz hraje Spotify, ma prednost pred efektem i playlistem (hudba.py)
+        "hudba": copy.deepcopy(MUSIC_DEFAULT),
     }
 
 
@@ -288,14 +293,21 @@ def _orient(cols, shift, reverse):
     return [cols[(shift + sign * k) % n] for k in range(n)]
 
 
-def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
+def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None):
     """{klic: [[r, g, b] x pocet LED]} s jasem - pro vlakno i nahled v nastaveni.
-    orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat."""
+    orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat.
+    music = snimek hudby ze Spotify (hudba.Music.led_snapshot / fx.music_demo): hudebni vizualizer
+    pro vsechny cile, music["mix"] 0..1 = prolnuti s beznym efektem."""
     tg = targets(lcfg)
     wave = bool(lcfg.get("vlna"))
     offsets = wave_offsets(lcfg, [k for k, *_ in tg if k not in NO_WAVE])[0] if wave else {}
     span = max(offsets.values(), default=0.0)
     pl = playlist_at(lcfg, t, span)
+    mix = max(0.0, min(1.0, float(music.get("mix", 1.0)))) if music else 0.0
+    if mix > 0:
+        meff = (lcfg.get("hudba") or {})
+        order = wave_offsets(dict(lcfg, vlna_f140_spolu=False), [k for k, *_ in tg if k not in NO_WAVE])[1]
+        place = {k: i / max(1, len(order) - 1) for i, k in enumerate(order)}      # 0 predek .. 1 zadek
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
         def one(eff, tt):
@@ -304,13 +316,21 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
             if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
                 c = _orient(c, *orientation(lcfg, key))
             return c
-        if pl and follows_playlist(lcfg, group):
+        if mix >= 1.0:
+            cols = None
+        elif pl and follows_playlist(lcfg, group):
             cols = one(pl["eff"], pl["t"])
             if "k" in pl:                                  # prolnuti z predchozi polozky playlistu
                 old = one(pl["prev"], pl["t_prev"])
                 cols = [fx._mix(a, b, pl["k"]) for a, b in zip(old, cols)]
         else:
             cols = one(effect_for(lcfg, group), t)
+        if mix > 0:                                        # hudba: uder jde vlnou od ventilatoru, ktery je napred
+            delay = (span - offsets.get(key, 0.0)) / span if wave and span > 0 else 0.0
+            mc = engine.music(meff, music, key, n, place.get(key, 0.0), delay, dt)
+            if orient:
+                mc = _orient(mc, *orientation(lcfg, key))
+            cols = mc if cols is None else [fx._mix(a, b, mix) for a, b in zip(cols, mc)]
         if group in EXTRAS:
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(group, EXTRA_DEFAULT).get("jas", 100)) / 100.0
         else:
@@ -629,6 +649,7 @@ class LedWorker(threading.Thread):
         self._off_done = threading.Event()
         self._resume = threading.Event()
         self._shutdown = False               # konci Windows: LED zhasnout (ne klidny stav)
+        self.music = None                    # hudba.Music - hudebni vizualizer, kdyz hraje Spotify
         self.state = {"stav": "čeká"}
 
     def update(self, lcfg, data=None):
@@ -674,6 +695,7 @@ class LedWorker(threading.Thread):
         engine = fx.Engine()
         session, hw_key, t0 = None, None, time.monotonic()
         pl_key = None                            # zmena playlistu (po Ulozit) = playlist od zacatku
+        snap, music_err, music_fps, frames, fps_t = None, None, None, 0, time.monotonic()
         last_wall, last_force, prev, last_retry = time.time(), 0.0, time.monotonic(), time.monotonic()
         while not self._quit.is_set():
             with self._lock:
@@ -744,7 +766,15 @@ class LedWorker(threading.Thread):
                     session.setup_gpu(lcfg)                   # grafika zapnuta / vypnuta
                     hw_key, last_force = key, 0.0
                 dt, prev = now - prev, now
-                frame = render(engine, lcfg, now - t0, data, min(dt, 0.2))
+                snap = None
+                if self.music is not None:
+                    try:
+                        snap = self.music.led_snapshot(lcfg.get("hudba"))
+                    except Exception as e:                # chyba hudby nesmi zastavit LED
+                        if str(e) != music_err:
+                            music_err = str(e)
+                            log.warning("LED: hudba – %s", e)
+                frame = render(engine, lcfg, now - t0, data, min(dt, 0.2), music=snap)
                 force = now - last_force > REFRESH_S
                 session.send(frame, force)
                 if force:
@@ -756,6 +786,16 @@ class LedWorker(threading.Thread):
                 if pl:                                   # co prave hraje (okno nastaveni)
                     st["playlist"] = {"i": pl["i"], "pocet": pl["pocet"], "typ": pl["eff"].get("typ"),
                                       "zbyva": round(pl["zbyva"])}
+                if snap is not None:
+                    st["hudba"] = {"styl": fx.music_style(lcfg.get("hudba") or {}, snap), "mix": round(snap["mix"], 2)}
+                    frames += 1
+                    if now - fps_t >= 60:                # skutecna snimkova frekvence s hudbou (do logu 1x za minutu)
+                        if music_fps is None or abs(frames / (now - fps_t) - music_fps) > 5:
+                            music_fps = frames / (now - fps_t)
+                            log.info("LED: hudba %.0f snímků/s.", music_fps)
+                        frames, fps_t = 0, now
+                else:
+                    frames, fps_t = 0, now
                 self._set_state(st)
             except Exception as e:
                 if session:
@@ -764,7 +804,9 @@ class LedWorker(threading.Thread):
                 self._set_state({"stav": "chyba", "chyby": [str(e)]})
                 self._quit.wait(RETRY_S)
                 continue
-            if is_animated(lcfg):
+            if snap is not None:                         # hudba: plynulejsi (udery jsou kratke)
+                self._quit.wait(max(0.0, 1 / fx.MUSIC_FPS - (time.monotonic() - now)))
+            elif is_animated(lcfg):
                 self._quit.wait(max(0.0, 1 / fx.FPS - (time.monotonic() - now)))
             else:
                 self._wake.wait(1.0)

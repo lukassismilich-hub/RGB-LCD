@@ -557,6 +557,192 @@ class Engine:
         return 0.0 if hi == lo else max(0.0, min(1.0, (smooth - lo) / (hi - lo)))
 
 
+    # ------------------------------------------------------------- hudebni vizualizer (Spotify)
+
+    def music(self, eff, snap, key, n, pos=0.0, delay=0.0, dt=1 / FPS):
+        """Barvy n LED jednoho cile pro hudebni vizualizer. snap = snimek analyzy (hudba.Analyzer /
+        music_demo), pos = poloha ve skrini 0 (predek) .. 1 (zadek) - spektrum, delay = 0..1 jak pozde
+        k cili dorazi uder pri vlne (MUSIC_WAVE_S)."""
+        cols = [hex_rgb(c) for c in (snap.get("paleta") or [])] or [hex_rgb(c) for c in DEFAULT_PALETTE[:3]]
+        k = len(cols)
+        d = int(snap.get("drop_n", 0))                    # refren / drop: prohodi hlavni a doplnkovou barvu
+        main, acc = cols[d % k], cols[(d + 1) % k]
+        white = (255.0, 255.0, 255.0)
+        try:
+            jas = max(0.0, min(1.0, float(eff.get("jas", 100)) / 100.0)) ** 2
+        except (TypeError, ValueError):
+            jas = 1.0
+        styl = music_style(eff, snap)
+        lag = delay * MUSIC_WAVE_S
+        bass, mid, high = (float(snap.get(x, 0.0)) for x in ("bass", "mid", "high"))
+        level, ph = float(snap.get("level", 0.0)), float(snap.get("phase", 0.0))
+        bands = list(snap.get("bands") or [0.0] * 16)
+        fl = 0.0                                          # zablesk uderu (s vlnou skrini)
+        for b in snap.get("beats", ()):
+            a = b[0] - lag
+            if a >= 0:
+                fl = max(fl, b[1] * math.exp(-a / 0.14))
+        new = self._new_beats(key, snap, lag)
+        rnd = self.rng
+
+        if snap.get("quiet"):                             # pauza / ticho: klidne vlneni v barvach skladby
+            out = [_scale(_cyclic(cols, i / max(1, n) + ph * 0.3), 0.22 + 0.08 * math.sin(ph * 6)) for i in range(n)]
+        elif styl == "spektrum":
+            x = max(0.0, min(1.0, pos)) * (len(bands) - 1)
+            lv = _band_at(bands, x)
+            st = self.state.setdefault(("hudba_spicka", key), [0.0])
+            st[0] = max(lv, st[0] - dt * 0.5)             # spicka pomalu klesa
+            if n == 1:
+                out = [_scale(_gradient(cols, lv), 0.12 + 0.88 * lv)]
+            else:
+                out = []
+                for i in range(n):
+                    h = 1 - (_ring_y(i, n, eff) + 1) / 2  # 0 = dole, 1 = nahore
+                    lit = max(0.0, min(1.0, (lv - h) * n / 2 + 0.5))
+                    c = _scale(_gradient(cols, h), 0.05 + 0.95 * lit)
+                    pk = max(0.0, 1 - abs(h - st[0]) * n / 1.5) if st[0] > 0.08 else 0.0
+                    out.append(_mix(c, _mix(acc, white, 0.6), pk * 0.8))
+        elif styl == "ekvalizer":
+            out = []
+            for i in range(n):
+                h = 0.5 if n == 1 else 1 - (_ring_y(i, n, eff) + 1) / 2
+                v = level if n == 1 else _band_at(bands, h * (len(bands) - 1))
+                out.append(_scale(_gradient(cols, h), min(1.0, 0.05 + 0.95 * v ** 1.4 + 0.2 * fl)))
+        elif styl == "komety":
+            st = self.state.setdefault(("hudba_komety", key), [])
+            bpm = float(snap.get("bpm") or 120.0)
+            for _bid, strength in new:
+                st.append([rnd.random() * n, rnd.choice((-1, 1)) * (0.5 + bpm / 160.0), rnd.randrange(k), strength, 0.0])
+            for c in st:
+                c[0] = (c[0] + c[1] * n * dt) % max(1, n)
+                c[4] += dt
+            st[:] = [c for c in st if c[4] < 1.3][-6:]
+            bg = _scale(main, 0.04 + 0.16 * bass)
+            out = [bg] * n
+            if n == 1:
+                last = st[-1] if st else None
+                out = [_mix(bg, cols[last[2]], fl) if last else bg]
+            else:
+                for head, vel, ci, strength, age in st:
+                    life = strength * max(0.0, 1 - age / 1.3)
+                    tail = max(2.0, n * 0.45)
+                    for i in range(n):
+                        dd = ((head - i) if vel > 0 else (i - head)) % n
+                        kk = max(0.0, 1 - dd / tail) ** 2 * life
+                        if kk > 0:
+                            out[i] = tuple(max(out[i][j], cols[ci][j] * kk) for j in range(3))
+        elif styl == "jiskry":
+            st = self.state.setdefault(("hudba_jiskry", key), [])
+            if len(st) != n:
+                st[:] = [[0.0, 0] for _ in range(n)]
+            dec = math.exp(-dt / 0.25)
+            for s in st:
+                s[0] *= dec
+            for _bid, strength in new:
+                for i in rnd.sample(range(n), max(1, int(n * (0.25 + 0.35 * strength)))):
+                    st[i] = [strength, rnd.randrange(k)]
+            if n > 1:
+                for s in st:
+                    if rnd.random() < dt * 8 * high ** 2.5:
+                        s[0], s[1] = max(s[0], 0.6), -1
+            bg = _scale(main, 0.04 + 0.1 * level)
+            out = []
+            for v, ci in st:
+                c = _mix(acc, white, 0.45) if ci < 0 else cols[ci % k]
+                out.append(tuple(max(bg[j], c[j] * v) for j in range(3)))
+        elif styl == "klidny":
+            st = self.state.setdefault(("hudba_klid", key), [0.0])
+            st[0] += (level - st[0]) * min(1.0, dt / 0.6)
+            out = [_scale(_cyclic(cols, i / max(1, n) + ph * 0.5), 0.15 + 0.85 * st[0]) for i in range(n)]
+        else:                                             # "pulz": basy = jas, uder = zablesk vlnou, vysky = jiskry
+            kk = min(1.0, 0.10 + 0.55 * bass + 0.6 * fl)
+            out = []
+            for i in range(n):
+                m = (1 + math.sin(2 * math.pi * (i / max(1, n) + ph))) / 2
+                c = _mix(_mix(main, acc, 0.65 * m), white, 0.3 * fl * fl)
+                out.append(_scale(c, kk))
+            if n > 1:
+                st = self.state.setdefault(("hudba_jiskry", key), [])
+                if len(st) != n:
+                    st[:] = [[0.0, 0] for _ in range(n)]
+                dec = math.exp(-dt / 0.09)
+                spark = _mix(acc, white, 0.45)
+                for i, s in enumerate(st):
+                    s[0] *= dec
+                    if rnd.random() < dt * 10 * high ** 2.5:
+                        s[0] = 1.0
+                    if s[0] > 0.02:
+                        out[i] = tuple(max(out[i][j], spark[j] * s[0]) for j in range(3))
+        return [_scale(c, jas) for c in out]
+
+    def _new_beats(self, key, snap, lag):
+        """Udery, ktere k cili prave dorazily (s vlnou o lag s pozdeji): [(poradi, sila)]."""
+        st = self.state.setdefault(("hudba_uder", key), [0])
+        beats = [b for b in snap.get("beats", ()) if len(b) > 2]
+        if beats and max(b[2] for b in beats) < st[0] - 5:   # analyza zacala znovu (nova skladba / restart)
+            st[0] = 0
+        out = []
+        for age, strength, bid in beats:
+            if age >= lag and bid > st[0]:
+                out.append((bid, strength))
+        if out:
+            st[0] = max(b for b, _s in out)
+        return out
+
+
+MUSIC_STYLES = {
+    "pulz": "pulz s vlnou",
+    "spektrum": "spektrum po skříni",
+    "ekvalizer": "ekvalizér na kruhu",
+    "komety": "komety do rytmu",
+    "jiskry": "jiskry do rytmu",
+    "klidny": "klidné vlnění",
+}
+MUSIC_WAVE_S = 0.25          # za jak dlouho uder probehne celou skrini (pri vlne)
+MUSIC_FPS = 50               # snimky za sekundu, kdyz hraje hudba (jinak FPS)
+
+
+def music_style(eff, snap):
+    """Styl vizualizeru; "stridat" = s kazdou skladbou jiny (podle poradi skladby)."""
+    if eff.get("stridat"):
+        keys = list(MUSIC_STYLES)
+        return keys[(int(snap.get("track_n", 0)) * 7 + 3) % len(keys)]
+    styl = eff.get("styl", "pulz")
+    return styl if styl in MUSIC_STYLES else "pulz"
+
+
+def _band_at(bands, x):
+    """Uroven pasma na (necele) pozici x - prumer okoli, at sousedni ventilatory neskacou."""
+    if not bands:
+        return 0.0
+    lo, hi = max(0, int(math.floor(x - 1))), min(len(bands) - 1, int(math.ceil(x + 1)))
+    vals = bands[lo:hi + 1]
+    return max(0.0, min(1.0, sum(vals) / len(vals)))
+
+
+def music_demo(t, paleta=None, track_n=0):
+    """Simulovana hudba pro nahled v okne (120 uderu za minutu, hi-hat mezi udery, drop kazdych 16 s)."""
+    period = 0.5
+    cur = math.floor(t / period)
+    beats = []
+    for j in range(3, -1, -1):
+        bid = cur - j
+        if bid >= 0:
+            beats.append((t - bid * period, 1.0 if bid % 4 == 0 else 0.7, bid + 1))
+    age = t - cur * period
+    bass = 0.1 + 0.85 * math.exp(-age / 0.15)
+    high = 0.85 * math.exp(-((t - period / 2) % period) / 0.05)
+    mid = 0.45 + 0.25 * math.sin(t * 0.7)
+    bands = []
+    for b in range(16):
+        x = b / 15
+        v = bass * (1 - x) ** 2 + mid * math.exp(-((x - 0.5) / 0.25) ** 2) + high * x * x
+        bands.append(max(0.0, min(1.0, v * 0.9 + 0.08 * math.sin(t * 3 + b))))
+    return {"bass": bass, "mid": mid, "high": high, "level": 0.6 + 0.2 * math.sin(t * 0.3), "bands": bands,
+            "beats": beats, "beat_n": cur + 1, "drop_n": int(t // 16), "phase": t * 0.3, "bpm": 120.0,
+            "quiet": False, "paleta": list(paleta or DEFAULT_PALETTE[:3]), "track_n": track_n, "mix": 1.0}
+
+
 def _ring_y(i, n, eff):
     """Svisla poloha LED i na kruhu (-1 nahore, +1 dole). LED 1 vpravo, cislovani po smeru hodin
     (jako v nahledu); "otoceni" efektu otoci svisle efekty po 90 stupnich."""

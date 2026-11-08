@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 
+import hudba
 import led
 import program_ikona
 import prvky
@@ -87,6 +88,8 @@ DEFAULTS = {
     "led": led.default_config(),
     # ikona prave spusteneho programu / hry na LCD Krakenu (program_ikona.py)
     "ikona_programu": program_ikona.DEFAULTS,
+    # obrazovka "Prave hraje" na zacatku skladby ze Spotify (hudba.py, hudba_lcd.py)
+    "hudba": hudba.LCD_DEFAULTS,
 }
 
 
@@ -149,9 +152,13 @@ def load():
         a.setdefault(k, json.loads(json.dumps(v)))
     for k, v in DEFAULTS["ikona_programu"].items():     # doplneni novych klicu ikony programu
         cfg["ikona_programu"].setdefault(k, json.loads(json.dumps(v)))
+    for k, v in DEFAULTS["hudba"].items():              # doplneni novych klicu obrazovky Prave hraje
+        cfg["hudba"].setdefault(k, json.loads(json.dumps(v)))
     lc = cfg["led"]
     for k, v in DEFAULTS["led"].items():               # doplneni novych klicu LED
         lc.setdefault(k, json.loads(json.dumps(v)))
+    for k, v in DEFAULTS["led"]["hudba"].items():      # hudebni vizualizer
+        lc["hudba"].setdefault(k, json.loads(json.dumps(v)))
     for group in ("nzxt", "fusion", "argb"):
         for ch, v in DEFAULTS["led"][group].items():
             lc[group].setdefault(ch, json.loads(json.dumps(v)))

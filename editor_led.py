@@ -68,14 +68,18 @@ class LedEditor:
         self.fx_frame = V.card(left)
         self.fx_frame.grid(row=1, column=0, sticky="nsew", pady=(16, 0))
         self._build_effects()
+        self._music_demo = tk.BooleanVar(value=False)       # nahled: simulovana hudba
+        self.music = V.card(left)
+        self.music.grid(row=2, column=0, sticky="nsew", pady=(16, 0))
+        self._build_music()
         self.gpu = V.card(left)
-        self.gpu.grid(row=2, column=0, sticky="nsew", pady=(16, 0))
+        self.gpu.grid(row=3, column=0, sticky="nsew", pady=(16, 0))
         self._build_gpu()
         self._kb_job = None                       # bezici prace s klavesnici (vlakno) a jeji vysledek
         self._kb_mode = None
         if led.KEYBOARD:                          # klavesnice zatim skryta
             self.kb = V.card(left)
-            self.kb.grid(row=3, column=0, sticky="nsew", pady=(16, 0))
+            self.kb.grid(row=4, column=0, sticky="nsew", pady=(16, 0))
             self._build_keyboard()
             self._kb_run(self._kb_read_mode)      # aktualni rezim klavesnice
 
@@ -656,6 +660,140 @@ class LedEditor:
         self._build_custom()                                # kruhy barev a natoceni podle zapojenych hlavicek
         self._build_sync()
 
+    # ------------------------------------------------------- hudba ze Spotify
+    def _build_music(self):
+        f = self.music
+        for w in f.winfo_children():
+            w.destroy()
+        mc = self.lcfg.setdefault("hudba", copy.deepcopy(led.MUSIC_DEFAULT))
+        for key, v in led.MUSIC_DEFAULT.items():
+            mc.setdefault(key, copy.deepcopy(v))
+        f.columnconfigure(1, weight=1)
+        V.card_title(f, "Hudba ze Spotify").grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 4))
+        on = tk.BooleanVar(value=bool(mc.get("zapnuto")))
+
+        def on_toggle():
+            mc["zapnuto"] = on.get()
+            self._build_music()
+        ttk.Checkbutton(f, text="Když hraje Spotify, přepnout na hudební vizualizér", variable=on,
+                        command=on_toggle).grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 2))
+        self._music_lbl = ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left")
+        self._music_lbl.grid(row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 6))
+        if not mc.get("zapnuto"):
+            ttk.Frame(f, height=8).grid(row=3, column=0)
+            self._music_refresh()
+            return
+        chips = ttk.Frame(f)
+        chips.grid(row=3, column=0, columnspan=3, sticky="ew", padx=20, pady=(4, 2))
+        sv = tk.StringVar(value=mc.get("styl", "pulz"))
+        alt = tk.BooleanVar(value=bool(mc.get("stridat")))
+        for i, (key, name) in enumerate(fx.MUSIC_STYLES.items()):
+            chips.columnconfigure(i % 3, weight=1, uniform="chip")
+            ttk.Radiobutton(chips, text=name, value=key, variable=sv, style="Chip.Toolbutton",
+                            command=lambda: (mc.__setitem__("styl", sv.get()), alt.set(False),
+                                             mc.__setitem__("stridat", False))).grid(
+                row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
+        ttk.Checkbutton(f, text="Jiný styl s každou skladbou", variable=alt,
+                        command=lambda: mc.__setitem__("stridat", alt.get())).grid(
+            row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 8))
+
+        def slider(row, text, key, lo, hi, res, fmt):
+            ttk.Label(f, text=text, style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10), pady=4)
+            v = tk.DoubleVar(value=float(mc.get(key, lo)))
+            lbl = ttk.Label(f, width=8, font=V.MONO, anchor="e")
+            lbl.grid(row=row, column=2, sticky="e", padx=(8, 20))
+
+            def on(_e=None):
+                x = round(float(v.get()) / res) * res
+                mc[key] = int(x) if float(res).is_integer() else round(x, 2)
+                lbl.config(text=fmt(mc[key]))
+            V.scale(f, variable=v, from_=lo, to=hi, resolution=res, length=160, command=on).grid(
+                row=row, column=1, sticky="ew", pady=4)
+            on()
+        slider(5, "Citlivost", "citlivost", 1, 10, 1, lambda x: f"{x}")
+        slider(6, "Jas", "jas", 10, 100, 5, lambda x: f"{x} %")
+        slider(7, "Zpoždění světel", "zpozdeni_ms", 0, 500, 10, lambda x: f"{x} ms")
+        ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
+            "Bluetooth sluchátka hrají o 150–250 ms později než reproduktory – o tolik zpozdi světla, "
+            "aby údery seděly. S kabelem / reproduktory 0 ms.")).grid(
+            row=8, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 4))
+        slider(9, "Návrat po pauze", "navrat_s", 0, 30, 1, lambda x: f"{x} s")
+        ttk.Label(f, text="Barvy", style="Muted.TLabel").grid(row=10, column=0, sticky="w", padx=(20, 10), pady=4)
+        bv = tk.StringVar(value=mc.get("barvy", "obal"))
+
+        def on_colors():
+            mc["barvy"] = bv.get()
+            self._build_music()
+        V.segmented(f, bv, [("obal", "z obalu alba"), ("vlastni", "vlastní")], command=on_colors).grid(
+            row=10, column=1, columnspan=2, sticky="w", pady=4)
+        row = 11
+        if mc.get("barvy") == "vlastni":
+            cols = mc.setdefault("paleta", list(led.MUSIC_DEFAULT["paleta"]))
+            ttk.Label(f, text="Počet barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),
+                                                                       pady=4)
+            nv = tk.IntVar(value=max(2, min(5, len(cols))))
+
+            def on_count():
+                n = nv.get()
+                while len(cols) < n:
+                    cols.append(next(c for c in fx.DEFAULT_PALETTE if c not in cols))
+                del cols[n:]
+                self._build_music()
+            V.segmented(f, nv, [(k, str(k)) for k in range(2, 6)], command=on_count).grid(
+                row=row, column=1, columnspan=2, sticky="w", pady=4)
+            row += 1
+            bf = ttk.Frame(f)
+            bf.grid(row=row, column=1, columnspan=2, sticky="w", pady=4)
+            for i in range(len(cols)):
+                b = V.swatch(bf, cols[i], None, text="hlavní" if i == 0 else ("doplňková" if i == 1 else str(i + 1)),
+                             width=9)
+                b.config(command=lambda i=i, b=b: self._pick_list(cols, i, b))
+                b.pack(side="left", padx=(0, 6), ipady=4)
+            row += 1
+        ttk.Checkbutton(f, text="Náhled vpravo: simulovaná hudba (120 úderů za minutu)", variable=self._music_demo).grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=20, pady=(8, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=470, justify="left", text=(
+            "Reaguje jen na zvuk Spotify – hra, Discord ani upozornění ne. Má přednost před efektem "
+            "i playlistem; po pauze se za zvolenou dobu vrátí. Údery jdou při vlně skříní od předku dozadu.")).grid(
+            row=row + 1, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 16))
+        self._music_refresh()
+
+    def _music_palette(self):
+        """Barvy pro nahled: z obalu prave hrajici skladby (ze stav.json), jinak vlastni."""
+        mc = self.lcfg.get("hudba") or {}
+        st = getattr(self.app, "mstate", None) or {}
+        if mc.get("barvy", "obal") == "obal" and st.get("paleta"):
+            return st["paleta"]
+        return mc.get("paleta") or led.MUSIC_DEFAULT["paleta"]
+
+    def _music_refresh(self):
+        lbl = getattr(self, "_music_lbl", None)
+        try:
+            if lbl is None or not lbl.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        st = getattr(self.app, "mstate", None) or {}
+        if not self.app.running:
+            text = "Aplikace neběží."
+        elif not st:
+            text = "Stav hudby uvidíš, až poběží nová verze aplikace."
+        elif st.get("chyba"):
+            text = "Chyba: " + st["chyba"]
+        elif not st.get("spotify"):
+            text = "Spotify nehraje (není otevřené)."
+        else:
+            song = f"{st.get('interpret', '')} – {st.get('nazev', '')}" if st.get("nazev") else "?"
+            text = ("▶ " if st.get("hraje") else "❚❚ ") + song
+            if st.get("vizualizer"):
+                text += " · vizualizér běží"
+                u = st.get("uroven")
+                if u:
+                    text += f" · basy {u['bass']:.0%} středy {u['mid']:.0%} výšky {u['high']:.0%}".replace("%", " %")
+                if st.get("bpm"):
+                    text += f" · {st['bpm']:.0f} BPM"
+        lbl.config(text=text)
+
     # ------------------------------------------------------- graficka karta
     def _build_gpu(self):
         f = self.gpu
@@ -1030,7 +1168,14 @@ class LedEditor:
                 if info and self._pl_view == "polozka":
                     info = dict(info, i=sel, pocet=len(items))
             self._pl_update(info["i"] if info and self._pl_view == "vse" else None)
-            frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2))
+            snap = None
+            if self._music_demo.get() and (lc.get("hudba") or {}).get("zapnuto"):   # simulovana hudba
+                snap = fx.music_demo(now - self.t0, self._music_palette())
+                info = None
+            frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), music=snap)
+            if snap is not None:
+                c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
+                              text="♪ simulovaná hudba · " + fx.MUSIC_STYLES[fx.music_style(lc["hudba"], snap)])
             if info:
                 name = fx.EFFECTS.get(info["eff"].get("typ"), ("?",))[0]
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
@@ -1103,7 +1248,9 @@ class LedEditor:
         elif s in ("běží", "nastaveno"):
             text, color = "● LED běží", V.OK
             p = st.get("playlist")
-            if p:
+            if st.get("hudba"):
+                text += " · ♪ hudba: " + fx.MUSIC_STYLES.get(st["hudba"].get("styl"), "?")
+            elif p:
                 text += (f" · playlist {p.get('i', 0) + 1}/{p.get('pocet', '?')}: "
                          f"{fx.EFFECTS.get(p.get('typ'), ('?',))[0]} (ještě {p.get('zbyva', '?')} s)")
         elif s == "chyba":
@@ -1113,3 +1260,4 @@ class LedEditor:
         else:
             text, color = "Stav LED uvidíš, až poběží aplikace (nová verze).", V.MUTED
         self.status.config(text=text, foreground=color)
+        self._music_refresh()

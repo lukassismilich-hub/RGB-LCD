@@ -16,6 +16,7 @@ from alphacool import AlphacoolWorker
 import camservice
 import config
 from cooling import Cooling
+import hudba
 import hwinfo
 from led import LedWorker
 import mono
@@ -89,13 +90,13 @@ def update_history(history, cfg, data):
     return {k: [v for _, v in dq] for k, dq in history.items()}
 
 
-def write_state(data, cooling_state, hist, alpha_state, led_state, code, problems, program):
+def write_state(data, cooling_state, hist, alpha_state, led_state, code, problems, program, music):
     try:
         tmp = STATE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"cas": time.time(), "kod": code, "data": data, "chlazeni": cooling_state,
                        "historie": hist, "alphacool": alpha_state, "led": led_state,
-                       "obrazovky_chyby": problems, "program": program}, f, ensure_ascii=False)
+                       "obrazovky_chyby": problems, "program": program, "hudba": music}, f, ensure_ascii=False)
         os.replace(tmp, STATE)
     except OSError:
         pass
@@ -131,15 +132,45 @@ def start_program(cur):
                  now - cur["found"], cur["secs"])
 
 
-def wait(seconds, wake):
-    """pause(), ktera skonci driv, kdyz se spusti program s ikonou (at je na LCD hned)."""
+def render_music(music, cfg, bad):
+    """(obrazek, skladba): obrazovka "Prave hraje" na zacatku skladby ze Spotify (hudba.py),
+    nebo (None, None). Dobu zobrazeni spusti hlavni smycka, az Kraken obrazek prijme."""
+    cur = music.lcd_active()
+    if cur is None:
+        return None, None
+    try:
+        import hudba_lcd
+        img = hudba_lcd.render(cur["track"], hudba.lcd_settings(cfg.get("hudba")), music.progress(),
+                               cfg.get("gama_grafiky", 0.65), cfg.get("plasticky_vzhled", True))
+    except Exception as e:
+        if "hudba" not in bad:
+            bad["hudba"] = f"právě hraje: {e}"
+            log.error("Obrazovku Právě hraje nejde vykreslit (%s).", e)
+        cur["until"] = 0
+        return None, None
+    return img, cur
+
+
+def start_music(cur):
+    """Kraken obrazovku Prave hraje prijal - od ted bezi doba zobrazeni."""
+    if cur is not None and cur["until"] is None:
+        now = time.monotonic()
+        cur["until"] = now + cur["secs"]
+        tr = cur["track"]
+        log.info("Právě hraje na LCD: %s – %s (%.1f s po změně skladby, na %g s).", tr.get("interpret"),
+                 tr.get("nazev"), now - cur["found"], cur["secs"])
+
+
+def wait(seconds, *wake):
+    """pause(), ktera skonci driv, kdyz se spusti program s ikonou nebo zacne skladba (at je na LCD hned)."""
     end = time.monotonic() + seconds
-    while not STOP.is_set() and not wake.is_set():
+    while not STOP.is_set() and not any(w.is_set() for w in wake):
         left = end - time.monotonic()
         if left <= 0:
             return
         pause(min(0.05, left))
-    wake.clear()
+    for w in wake:
+        w.clear()
 
 
 def render_screen(cfg, data, hist, seen_max, rot, bad):
@@ -212,10 +243,15 @@ def main():
     watcher = program_ikona.Watcher()    # ikona spusteneho programu na LCD, vlastni vlakno
     watcher.update(cfg.get("ikona_programu"))
     watcher.start()
+    music = hudba.Music()                # Spotify: obrazovka Prave hraje a hudebni vizualizer LED
+    music.update(cfg.get("hudba"), cfg["led"].get("hudba"))
+    music.start()
+    leds.music = music
 
     try:
         while not STOP.is_set():
             loop_start = time.monotonic()
+            song = None                          # obrazovka Prave hraje v tomto kole
             try:
                 if kraken.dev is None:
                     kraken.open()
@@ -237,6 +273,7 @@ def main():
                     if cfg["jas"] != old_jas:
                         kraken.set_brightness(cfg["jas"])
                     watcher.update(cfg.get("ikona_programu"))
+                    music.update(cfg.get("hudba"), cfg["led"].get("hudba"))
                     log.info("Nastaveni nacteno znovu.")
 
                 data = collect(kraken)
@@ -246,7 +283,7 @@ def main():
                 leds.update(cfg["led"], data)
                 if time.monotonic() - last_state >= STATE_EVERY_S:
                     write_state(data, cooling.state, hist, alpha.state, leds.state, code,
-                                sorted(bad_screens.values()), watcher.state)
+                                sorted(bad_screens.values()), watcher.state, music.status())
                     last_state = time.monotonic()
                 if not any(not k.startswith("@") for k in data) and not warned_hwinfo:
                     log.warning("Z HWiNFO nejsou data - bezi HWiNFO se zapnutym Gadget reportingem?")
@@ -255,6 +292,14 @@ def main():
                     seen_max[name] = max(seen_max.get(name, item["value"]), item["value"])
 
                 img, prog = render_program(watcher, cfg, bad_screens)
+                mimg, mcur = render_music(music, cfg, bad_screens)
+                if mimg is not None:             # ikona programu i skladba: vyhraje novejsi udalost
+                    if img is None or mcur["found"] >= prog["found"]:
+                        if prog is not None:
+                            prog["until"] = 0    # starsi ikona uz se neukaze
+                        img, prog, song = mimg, None, mcur
+                    else:
+                        mcur["until"] = 0
                 if img is None:
                     img = render_screen(cfg, data, hist, seen_max, rot, bad_screens)
                 else:                            # prerusena obrazovka dostane po ikone celou dobu rotace
@@ -263,9 +308,11 @@ def main():
                     b = img.tobytes()
                     if b == last_bytes:          # posilame jen zmeny
                         start_program(prog)
+                        start_music(song)
                     elif kraken.show(img):       # False = Kraken obrazek odmitl, dalsi kolo znovu
                         last_bytes = b
                         start_program(prog)
+                        start_music(song)
                 if kraken.rejected != rejected_logged[0] and time.monotonic() - rejected_logged[1] > 60:
                     log.info("LCD: Kraken odmitl %d obrazku (zaneprazdneny, napr. pri startu hry) - "
                              "posilaji se znovu.", kraken.rejected - rejected_logged[0])
@@ -288,7 +335,9 @@ def main():
                 log.warning("Smycka trvala %.1f s (PC vytizene nebo pomale cteni dat).", elapsed)
                 slow_warned = time.monotonic()
             period = max(config.MIN_REFRESH_S, float(cfg["obnova_s"]))
-            wait(max(0.05, period - elapsed), watcher.wake)
+            if song is not None:                 # prstenec prubehu skladby: aspon 1x za sekundu
+                period = min(period, 1.0)
+            wait(max(0.05, period - elapsed), watcher.wake, music.wake)
     except KeyboardInterrupt:
         log.info("Ukoncuji (Ctrl+C).")
     finally:
@@ -298,6 +347,7 @@ def main():
             # az po predani chlazeni - to ma prednost; pri vypnuti PC LED zhasnout
             leds.stop(0.5, off=ukonceni.SHUTDOWN.is_set())
             watcher.stop()
+            music.stop()
             alpha.stop(1.5)
         finally:
             ukonceni.DONE.set()

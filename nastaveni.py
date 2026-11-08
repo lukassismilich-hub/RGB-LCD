@@ -172,7 +172,7 @@ FIELDS.update({
 
 
 # z posledniho stav.json: verze kodu bezici aplikace a obrazovky, ktere nejde vykreslit
-STATE_EXTRA = {"kod": None, "chyby": [], "program": {}}
+STATE_EXTRA = {"kod": None, "chyby": [], "program": {}, "hudba": {}}
 
 
 def load_data():
@@ -182,12 +182,12 @@ def load_data():
             st = json.load(f)
         if time.time() - st.get("cas", 0) < 10:
             STATE_EXTRA.update(kod=st.get("kod"), chyby=st.get("obrazovky_chyby", []),
-                               program=st.get("program") or {})
+                               program=st.get("program") or {}, hudba=st.get("hudba") or {})
             return (st["data"], True, st.get("chlazeni", {}), st.get("historie", {}),
                     st.get("alphacool", {}), st.get("led", {}))
     except (OSError, ValueError, KeyError):
         pass
-    STATE_EXTRA.update(kod=None, chyby=[], program={})
+    STATE_EXTRA.update(kod=None, chyby=[], program={}, hudba={})
     import systemdata
     data = hwinfo.read_full()
     data.update(systemdata.read())
@@ -403,6 +403,11 @@ class App(tk.Tk):
         return (self.data.get(name) or {}).get("value")
 
     # ---------------------------------------------------------- hlavicka
+    @property
+    def mstate(self):
+        """Hudba ze Spotify (stav.json "hudba"): co hraje, paleta z obalu, stav vizualizeru."""
+        return STATE_EXTRA["hudba"]
+
     def _build_header(self, main):
         h = tk.Frame(main, bg=V.BG)
         h.grid(row=0, column=0, sticky="ew", padx=24, pady=(18, 16))
@@ -1015,6 +1020,7 @@ class App(tk.Tk):
         ttk.Checkbutton(g, text="Záře kolem 3D tvarů", variable=gv,
                         command=on_glow).grid(row=9, column=0, columnspan=2, sticky="w", padx=32, pady=(6, 14))
         self._build_program_card(f)
+        self._build_music_card(f)
         f.update_idletasks()
         sc.canvas.config(width=f.winfo_reqwidth())
 
@@ -1073,6 +1079,96 @@ class App(tk.Tk):
         ttk.Button(bf, text="Vyzkoušet…", command=self._try_program).pack(side="left")
         self._program_preview_until = 0.0
         self._update_program_card()
+
+    def _build_music_card(self, f):
+        """Obrazovka "Prave hraje" na zacatku skladby ze Spotify (hudba.py, hudba_lcd.py)."""
+        import hudba
+        hc = self.cfg.setdefault("hudba", json.loads(json.dumps(hudba.LCD_DEFAULTS)))
+        for key, v in hudba.LCD_DEFAULTS.items():
+            hc.setdefault(key, json.loads(json.dumps(v)))
+        k = V.card(f)
+        k.pack(fill="x", pady=(16, 0))
+        k.columnconfigure(0, weight=1)
+        V.card_title(k, "Právě hraje (Spotify)").grid(row=0, column=0, columnspan=2, sticky="w",
+                                                      padx=16, pady=(14, 6))
+
+        def flag(key, text, row, padx=16):
+            v = tk.BooleanVar(value=bool(hc.get(key)))
+            ttk.Checkbutton(k, text=text, variable=v, command=lambda: hc.__setitem__(key, v.get())).grid(
+                row=row, column=0, columnspan=2, sticky="w", padx=padx, pady=3)
+        flag("zapnuto", "Ukázat skladbu na začátku", 1)
+        flag("po_pauze", "I po pauze (delší než 5 s)", 2)
+        lv = tk.StringVar(value=hc.get("rozvrzeni", "obal"))
+        V.segmented(k, lv, list(hudba.LCD_LAYOUTS.items()), command=lambda: hc.__setitem__("rozvrzeni", lv.get())).grid(
+            row=3, column=0, columnspan=2, sticky="w", padx=16, pady=(4, 4))
+        flag("prubeh", "Prstenec průběhu skladby", 4)
+        flag("zare", "Záře z barev obalu", 5)
+        ttk.Label(k, text="Doba zobrazení (s)", style="Muted.TLabel").grid(row=6, column=0, sticky="w", padx=16, pady=4)
+        dv = tk.StringVar(value=str(hc.get("doba_s", 15)))
+        ttk.Spinbox(k, textvariable=dv, from_=1, to=120, increment=1, width=6, font=V.MONO).grid(
+            row=6, column=1, sticky="e", padx=16, pady=4)
+
+        def on_dur(*_):
+            try:
+                x = max(1.0, min(120.0, float(dv.get().replace(",", "."))))
+                hc["doba_s"] = int(x) if x.is_integer() else x
+            except ValueError:
+                pass
+        dv.trace_add("write", on_dur)
+        ttk.Label(k, style="Small.TLabel", wraplength=250, justify="left", text=(
+            "Přednost před rotací obrazovek. S ikonou programu vyhraje to, co přišlo později.")).grid(
+            row=7, column=0, columnspan=2, sticky="w", padx=16, pady=(4, 2))
+        self._music_lbl = ttk.Label(k, style="Small.TLabel", wraplength=250, justify="left")
+        self._music_lbl.grid(row=8, column=0, columnspan=2, sticky="w", padx=16, pady=(6, 2))
+        ttk.Button(k, text="Vyzkoušet", command=self._try_music).grid(row=9, column=0, sticky="w", padx=16,
+                                                                      pady=(2, 14))
+        self._update_music_card()
+
+    def _update_music_card(self):
+        lbl = getattr(self, "_music_lbl", None)
+        if lbl is None:
+            return
+        st = self.mstate
+        if not self.running:
+            text = "Aplikace neběží."
+        elif not st:
+            text = "Stav uvidíš, až poběží nová verze aplikace."
+        elif not st.get("spotify"):
+            text = "Spotify není otevřené."
+        elif st.get("nazev"):
+            text = ("▶ " if st.get("hraje") else "❚❚ ") + f"{st.get('interpret', '')} – {st['nazev']}"
+        else:
+            text = "Spotify zatím nic nehraje."
+        lbl.config(text=text)
+
+    def _try_music(self):
+        """Nahled obrazovky Prave hraje (prave hrajici skladba ze Spotify, jinak ukazka) v nahledu i na LCD."""
+        import hudba
+        import hudba_lcd
+        hc = hudba.lcd_settings(self.cfg.get("hudba"))
+        try:
+            tr, prog = hudba.current_track()
+        except Exception as e:
+            tr, prog = None, None
+            self.src_lbl.config(text=f"Spotify nejde přečíst: {e}")
+        sample = tr is None
+        if sample:
+            tr, prog = dict(hudba.SAMPLE_TRACK), (84.0, 213.0)
+        try:
+            img = hudba_lcd.render(tr, hc, prog if hc.get("prubeh") else None, self.cfg["gama_grafiky"],
+                                   self.cfg.get("plasticky_vzhled", True))
+        except Exception as e:
+            messagebox.showerror("Právě hraje", f"Obrazovku nejde vykreslit: {e}", parent=self)
+            return
+        self._program_preview_until = time.monotonic() + float(hc.get("doba_s", 15))
+        if self.running and not sample:                   # i na LCD (aplikace ji do 0,5 s ukaze)
+            try:
+                hudba.request_test(hc)
+            except OSError:
+                pass
+        self._preview_img = ImageTk.PhotoImage(img)
+        self.preview.config(image=self._preview_img)
+        self.src_lbl.config(text="Ukázka (Spotify nic nehraje)" if sample else f"Právě hraje: {tr.get('nazev', '')}")
 
     def _update_program_card(self):
         p = STATE_EXTRA["program"]
@@ -1202,6 +1298,7 @@ class App(tk.Tk):
         self.leds.refresh()
         self._update_sidebar()
         self._update_program_card()
+        self._update_music_card()
         self._update_dirty()
         if self._keditor is not None:
             try:

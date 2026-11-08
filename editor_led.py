@@ -11,6 +11,7 @@
 #     zaloha pameti (jen cteni), barva z aplikace pres LED SDK z G HUB
 # Zmeny se na ventilatorech projevi po Ulozit.
 
+import copy
 import math
 import os
 import time
@@ -23,7 +24,16 @@ import vzhled as V
 
 PREVIEW_MS = 40
 PREVIEW_W, PREVIEW_H = 470, 180
+PLAYLIST_ITEM_S = 20          # nova polozka playlistu trva asi tolik sekund (pocet opakovani podle delky)
 _contrast = V.contrast
+
+
+def _dur(s):
+    """Delka cesky: 3,1 s / 25 s / 1 min 05 s."""
+    if s < 10:
+        return f"{s:.1f} s".replace(".", ",")
+    s = round(s)
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60:02d} s"
 
 
 class LedEditor:
@@ -32,6 +42,10 @@ class LedEditor:
         self.engine = fx.Engine(seed=7)
         self.t0 = time.monotonic()
         self._prev = self.t0
+        self._pl_t0 = self.t0                     # playlist v nahledu od zacatku
+        self._pl_sel = 0                          # vybrana polozka playlistu
+        self._pl_view = "vse"                     # nahled: "vse" = cely playlist, "polozka" = jen vybrana
+        self._pl_ui = None
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=0)
 
@@ -116,7 +130,17 @@ class LedEditor:
         f = self.fx_frame
         for w in f.winfo_children():
             w.destroy()
+        pl = self.lcfg.setdefault("playlist", copy.deepcopy(led.PLAYLIST_DEFAULT))
+        mode = tk.BooleanVar(value=bool(pl.get("zapnuto")))
         same = tk.BooleanVar(value=self.lcfg.get("stejne_pro_vse", True))
+
+        def on_mode():
+            pl["zapnuto"] = mode.get()
+            if mode.get() and not pl.get("polozky"):      # prvni polozka = dosavadni efekt
+                pl["polozky"] = [self._pl_new(self.lcfg.get("efekt", fx.DEFAULT_EFFECT))]
+                self._pl_sel = 0
+            self._pl_t0 = time.monotonic()
+            self._build_effects()
 
         def on_same():
             self.lcfg["stejne_pro_vse"] = same.get()
@@ -125,23 +149,34 @@ class LedEditor:
         head.grid(row=0, column=0, columnspan=2, sticky="ew", padx=20, pady=(14, 4))
         head.columnconfigure(0, weight=1)
         V.card_title(head, "Efekt").grid(row=0, column=0, sticky="w")
-        V.segmented(head, same, [(True, "Stejný pro všechny"), (False, "Zvlášť F140 a deska")],
-                    command=on_same).grid(row=0, column=1)
+        V.segmented(head, mode, [(False, "Jeden efekt"), (True, "Playlist")], command=on_mode).grid(row=0, column=1)
         wave = tk.BooleanVar(value=self.lcfg.get("vlna", False))
         wf = ttk.Frame(f)
         wf.grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 6))
-        ttk.Label(wf, text="Mezi ventilátory", style="Muted.TLabel").pack(side="left", padx=(0, 10))
+
         def on_wave():
             self.lcfg["vlna"] = wave.get()
             self._build_effects()                               # volby vlny jen pri vlne
-        V.segmented(wf, wave, [(False, "Synchronně"), (True, "Vlna (posunutě)")], command=on_wave).pack(side="left")
+        if not mode.get():
+            ttk.Label(wf, text="Ventilátory", style="Muted.TLabel").grid(row=0, column=0, sticky="w",
+                                                                         padx=(0, 10), pady=3)
+            V.segmented(wf, same, [(True, "Stejný efekt pro všechny"), (False, "Zvlášť F140 a deska")],
+                        command=on_same).grid(row=0, column=1, sticky="w", pady=3)
+        ttk.Label(wf, text="Mezi ventilátory", style="Muted.TLabel").grid(row=1, column=0, sticky="w",
+                                                                          padx=(0, 10), pady=3)
+        V.segmented(wf, wave, [(False, "Synchronně"), (True, "Vlna (posunutě)")], command=on_wave).grid(
+            row=1, column=1, sticky="w", pady=3)
         if wave.get():
             self._wave_options(f)
+        f.columnconfigure(0, weight=1)
+        if mode.get():
+            self._build_playlist(f, pl)
+            return
+        self._pl_ui = None
         if same.get():
             panels = [("efekt", None)]
         else:
             panels = [("efekt_f140", "F140"), ("efekt_deska", "Ventilátory na desce")]
-        f.columnconfigure(0, weight=1)
         # zvlast: panely pod sebou pres celou sirku (vedle sebe se pravy nevesel a orizl se)
         for i, (key, title) in enumerate(panels):
             eff = self.lcfg.setdefault(key, dict(fx.DEFAULT_EFFECT))
@@ -152,6 +187,188 @@ class LedEditor:
             if title:
                 ttk.Label(pf, text=title, style="Bold.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 4))
             self._effect_panel(pf, eff, 3)
+
+    # ------------------------------------------------------------- playlist
+    def _pl_reps_for(self, eff):
+        """Pocet opakovani, aby polozka trvala asi PLAYLIST_ITEM_S sekund."""
+        return max(1, min(led.MAX_REPEATS, round(PLAYLIST_ITEM_S / fx.cycle_s(eff, led.wave_span(self.lcfg)))))
+
+    def _pl_new(self, eff):
+        e = copy.deepcopy(dict(eff))
+        e["opakovani"] = self._pl_reps_for(e)
+        return e
+
+    def _build_playlist(self, f, pl):
+        """Seznam efektu playlistu (poradi, pocet opakovani), prolinani a nastaveni vybrane polozky."""
+        items = pl.setdefault("polozky", [])
+        if not items:
+            items.append(self._pl_new(fx.DEFAULT_EFFECT))
+        self._pl_sel = max(0, min(self._pl_sel, len(items) - 1))
+        sel = self._pl_sel
+        item = items[sel]
+        pf = ttk.Frame(f)
+        pf.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=20, pady=(4, 16))
+        pf.columnconfigure(0, weight=1)
+        ttk.Label(pf, style="Small.TLabel", wraplength=440, justify="left", text=(
+            "Efekty se střídají dokola v tomto pořadí; každý běží zvolený počet opakování (jedno opakování = "
+            "jedna otáčka, nádech, projití všech barev…, u efektů bez cyklu 5 s). Playlist platí pro všechny "
+            "ventilátory i grafiku s efektem „jako F140 / deska“.")).grid(row=0, column=0, columnspan=2,
+                                                                         sticky="w", pady=(0, 8))
+        lf = tk.Frame(pf, bg=V.FIELD, highlightthickness=1, highlightbackground=V.LINE)
+        lf.grid(row=1, column=0, sticky="nsew")
+        lb = V.listbox(lf, height=max(4, min(12, len(items))), bg=V.FIELD, font=V.MONO, width=44)
+        lb.pack(side="left", fill="both", expand=True, padx=4, pady=4)
+        if len(items) > 12:
+            sb = ttk.Scrollbar(lf, orient="vertical", command=lb.yview)
+            sb.pack(side="right", fill="y")
+            lb.config(yscrollcommand=sb.set)
+        for text in self._pl_lines(items, None):
+            lb.insert("end", text)
+        lb.selection_set(sel)
+        lb.see(sel)
+
+        def on_select(_e=None):
+            cur = lb.curselection()
+            if cur and cur[0] != self._pl_sel:
+                self._pl_sel = cur[0]
+                if self._pl_view == "polozka":
+                    self._pl_t0 = time.monotonic()
+                f.after_idle(self._build_effects)
+        lb.bind("<<ListboxSelect>>", on_select)
+        bf = ttk.Frame(pf)
+        bf.grid(row=1, column=1, sticky="n", padx=(8, 0))
+
+        def add():
+            items.insert(sel + 1, self._pl_new(fx.DEFAULT_EFFECT))
+            self._pl_sel = sel + 1
+            self._build_effects()
+
+        def dup():
+            items.insert(sel + 1, copy.deepcopy(item))
+            self._pl_sel = sel + 1
+            self._build_effects()
+
+        def move(d):
+            j = sel + d
+            if 0 <= j < len(items):
+                items[sel], items[j] = items[j], items[sel]
+                self._pl_sel = j
+                self._build_effects()
+
+        def remove():
+            if len(items) > 1:
+                del items[sel]
+                self._pl_sel = min(sel, len(items) - 1)
+                self._build_effects()
+        for text, cmd, ok in (("+ Přidat", add, True), ("Duplikovat", dup, True),
+                              ("▲ Nahoru", lambda: move(-1), sel > 0),
+                              ("▼ Dolů", lambda: move(1), sel < len(items) - 1),
+                              ("Odebrat", remove, len(items) > 1)):
+            b = ttk.Button(bf, text=text, command=cmd, width=11)
+            b.pack(fill="x", pady=(0, 4))
+            if not ok:
+                b.state(["disabled"])
+        of = ttk.Frame(pf)
+        of.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        ttk.Label(of, text="Prolínání", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=3)
+        fv = tk.DoubleVar(value=float(pl.get("prolinani", 1.0)))
+        fl = ttk.Label(of, style="Muted.TLabel", width=8)
+
+        def show_fade():
+            x = round(float(fv.get()), 1)
+            fl.config(text="ostře" if x <= 0 else f"{x:g} s".replace(".", ","))
+
+        def on_fade(_e=None):
+            pl["prolinani"] = round(float(fv.get()), 1)
+            show_fade()
+        V.scale(of, variable=fv, from_=0, to=led.MAX_FADE_S, resolution=0.5, length=150, command=on_fade).grid(
+            row=0, column=1, sticky="w")
+        fl.grid(row=0, column=2, sticky="w", padx=(8, 0))
+        show_fade()
+        total = ttk.Label(of, style="Muted.TLabel")
+        total.grid(row=0, column=3, sticky="e", padx=(16, 0))
+        of.columnconfigure(3, weight=1)
+        ttk.Label(of, text="Náhled", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=3)
+        vf = ttk.Frame(of)
+        vf.grid(row=1, column=1, columnspan=3, sticky="w", pady=3)
+        view = tk.StringVar(value=self._pl_view)
+
+        def on_view():
+            self._pl_view = view.get()
+            self._pl_t0 = time.monotonic()
+        V.segmented(vf, view, [("vse", "celý playlist"), ("polozka", "jen vybraný efekt")],
+                    command=on_view).pack(side="left")
+        ttk.Button(vf, text="⟲ Od začátku", command=lambda: setattr(self, "_pl_t0", time.monotonic())).pack(
+            side="left", padx=(8, 0))
+        ttk.Separator(pf).grid(row=3, column=0, columnspan=2, sticky="ew", pady=12)
+        ef = ttk.Frame(pf)
+        ef.grid(row=4, column=0, columnspan=2, sticky="nsew")
+        ef.columnconfigure(1, weight=1)
+        ttk.Label(ef, text=f"Efekt {sel + 1} z {len(items)}", style="Bold.TLabel").grid(row=0, column=0, sticky="w")
+        rf = ttk.Frame(ef)
+        rf.grid(row=0, column=1, sticky="e")
+        ttk.Label(rf, text="Opakování", style="Muted.TLabel").pack(side="left", padx=(0, 6))
+        rv = tk.StringVar(value=str(led.repeats(item)))
+        ttk.Spinbox(rf, textvariable=rv, from_=1, to=led.MAX_REPEATS, width=5, font=V.MONO).pack(side="left")
+        reps = ttk.Label(rf, style="Muted.TLabel", width=18)
+        reps.pack(side="left", padx=(6, 0))
+
+        def on_reps(*a):
+            try:
+                item["opakovani"] = max(1, min(led.MAX_REPEATS, int(rv.get())))
+            except ValueError:
+                pass
+        rv.trace_add("write", on_reps)
+        typ_before = item.get("typ")
+
+        def changed():                                     # jiny efekt = jina delka opakovani
+            if item.get("typ") != typ_before:
+                item["opakovani"] = self._pl_reps_for(item)
+            self._build_effects()
+        panel = ttk.Frame(ef)
+        panel.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(6, 0))
+        self._effect_panel(panel, item, 3, rebuild=changed)
+        self._pl_ui = {"lb": lb, "total": total, "reps": reps, "lines": None}
+
+    def _pl_lines(self, items, playing):
+        span = led.wave_span(self.lcfg)
+        out = []
+        for i, e in enumerate(items):
+            name = fx.EFFECTS.get(e.get("typ"), ("?",))[0]
+            mark = "▶" if i == playing else " "
+            out.append(f"{mark}{i + 1:>2}. {name:<18} {led.repeats(e):>3}× {_dur(led.item_duration(e, span)):>9}")
+        return out
+
+    def _pl_update(self, playing):
+        """Delky polozek a celkem (meni se s rychlosti efektu) a hrajici polozka v nahledu."""
+        ui = self._pl_ui
+        if not ui:
+            return
+        try:
+            if not ui["lb"].winfo_exists():
+                self._pl_ui = None
+                return
+        except tk.TclError:
+            self._pl_ui = None
+            return
+        items = self.lcfg.get("playlist", {}).get("polozky", [])
+        lines = self._pl_lines(items, playing)
+        if lines == ui["lines"]:
+            return
+        lb = ui["lb"]
+        if len(lines) == lb.size():
+            for i, text in enumerate(lines):
+                if text != lb.get(i):
+                    lb.delete(i)
+                    lb.insert(i, text)
+            lb.selection_clear(0, "end")
+            lb.selection_set(self._pl_sel)
+        ui["lines"] = lines
+        span = led.wave_span(self.lcfg)
+        ui["total"].config(text="celkem " + _dur(sum(led.item_duration(e, span) for e in items)))
+        if 0 <= self._pl_sel < len(items):
+            e = items[self._pl_sel]
+            ui["reps"].config(text=f"× {_dur(fx.cycle_s(e, span))} = {_dur(led.item_duration(e, span))}")
 
     def _wave_options(self, f):
         """Smer vlny ve skrini (D_LED1 vpredu, 2x F140 uprostred, D_LED2 vzadu) a chovani F140."""
@@ -802,7 +1019,22 @@ class LedEditor:
             c.create_text(PREVIEW_W / 2, PREVIEW_H / 2, text="Řízení LED vypnuto", fill=V.MUTED)
         else:
             # vcetne natoceni - LED v poradi, jak je aplikace posila (LED 1 vpravo, po smeru hodin)
-            frame = led.render(self.engine, lc, now - self.t0, self.app.data, min(dt, 0.2))
+            lr, t, info = lc, now - self.t0, None
+            items = led.playlist_items(lc)
+            if items:                                           # playlist: od zacatku / jen vybrany efekt
+                t = now - self._pl_t0
+                sel = max(0, min(self._pl_sel, len(items) - 1))
+                if self._pl_view == "polozka":
+                    lr = dict(lc, playlist=dict(lc["playlist"], polozky=[items[sel]]))
+                info = led.playlist_at(lr, t)
+                if info and self._pl_view == "polozka":
+                    info = dict(info, i=sel, pocet=len(items))
+            self._pl_update(info["i"] if info and self._pl_view == "vse" else None)
+            frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2))
+            if info:
+                name = fx.EFFECTS.get(info["eff"].get("typ"), ("?",))[0]
+                c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
+                              text=f"▶ {info['i'] + 1}/{info['pocet']}  {name} · ještě {_dur(info['zbyva'])}")
             kb = frame.pop("klavesnice", None)
             self._kb_preview(kb)
             gpu = frame.pop("grafika", None)
@@ -870,6 +1102,10 @@ class LedEditor:
             text, color = "● LED běží jen zčásti – " + "; ".join(st["chyby"]) + " (zkouší znovu po 30 s)", V.WARN
         elif s in ("běží", "nastaveno"):
             text, color = "● LED běží", V.OK
+            p = st.get("playlist")
+            if p:
+                text += (f" · playlist {p.get('i', 0) + 1}/{p.get('pocet', '?')}: "
+                         f"{fx.EFFECTS.get(p.get('typ'), ('?',))[0]} (ještě {p.get('zbyva', '?')} s)")
         elif s == "chyba":
             text, color = "Chyba: " + "; ".join(st.get("chyby", [])), V.ERR
         elif s == "vypnuto":

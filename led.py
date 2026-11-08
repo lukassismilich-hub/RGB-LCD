@@ -57,6 +57,11 @@ EXTRAS = ("grafika", "klavesnice")   # cile s jednou "LED" mimo ventilatory (bez
 EXTRA_DEFAULT = {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffffff"}
 
 
+PLAYLIST_DEFAULT = {"zapnuto": False, "polozky": [], "prolinani": 1.0}
+MAX_REPEATS = 999
+MAX_FADE_S = 5.0
+
+
 def rainbow(n):
     """n barev duhy po obvodu (pro kruh s n LED)."""
     import colorsys
@@ -102,6 +107,9 @@ def default_config():
         "efekt_grafika": copy.deepcopy(fx.DEFAULT_EFFECT),
         "klavesnice": dict(EXTRA_DEFAULT),
         "efekt_klavesnice": copy.deepcopy(fx.DEFAULT_EFFECT),
+        # playlist efektu: polozky = efekty (jako "efekt") + "opakovani"; strida se dokola v poradi,
+        # plati pro vsechny ventilatory (a grafiku / klavesnici s efektem "jako F140 / deska")
+        "playlist": copy.deepcopy(PLAYLIST_DEFAULT),
     }
 
 
@@ -182,7 +190,79 @@ def effect_for(lcfg, group):
 
 def is_animated(lcfg):
     groups = {g for _k, _n, g, _c in targets(lcfg)}
-    return any(effect_for(lcfg, g).get("typ") in fx.ANIMATED for g in groups)
+    items = playlist_items(lcfg)
+    if len(items) > 1:                                     # playlist strida efekty
+        return True
+    return any((items[0] if items and follows_playlist(lcfg, g) else effect_for(lcfg, g)).get("typ")
+               in fx.ANIMATED for g in groups)
+
+
+# ----------------------------------------------------------------- playlist
+
+def playlist_items(lcfg):
+    """Polozky zapnuteho playlistu (efekty s "opakovani"); prazdny seznam = playlist se nepouziva."""
+    pl = lcfg.get("playlist") or {}
+    if not pl.get("zapnuto"):
+        return []
+    return [p for p in pl.get("polozky", []) if isinstance(p, dict) and p.get("typ") in fx.EFFECTS]
+
+
+def follows_playlist(lcfg, group):
+    """Ridi se skupina playlistem? Ventilatory ano, grafika / klavesnice jen s efektem jako F140 / deska."""
+    if group in EXTRAS:
+        return lcfg.get(group, {}).get("efekt", "deska") != "vlastni"
+    return True
+
+
+def repeats(eff):
+    try:
+        return max(1, min(MAX_REPEATS, int(eff.get("opakovani", 1))))
+    except (TypeError, ValueError):
+        return 1
+
+
+def wave_span(lcfg):
+    """Sirka vlny (nejvetsi posun faze) jako v render() - pro delku efektu se setrenim pri vlne."""
+    if not lcfg.get("vlna"):
+        return 0.0
+    offs = wave_offsets(lcfg, [k for k, *_ in targets(lcfg) if k not in NO_WAVE])[0]
+    return max(offs.values(), default=0.0)
+
+
+def item_duration(eff, span=0.0):
+    """Delka polozky playlistu (s) = delka jednoho opakovani efektu x pocet opakovani."""
+    return fx.cycle_s(eff, span) * repeats(eff)
+
+
+def playlist_at(lcfg, t, span=None):
+    """Co playlist hraje v case t (s od zacatku playlistu), None = playlist vypnuty / prazdny.
+    {"i": index, "eff", "t": cas v polozce, "zbyva": s do konce polozky, "pocet": polozek,
+     "prev", "t_prev", "k": prolnuti 0..1 z predchozi polozky (jen na zacatku polozky)}.
+    Polozky se stridaji dokola; prolnuti probiha na zacatku nove polozky (predchozi efekt
+    bezi dal pres svuj konec), celkova delka se tim nemeni."""
+    items = playlist_items(lcfg)
+    if not items:
+        return None
+    if span is None:
+        span = wave_span(lcfg)
+    durs = [item_duration(e, span) for e in items]
+    n = len(items)
+    x = max(0.0, t) % sum(durs)
+    i = 0
+    while i < n - 1 and x >= durs[i]:
+        x -= durs[i]
+        i += 1
+    out = {"i": i, "eff": items[i], "t": x, "zbyva": durs[i] - x, "pocet": n}
+    try:
+        fade = max(0.0, min(MAX_FADE_S, float((lcfg.get("playlist") or {}).get("prolinani", 1.0))))
+    except (TypeError, ValueError):
+        fade = 0.0
+    fade = min(fade, durs[i] / 2)
+    if n > 1 and fade > 0 and x < fade and t - x > 1e-6:     # ne u uplne prvni polozky po startu
+        p = (i - 1) % n
+        u = x / fade
+        out.update(prev=items[p], t_prev=durs[p] + x, k=u * u * (3 - 2 * u))
+    return out
 
 
 def orientation(lcfg, key):
@@ -215,13 +295,22 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True):
     wave = bool(lcfg.get("vlna"))
     offsets = wave_offsets(lcfg, [k for k, *_ in tg if k not in NO_WAVE])[0] if wave else {}
     span = max(offsets.values(), default=0.0)
+    pl = playlist_at(lcfg, t, span)
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
-        eff = effect_for(lcfg, group)
-        cols = engine.frame(eff, t, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0),
-                            span=span)
-        if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
-            cols = _orient(cols, *orientation(lcfg, key))
+        def one(eff, tt):
+            c = engine.frame(eff, tt, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0),
+                             span=span)
+            if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
+                c = _orient(c, *orientation(lcfg, key))
+            return c
+        if pl and follows_playlist(lcfg, group):
+            cols = one(pl["eff"], pl["t"])
+            if "k" in pl:                                  # prolnuti z predchozi polozky playlistu
+                old = one(pl["prev"], pl["t_prev"])
+                cols = [fx._mix(a, b, pl["k"]) for a, b in zip(old, cols)]
+        else:
+            cols = one(effect_for(lcfg, group), t)
         if group in EXTRAS:
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(group, EXTRA_DEFAULT).get("jas", 100)) / 100.0
         else:
@@ -525,7 +614,7 @@ def _still(lcfg, typ):
     """Staticky stav vsech ventilatoru: "vlastni" = vlastni barvy LED, "vypnuto" = zhasnuto.
     Plati i pro grafiku / klavesnici (jejich vlastni efekt se pri tom nepouzije)."""
     extras = {k: dict(lcfg[k], efekt="deska") for k in EXTRAS if isinstance(lcfg.get(k), dict)}
-    return dict(lcfg, stejne_pro_vse=True, efekt={"typ": typ}, **extras)
+    return dict(lcfg, stejne_pro_vse=True, efekt={"typ": typ}, playlist=None, **extras)
 
 
 class LedWorker(threading.Thread):
@@ -584,6 +673,7 @@ class LedWorker(threading.Thread):
     def run(self):
         engine = fx.Engine()
         session, hw_key, t0 = None, None, time.monotonic()
+        pl_key = None                            # zmena playlistu (po Ulozit) = playlist od zacatku
         last_wall, last_force, prev, last_retry = time.time(), 0.0, time.monotonic(), time.monotonic()
         while not self._quit.is_set():
             with self._lock:
@@ -623,6 +713,12 @@ class LedWorker(threading.Thread):
             now_wall, now = time.time(), time.monotonic()
             resumed = now_wall - last_wall > RESUME_GAP_S
             last_wall = now_wall
+            k_pl = json.dumps(lcfg.get("playlist"), sort_keys=True)
+            if k_pl != pl_key:
+                if pl_key is not None and playlist_items(lcfg):
+                    t0 = now
+                    log.info("LED: playlist efektů (%d) od začátku.", len(playlist_items(lcfg)))
+                pl_key = k_pl
             key = json.dumps({"z": lcfg.get("fusion"), "a": lcfg.get("argb"),
                               "k": extra_on(lcfg, "klavesnice"), "g": extra_on(lcfg, "grafika")}, sort_keys=True)
             try:
@@ -655,8 +751,12 @@ class LedWorker(threading.Thread):
                     last_force = now
                 if not session.running:                  # oba radice selhaly za behu
                     raise RuntimeError("; ".join(session.error_text()))
-                self._set_state({"stav": "běží", "chyby": session.error_text()} if session.errors
-                                else {"stav": "běží"})
+                st = {"stav": "běží", "chyby": session.error_text()} if session.errors else {"stav": "běží"}
+                pl = playlist_at(lcfg, now - t0)
+                if pl:                                   # co prave hraje (okno nastaveni)
+                    st["playlist"] = {"i": pl["i"], "pocet": pl["pocet"], "typ": pl["eff"].get("typ"),
+                                      "zbyva": round(pl["zbyva"])}
+                self._set_state(st)
             except Exception as e:
                 if session:
                     session.close()

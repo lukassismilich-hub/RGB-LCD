@@ -104,6 +104,63 @@ def palette(eff):
     return cols[:n]
 
 
+# playlist: efekty bez pravidelneho cyklu (nahodne nebo staticke) - jedno "opakovani" = NOMINAL_S sekund
+NOMINAL_S = 5.0
+NO_CYCLE = ("barva", "vlastni", "trpyt", "ohen", "duhovy_trpyt", "blesky", "ohnostroj", "konfety",
+            "staticky_prechod", "teplota", "kapky", "plamen", "hladina", "vypnuto")
+
+
+def cycle_s(eff, span=0.0):
+    """Delka jednoho opakovani efektu v sekundach (pro playlist) - jedna otacka, jeden nadech, jedno
+    projiti vsech barev palety...; efekty bez cyklu (NO_CYCLE) NOMINAL_S. span = sirka vlny jako ve frame()."""
+    typ = eff.get("typ", "vypnuto")
+    try:
+        speed = max(1, min(10, int(eff.get("rychlost", 4))))
+    except (TypeError, ValueError):
+        speed = 4
+    rate = 0.08 * speed
+    k = color_count(eff) if typ in PALETTE else len(eff.get("barvy", [])) or 1
+    if typ in NO_CYCLE or typ not in EFFECTS:
+        s = NOMINAL_S
+    elif typ == "duha_prelevani":
+        s = k / (3 * rate) if eff.get("barvy_rezim") == "barvy" else 1 / (0.5 * rate)
+    elif typ == "dychani":                       # nadech kazdou barvou palety
+        s = (12.0 / speed + _pause(eff)) * k
+    elif typ == "stirani":                       # setreni kazdou barvou palety (pri vlne vsech ventilatoru)
+        span = max(0.0, min(0.95, span or 0.0))
+        slots = max(1, round(1.0 / (1.0 - span)))
+        s = (slots / (rate * 1.5) + _pause(eff)) * k
+    elif typ == "stridani":
+        s = (4.0 / speed + _pause(eff)) * k
+    elif typ == "blikani":
+        s = 1 / (speed * 0.8)
+    elif typ == "polarni_zare":
+        s = 1 / (rate * 0.35)
+    elif typ == "plazma":
+        s = 1 / (rate * 0.25)
+    elif typ == "tep":                           # jeden uder
+        s = 60.0 / (40 + 10 * speed)
+    elif typ == "stroboskop":
+        s = 1 / (0.4 * speed)
+    elif typ == "policie":
+        s = 1 / (speed * 0.3)
+    elif typ == "divadlo":
+        s = 2.0 / speed
+    elif typ == "odraz":
+        s = 1 / (rate * 1.2)
+    elif typ in ("duhove_dychani", "dychajici_paleta"):
+        s = 12.0 / speed
+    elif typ == "vlneni":                        # paleta obejde kruh jednou
+        s = 4 / rate
+    elif typ == "vodopad":
+        s = 1 / (rate * 1.2)
+    elif typ == "pretahovana":
+        s = 1 / (rate * 0.6)
+    else:                                        # otacive: duha, kometa, prechod, paleta, vysece, majak...
+        s = 1 / rate
+    return max(0.1, s)
+
+
 def _pause(eff):
     try:
         return max(0.0, min(MAX_PAUSE, float(eff.get("pauza", 0))))

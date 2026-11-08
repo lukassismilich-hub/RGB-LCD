@@ -253,7 +253,7 @@ class Engine:
             return [src[i % len(src)] for i in range(n)]
         if typ == "duha_toceni":
             ph = t * rate * direction + offset
-            return [_hsv(i / n + ph) for i in range(n)]
+            return [_hsv(_ring_u(i, n) + ph) for i in range(n)]
         if typ == "duha_prelevani":
             if eff.get("barvy_rezim") == "barvy":
                 # kazda barva trva stejne dlouho jako jedna ze sesti zakladnich barev plne duhy
@@ -280,7 +280,7 @@ class Engine:
             k = (1 - math.cos(s / breath * 2 * math.pi)) / 2
             return [_scale(cols[cycle % len(cols)], k)] * n
         if typ == "kometa":
-            head = ((t * rate * direction + offset) % 1.0) * n
+            head = ((t * rate * direction + offset) % 1.0) * n + _ring_shift(n)
             tail = max(2.0, n * 0.6)
             bg = _scale(cols[1], 0.08) if len(cols) > 1 else black
             out = []
@@ -292,7 +292,7 @@ class Engine:
         if typ == "prechod":
             c2 = cols[1] if len(cols) > 1 else black
             ph = t * rate * direction + offset
-            return [_mix(cols[0], c2, (1 + math.cos(2 * math.pi * (i / n + ph))) / 2) for i in range(n)]
+            return [_mix(cols[0], c2, (1 + math.cos(2 * math.pi * (_ring_u(i, n) + ph))) / 2) for i in range(n)]
         if typ == "trpyt":
             st = self.state.setdefault(("trpyt", key), [0.0] * n)
             if len(st) != n:
@@ -320,9 +320,9 @@ class Engine:
             return [cols[0] if on else black] * n
         if typ in ("paleta", "vysece"):
             ph = t * rate * direction + offset
-            return [_cyclic(cols, i / n + ph, hard=typ == "vysece") for i in range(n)]
+            return [_cyclic(cols, _ring_u(i, n) + ph, hard=typ == "vysece") for i in range(n)]
         if typ == "dvojita_kometa":
-            head = ((t * rate * direction + offset) % 1.0) * n
+            head = ((t * rate * direction + offset) % 1.0) * n + _ring_shift(n)
             c2 = cols[1] if len(cols) > 1 else cols[0]
             a = _comet(head, n, max(2.0, n * 0.4), cols[0], direction)
             b = _comet((head + n / 2) % n, n, max(2.0, n * 0.4), c2, direction)
@@ -337,18 +337,19 @@ class Engine:
             slot = round((span - abs(offset)) * slots)            # 0 = setre se prvni
             total = slots * wipe + _pause(eff)
             step = math.floor(t / total)
-            edge = max(0.0, min(1.0, (t - step * total - slot * wipe) / wipe)) * n
+            sh = _ring_shift(n)                                   # setreni zacina vpravo u vsech ventilatoru
+            edge = max(0.0, min(1.0, (t - step * total - slot * wipe) / wipe)) * (n + sh)
             prev, cur = cols[step % len(cols)], cols[(step + 1) % len(cols)]
             out = []
             for i in range(n):
-                j = i if direction > 0 else n - 1 - i
+                j = (i - sh) % n if direction > 0 else (sh - i - 1) % n     # poradi LED pri setreni
                 out.append(_mix(prev, cur, edge - j))            # mekka hrana jedne LED
             return out
         if typ == "polarni_zare":
             ph = t * rate * 0.35
             out = []
             for i in range(n):
-                u = i / n + offset
+                u = _ring_u(i, n) + offset
                 x = 0.5 + 0.3 * math.sin(2 * math.pi * (u + ph)) + 0.2 * math.sin(2 * math.pi * (2 * u - ph * 1.7) + 1.3)
                 k = 0.55 + 0.45 * math.sin(2 * math.pi * (u * 3 + ph * 0.8) + 0.5)
                 out.append(_scale(_gradient(cols, x), k))
@@ -357,7 +358,7 @@ class Engine:
             ph = t * rate
             out = []
             for i in range(n):
-                u = i / n + offset
+                u = _ring_u(i, n) + offset
                 v = math.sin(2 * math.pi * (2 * u + ph)) + math.sin(2 * math.pi * (u - ph * 0.7) + 1.1)
                 out.append(_hsv(v / 4 + ph * 0.25))
             return out
@@ -389,7 +390,7 @@ class Engine:
             on = int((p % 0.5) * 12) % 2 == 0                  # 3 zablesky na kazde strane
             out = []
             for i in range(n):
-                mine = (i < n / 2) == (side == 0)
+                mine = ((i - _ring_shift(n)) % n < n / 2) == (side == 0)
                 out.append((cols[0] if side == 0 else c2) if on and mine else black)
             return out
         if typ == "divadlo":                      # kazda treti LED sviti a posouva se
@@ -400,12 +401,12 @@ class Engine:
             bg = _scale(cols[1], 0.08) if len(cols) > 1 else black
             x = (t * rate * 1.2 + offset) % 1.0
             tri = 1 - abs(2 * x - 1)              # 0 -> 1 -> 0
-            half = n / 2
-            pos = tri * (half - 1)
+            pos = tri * 0.5                       # od vpravo (0) k vlevo (0,5 otacky), zrcadlove dole i nahore
             out = []
             for i in range(n):
-                d = min(abs(i - pos), abs((n - 1 - i) - pos))      # zrcadlove na obou pulkach
-                k = max(0.0, 1 - d / 2.2) ** 2
+                u = _ring_u(i, n) % 1.0
+                d = abs(min(u, 1 - u) - pos)      # vzdalenost po kruhu (podil otacky)
+                k = max(0.0, 1 - d / 0.275) ** 2  # sirka jako drive 2,2 LED z 8
                 out.append(tuple(max(bg[j], cols[0][j] * k) for j in range(3)))
             return out
         if typ == "duhove_dychani":
@@ -466,7 +467,7 @@ class Engine:
             k = len(cols)
             out = []
             for i in range(n):
-                x = i / n * k
+                x = (_ring_u(i, n) % 1.0) * k
                 a = int(x) % k
                 out.append(_mix(cols[a], cols[(a + 1) % k], x - int(x)))
             return out
@@ -484,7 +485,7 @@ class Engine:
                 out.append(_scale(_gradient(cols, h), 0.06 + 0.94 * k))
             return out
         if typ == "majak":                        # jeden siroky paprsek obiha dokola, slaba zare kolem
-            pos = ((t * rate * direction + offset) % 1.0) * n
+            pos = ((t * rate * direction + offset) % 1.0) * n + _ring_shift(n)
             bg = _scale(cols[1], 0.06) if len(cols) > 1 else black
             width = max(1.2, n * 0.14)
             out = []
@@ -497,7 +498,7 @@ class Engine:
             ph = t * rate * direction + offset
             out = []
             for i in range(n):
-                u = i / n
+                u = _ring_u(i, n)
                 k = 0.12 + 0.88 * ((1 + math.sin(2 * math.pi * (2 * u - ph))) / 2) ** 2
                 out.append(_scale(_cyclic(cols, u + ph * 0.25), k))
             return out
@@ -505,7 +506,7 @@ class Engine:
             ph = t * rate * direction + offset
             period = 12.0 / speed
             k = 0.1 + 0.9 * (1 - math.cos(2 * math.pi * (t / period + offset))) / 2
-            return [_scale(_cyclic(cols, i / n + ph), k) for i in range(n)]
+            return [_scale(_cyclic(cols, _ring_u(i, n) + ph), k) for i in range(n)]
         if typ == "kapky":                        # nahodne LED se rozsviti barvou z palety a pomalu hasnou
             st = self.state.setdefault(("kapky", key), [[0.0, 0] for _ in range(n)])
             if len(st) != n:
@@ -594,7 +595,7 @@ class Engine:
         rnd = self.rng
 
         if snap.get("quiet"):                             # pauza / ticho: klidne vlneni v barvach skladby
-            out = [_scale(_cyclic(cols, i / max(1, n) + ph * 0.3), 0.22 + 0.08 * math.sin(ph * 6)) for i in range(n)]
+            out = [_scale(_cyclic(cols, _ring_u(i, n) + ph * 0.3), 0.22 + 0.08 * math.sin(ph * 6)) for i in range(n)]
         elif styl == "spektrum":
             x = max(0.0, min(1.0, pos)) * (len(bands) - 1)
             lv = _band_at(bands, x)
@@ -661,7 +662,7 @@ class Engine:
         elif styl == "klidny":
             st = self.state.setdefault(("hudba_klid", key), [0.0])
             st[0] += (level - st[0]) * min(1.0, dt / 0.6)
-            out = [_scale(_cyclic(cols, i / max(1, n) + ph * 0.5), 0.15 + 0.85 * st[0]) for i in range(n)]
+            out = [_scale(_cyclic(cols, _ring_u(i, n) + ph * 0.5), 0.15 + 0.85 * st[0]) for i in range(n)]
         elif styl == "zablesky":                         # kazdy uder = kratky zablesk dalsi barvou, jinak tma
             st = self.state.setdefault(("hudba_zab", key), [0.0, 0])
             st[0] *= math.exp(-dt / 0.07)
@@ -697,8 +698,7 @@ class Engine:
             else:
                 out = []
                 for i in range(n):
-                    u = ((2 * math.pi * i / n + math.radians(float(eff.get("otoceni", 0) or 0)) + math.pi / 2)
-                         / (2 * math.pi)) % 1.0            # 0 = nahore, po smeru hodin
+                    u = ((_ring_angle(i, n, eff) + math.pi / 2) / (2 * math.pi)) % 1.0   # 0 = nahore, po smeru hodin
                     lit = max(0.0, min(1.0, (st[0] - u) * n + 0.5))
                     c = _scale(_gradient(cols, u), 0.04 + 0.96 * lit)
                     pk = max(0.0, 1 - abs(u - st[1]) * n) if st[1] > 0.05 else 0.0
@@ -717,7 +717,7 @@ class Engine:
             st[1] += dt * (0.05 + 0.4 * bass)
             st[0] += (st[1] - st[0]) * min(1.0, dt / 0.06)
             kk = min(1.0, 0.25 + 0.75 * max(bass, fl))
-            out = [_scale(_cyclic(cols, i / max(1, n) + st[0], hard=True), kk) for i in range(n)]
+            out = [_scale(_cyclic(cols, _ring_u(i, n) + st[0], hard=True), kk) for i in range(n)]
         elif styl == "plameny":                          # plameny zespodu, vyska podle basu
             st = self.state.setdefault(("hudba_plam", key), [0.0, [0.6] * n])
             if len(st[1]) != n:
@@ -735,7 +735,7 @@ class Engine:
             out = []
             rot = cols[d % k:] + cols[:d % k]             # drop posune paletu (hlavni barva = prvni)
             for i in range(n):                        # cela paleta po obvodu, otaci se se stredy
-                c = _mix(_cyclic(rot, i / max(1, n) + ph), white, 0.3 * fl * fl)
+                c = _mix(_cyclic(rot, _ring_u(i, n) + ph), white, 0.3 * fl * fl)
                 out.append(_scale(c, kk))
             if n > 1:
                 st = self.state.setdefault(("hudba_jiskry", key), [])
@@ -861,14 +861,39 @@ def music_demo(t, paleta=None, track_n=0):
             "quiet": False, "paleta": list(paleta or DEFAULT_PALETTE[:3]), "track_n": track_n, "mix": 1.0}
 
 
-def _ring_y(i, n, eff):
-    """Svisla poloha LED i na kruhu (-1 nahore, +1 dole). LED 1 vpravo, cislovani po smeru hodin
-    (jako v nahledu); "otoceni" efektu otoci svisle efekty po 90 stupnich."""
+def bottom_led(n):
+    """Pozice (0..n-1), ktera je pri otoceni 0 presne dole: ctvrt otacky za LED 1 (LED 1 vpravo,
+    po smeru hodin). Kdyz n neni delitelne 4 (14 LED na desce), spodek by vysel mezi dve LED -
+    bere se blizsi LED, at efekty sedi s testem natoceni (led.test_frame sviti prave na ni)."""
+    return round(n / 4) % max(1, n)
+
+
+def _ring_shift(n):
+    """O kolik LED je kruh pootoceny, aby LED bottom_led(n) byla presne dole (0 pro 8 / 12 / 16 LED,
+    0,5 pro 14 LED)."""
+    return bottom_led(n) - n / 4 if n > 1 else 0.0
+
+
+def _ring_u(i, n):
+    """Poloha LED i na kruhu 0..1 (0 = vpravo, po smeru hodin) - stejna pro vsechny ventilatory bez
+    ohledu na pocet LED, at efekty sedi s testem natoceni."""
+    return (i - _ring_shift(n)) / n if n > 1 else 0.0
+
+
+def _ring_angle(i, n, eff):
+    """Uhel LED i na kruhu (0 = vpravo, po smeru hodin, rad), LED bottom_led(n) presne dole (pi/2);
+    "otoceni" efektu otoci svisle efekty po 90 stupnich."""
     try:
         rot = math.radians(float(eff.get("otoceni", 0)))
     except (TypeError, ValueError):
         rot = 0.0
-    return math.sin(2 * math.pi * i / max(1, n) + rot)
+    return 2 * math.pi * _ring_u(i, n) + rot
+
+
+def _ring_y(i, n, eff):
+    """Svisla poloha LED i na kruhu (-1 nahore, +1 dole). LED 1 vpravo, cislovani po smeru hodin
+    (jako v nahledu)."""
+    return math.sin(_ring_angle(i, n, eff))
 
 
 def apply_brightness(colors, percent):

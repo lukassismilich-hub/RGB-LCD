@@ -79,9 +79,8 @@ TEST_MODES = {"dole": "svítí spodek", "obiha": "obíhá od spodku po směru ho
 
 
 def bottom_pos(n):
-    """Pozice efektu (0..n-1), kterou efekty berou jako spodek ventilatoru: pozice 0 je vpravo,
-    cislovani po smeru hodin, takze spodek je ctvrt otacky dal (led_efekty._ring_y s otocenim 0)."""
-    return round(n / 4) % max(1, n)
+    """Pozice efektu (0..n-1), kterou efekty berou jako spodek ventilatoru (led_efekty.bottom_led)."""
+    return fx.bottom_led(n)
 
 
 def rainbow(n):

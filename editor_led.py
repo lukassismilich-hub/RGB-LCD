@@ -88,7 +88,8 @@ class LedEditor:
         V.card_title(pv, "Živý náhled").pack(anchor="w", padx=16, pady=(14, 6))
         self.preview = tk.Canvas(pv, width=PREVIEW_W, height=PREVIEW_H, bg=V.CARD, highlightthickness=0)
         self.preview.pack(padx=12)
-        ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu. "
+        ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu, a ukazuje, "
+                                                 "jak má vypadat na srovnaných ventilátorech (spodek dole). "
                                                  "Na ventilátorech se změna projeví po Uložit.",
                   wraplength=PREVIEW_W).pack(anchor="w", padx=16, pady=(4, 14))
         self._test = tk.StringVar(value="")                # test natoceni: "" / "dole" / "obiha"
@@ -1316,7 +1317,7 @@ class LedEditor:
         if not lc.get("zapnuto", True):
             c.create_text(PREVIEW_W / 2, PREVIEW_H / 2, text="Řízení LED vypnuto", fill=V.MUTED)
         else:
-            # vcetne natoceni - LED v poradi, jak je aplikace posila (LED 1 vpravo, po smeru hodin)
+            # bez natoceni ventilatoru = jak ma efekt vypadat (spodek dole, jako test natoceni)
             lr, t, info = lc, now - self.t0, None
             items = led.playlist_items(lc)
             if items:                                           # playlist: od zacatku / jen vybrany efekt
@@ -1338,7 +1339,7 @@ class LedEditor:
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
                               text="Test: " + led.TEST_MODES[self._test.get()] + " – takhle to má vypadat")
             else:
-                frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), music=snap)
+                frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), orient=False, music=snap)
             if snap is not None:
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
                               text="♪ simulovaná hudba · " + fx.MUSIC_STYLES[fx.music_style(lc["hudba"], snap)])
@@ -1367,7 +1368,7 @@ class LedEditor:
                                    fill="#111418")
                 c.create_oval(cx - R - 8, cy - R - 8, cx + R + 8, cy + R + 8, outline="#1d2228", width=10)
                 for i, rgb in enumerate(cols):
-                    a = math.radians(360 * i / n)
+                    a = fx._ring_angle(i, n, {})                # jako efekty: spodek dole i u 14 LED
                     x, y = cx + R * math.cos(a), cy + R * math.sin(a)
                     # LED sviti vic, nez stejna hodnota na monitoru -> pro nahled zesvetlit (gama)
                     r, g, b = (round(255 * (v / 255) ** 0.5) for v in rgb)

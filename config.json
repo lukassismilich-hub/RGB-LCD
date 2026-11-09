@@ -2037,24 +2037,10 @@
     "vlna_f140_spolu": false,
     "f140_vpredu": "led2",
     "klavesnice": {
-      "zapnuto": false,
+      "zapnuto": true,
       "efekt": "vlastni",
       "jas": 100,
       "barva": "#ffffff"
-    },
-    "efekt_klavesnice": {
-      "typ": "barva",
-      "barvy": [
-        "#ff0000",
-        "#0060ff",
-        "#00ff40",
-        "#ffb000"
-      ],
-      "rychlost": 4,
-      "opacny_smer": false,
-      "senzor": "CPU (Tctl/Tdie)",
-      "min": 40,
-      "max": 90
     },
     "grafika": {
       "zapnuto": true,
@@ -2247,11 +2233,11 @@
           "opakovani": 7
         }
       ],
-      "prolinani": 1.0
+      "prolinani": 2.0
     },
     "hudba": {
       "zapnuto": true,
-      "styl": "plameny",
+      "styl": "klidny",
       "stridat": true,
       "citlivost": 6,
       "jas": 100,
@@ -2264,9 +2250,9 @@
         "#00ff40"
       ],
       "zpozdeni_ms": 100,
-      "navrat_s": 3,
+      "navrat_s": 2,
       "citlivost_barev": 10,
-      "basy": 10,
+      "basy": 6,
       "styly_stridat": [
         "pulz",
         "spektrum",
@@ -2280,6 +2266,795 @@
       ],
       "otoceni": 0,
       "doplnit_barvy": false
+    },
+    "klavesnice_m": {
+      "1": {
+        "efekt_klavesnice": {
+          "typ": "barva",
+          "rychlost": 5,
+          "barvy": [
+            "#00ff00"
+          ],
+          "pocet_barev": 1,
+          "klavesy": {
+            "76": "#0000ff",
+            "77": "#0000ff",
+            "78": "#0000ff",
+            "79": "#0000ff",
+            "210": "#0000ff"
+          },
+          "zaklad": "#00ff00"
+        },
+        "vrstvy_klavesnice": [
+          {
+            "nazev": "logo a média",
+            "zapnuto": true,
+            "klavesy": [
+              153,
+              155,
+              156,
+              157,
+              158,
+              210
+            ],
+            "efekt": {
+              "typ": "vlna",
+              "rychlost": 5,
+              "duha": true,
+              "smer": 0,
+              "sirka": 1,
+              "pocet_barev": 2,
+              "barvy": [
+                "#ff0000",
+                "#0060ff"
+              ]
+            }
+          },
+          {
+            "nazev": "čísla",
+            "zapnuto": true,
+            "klavesy": [
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              39,
+              40,
+              41,
+              42,
+              43,
+              50,
+              54,
+              80,
+              81,
+              82,
+              83,
+              84,
+              85,
+              98,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111
+            ],
+            "efekt": {
+              "typ": "barva",
+              "rychlost": 5,
+              "barvy": [
+                "#ff8000"
+              ],
+              "pocet_barev": 1
+            }
+          },
+          {
+            "nazev": "F1–F12",
+            "zapnuto": true,
+            "klavesy": [
+              38,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60,
+              61,
+              62,
+              63,
+              64,
+              65,
+              66,
+              67,
+              68,
+              69,
+              70,
+              71,
+              72,
+              73,
+              74,
+              75,
+              76,
+              77,
+              78,
+              79
+            ],
+            "efekt": {
+              "typ": "barva",
+              "rychlost": 5,
+              "barvy": [
+                "#80ffff"
+              ],
+              "pocet_barev": 1
+            }
+          }
+        ],
+        "klavesy_g": {
+          "1": {
+            "akce": "lcd",
+            "svetlo": "kontrolka",
+            "barva_zap": "#ff0000",
+            "barva_vyp": "#00ff00",
+            "blik": true
+          },
+          "2": {
+            "akce": "predvolba",
+            "svetlo": "kontrolka",
+            "predvolba": 1,
+            "barva_zap": "#ff0000",
+            "barva_vyp": "#00ff00"
+          },
+          "3": {
+            "akce": "hudba",
+            "svetlo": "kontrolka",
+            "blik": true,
+            "barva_zap": "#00ff00",
+            "barva_vyp": "#ff0000"
+          },
+          "4": {
+            "akce": "styl",
+            "svetlo": "efekt"
+          },
+          "5": {
+            "akce": "pl_dalsi",
+            "svetlo": "efekt"
+          }
+        },
+        "klavesnice": {
+          "efekt": "vlastni",
+          "jas": 100
+        },
+        "pamet": {
+          "klavesy": {},
+          "logo": "jako"
+        }
+      },
+      "2": {
+        "efekt_klavesnice": {
+          "typ": "stirani",
+          "rychlost": 5,
+          "barvy": [
+            "#ff0040",
+            "#00a0ff",
+            "#40ff00"
+          ],
+          "smer": 0,
+          "pocet_barev": 3,
+          "klavesy": {
+            "76": "#0000ff",
+            "77": "#0000ff",
+            "78": "#0000ff",
+            "79": "#0000ff",
+            "210": "#0000ff"
+          },
+          "zaklad": "#00ff00"
+        },
+        "vrstvy_klavesnice": [
+          {
+            "nazev": "numerická",
+            "zapnuto": true,
+            "klavesy": [
+              80,
+              81,
+              82,
+              83,
+              84,
+              85,
+              86,
+              87,
+              88,
+              89,
+              90,
+              91,
+              92,
+              93,
+              94,
+              95,
+              96
+            ],
+            "efekt": {
+              "typ": "dest",
+              "rychlost": 5,
+              "barvy": [
+                "#00ff40"
+              ],
+              "pozadi": "#000800",
+              "sirka": 5,
+              "pocet_barev": 1
+            }
+          },
+          {
+            "nazev": "F1–F12",
+            "zapnuto": true,
+            "klavesy": [
+              55,
+              56,
+              57,
+              58,
+              59,
+              60,
+              61,
+              62,
+              63,
+              64,
+              65,
+              66,
+              153,
+              155,
+              156,
+              157,
+              158,
+              210
+            ],
+            "efekt": {
+              "typ": "vlna",
+              "rychlost": 5,
+              "duha": true,
+              "smer": 0,
+              "sirka": 6,
+              "pocet_barev": 2,
+              "barvy": [
+                "#ff0000",
+                "#0060ff"
+              ]
+            }
+          },
+          {
+            "nazev": "logo a média",
+            "zapnuto": true,
+            "klavesy": [
+              153,
+              155,
+              156,
+              157,
+              158,
+              210
+            ],
+            "efekt": {
+              "typ": "skener",
+              "rychlost": 5,
+              "barvy": [
+                "#ff0000"
+              ],
+              "pozadi": "#100000",
+              "smer": 0,
+              "sirka": 3,
+              "pocet_barev": 1
+            }
+          }
+        ],
+        "klavesy_g": {
+          "1": {
+            "akce": "predvolba",
+            "predvolba": 2
+          },
+          "2": {
+            "akce": "hudba"
+          },
+          "3": {
+            "akce": "styl"
+          }
+        },
+        "klavesnice": {
+          "efekt": "vlastni",
+          "jas": 100
+        },
+        "pamet": {
+          "klavesy": {},
+          "logo": "jako"
+        }
+      },
+      "3": {
+        "efekt_klavesnice": {
+          "typ": "stirani",
+          "rychlost": 5,
+          "barvy": [
+            "#ff0040",
+            "#00a0ff",
+            "#40ff00"
+          ],
+          "smer": 0,
+          "pocet_barev": 3,
+          "klavesy": {
+            "76": "#0000ff",
+            "77": "#0000ff",
+            "78": "#0000ff",
+            "79": "#0000ff",
+            "210": "#0000ff"
+          },
+          "zaklad": "#00ff00"
+        },
+        "vrstvy_klavesnice": [
+          {
+            "nazev": "numerická",
+            "zapnuto": true,
+            "klavesy": [
+              80,
+              81,
+              82,
+              83,
+              84,
+              85,
+              86,
+              87,
+              88,
+              89,
+              90,
+              91,
+              92,
+              93,
+              94,
+              95,
+              96
+            ],
+            "efekt": {
+              "typ": "dest",
+              "rychlost": 5,
+              "barvy": [
+                "#00ff40"
+              ],
+              "pozadi": "#000800",
+              "sirka": 5,
+              "pocet_barev": 1
+            }
+          },
+          {
+            "nazev": "F1–F12",
+            "zapnuto": true,
+            "klavesy": [
+              55,
+              56,
+              57,
+              58,
+              59,
+              60,
+              61,
+              62,
+              63,
+              64,
+              65,
+              66,
+              153,
+              155,
+              156,
+              157,
+              158,
+              210
+            ],
+            "efekt": {
+              "typ": "vlna",
+              "rychlost": 5,
+              "duha": true,
+              "smer": 0,
+              "sirka": 6,
+              "pocet_barev": 2,
+              "barvy": [
+                "#ff0000",
+                "#0060ff"
+              ]
+            }
+          },
+          {
+            "nazev": "logo a média",
+            "zapnuto": true,
+            "klavesy": [
+              153,
+              155,
+              156,
+              157,
+              158,
+              210
+            ],
+            "efekt": {
+              "typ": "skener",
+              "rychlost": 5,
+              "barvy": [
+                "#ff0000"
+              ],
+              "pozadi": "#100000",
+              "smer": 0,
+              "sirka": 3,
+              "pocet_barev": 1
+            }
+          }
+        ],
+        "klavesy_g": {
+          "1": {
+            "akce": "predvolba",
+            "predvolba": 2
+          },
+          "2": {
+            "akce": "hudba"
+          },
+          "3": {
+            "akce": "styl"
+          }
+        },
+        "klavesnice": {
+          "efekt": "vlastni",
+          "jas": 100
+        },
+        "pamet": {
+          "klavesy": {},
+          "logo": "jako"
+        }
+      }
+    },
+    "predvolby": [
+      {
+        "id": 1,
+        "nazev": "Předvolba z G2",
+        "cil": "klavesnice",
+        "nastaveni": {
+          "efekt_klavesnice": {
+            "typ": "barva",
+            "rychlost": 5,
+            "barvy": [
+              "#00ff00"
+            ],
+            "pocet_barev": 1,
+            "klavesy": {
+              "76": "#0000ff",
+              "77": "#0000ff",
+              "78": "#0000ff",
+              "79": "#0000ff",
+              "210": "#0000ff"
+            },
+            "zaklad": "#00ff00"
+          },
+          "vrstvy_klavesnice": [
+            {
+              "nazev": "logo a média",
+              "zapnuto": true,
+              "klavesy": [
+                153,
+                155,
+                156,
+                157,
+                158,
+                210
+              ],
+              "efekt": {
+                "typ": "vlna",
+                "rychlost": 5,
+                "duha": true,
+                "smer": 0,
+                "sirka": 1,
+                "pocet_barev": 2,
+                "barvy": [
+                  "#ff0000",
+                  "#0060ff"
+                ]
+              }
+            },
+            {
+              "nazev": "písmena",
+              "zapnuto": true,
+              "klavesy": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                47,
+                48,
+                49,
+                50,
+                51,
+                52,
+                53,
+                54,
+                55,
+                56,
+                57,
+                58,
+                59,
+                60,
+                61,
+                62,
+                63,
+                64,
+                65,
+                66,
+                97,
+                98,
+                104,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111
+              ],
+              "efekt": {
+                "typ": "kruh_basy",
+                "rychlost": 5,
+                "barvy": [
+                  "#ffffff",
+                  "#ff0080",
+                  "#0060ff"
+                ],
+                "barvy_hudba": "obal",
+                "pozadi": "#000000",
+                "pocet_barev": 2
+              }
+            },
+            {
+              "nazev": "Část 4",
+              "zapnuto": true,
+              "klavesy": [
+                67,
+                68,
+                69,
+                70,
+                71,
+                72,
+                73,
+                74,
+                75,
+                76,
+                77,
+                78,
+                79,
+                80,
+                81,
+                82,
+                83,
+                84,
+                85,
+                86,
+                87,
+                88,
+                89,
+                90,
+                91,
+                92,
+                93,
+                94,
+                95,
+                96
+              ],
+              "efekt": {
+                "typ": "pulz",
+                "rychlost": 5,
+                "barvy": [
+                  "#ff0040",
+                  "#00a0ff"
+                ],
+                "barvy_hudba": "obal",
+                "pocet_barev": 2
+              }
+            }
+          ],
+          "klavesnice": {
+            "efekt": "vlastni",
+            "jas": 100
+          }
+        }
+      },
+      {
+        "id": 2,
+        "nazev": "Předvolba z G1 (M2)",
+        "cil": "vse",
+        "nastaveni": {
+          "efekt_klavesnice": {
+            "typ": "stirani",
+            "rychlost": 5,
+            "barvy": [
+              "#ff0040",
+              "#00a0ff",
+              "#40ff00"
+            ],
+            "smer": 0,
+            "pocet_barev": 3,
+            "klavesy": {
+              "76": "#0000ff",
+              "77": "#0000ff",
+              "78": "#0000ff",
+              "79": "#0000ff",
+              "210": "#0000ff"
+            },
+            "zaklad": "#00ff00"
+          },
+          "vrstvy_klavesnice": [
+            {
+              "nazev": "numerická",
+              "zapnuto": true,
+              "klavesy": [
+                80,
+                81,
+                82,
+                83,
+                84,
+                85,
+                86,
+                87,
+                88,
+                89,
+                90,
+                91,
+                92,
+                93,
+                94,
+                95,
+                96
+              ],
+              "efekt": {
+                "typ": "dest",
+                "rychlost": 5,
+                "barvy": [
+                  "#00ff40"
+                ],
+                "pozadi": "#000800",
+                "sirka": 5,
+                "pocet_barev": 1
+              }
+            },
+            {
+              "nazev": "F1–F12",
+              "zapnuto": true,
+              "klavesy": [
+                55,
+                56,
+                57,
+                58,
+                59,
+                60,
+                61,
+                62,
+                63,
+                64,
+                65,
+                66,
+                153,
+                155,
+                156,
+                157,
+                158,
+                210
+              ],
+              "efekt": {
+                "typ": "vlna",
+                "rychlost": 5,
+                "duha": true,
+                "smer": 0,
+                "sirka": 6,
+                "pocet_barev": 2,
+                "barvy": [
+                  "#ff0000",
+                  "#0060ff"
+                ]
+              }
+            },
+            {
+              "nazev": "logo a média",
+              "zapnuto": true,
+              "klavesy": [
+                153,
+                155,
+                156,
+                157,
+                158,
+                210
+              ],
+              "efekt": {
+                "typ": "skener",
+                "rychlost": 5,
+                "barvy": [
+                  "#ff0000"
+                ],
+                "pozadi": "#100000",
+                "smer": 0,
+                "sirka": 3,
+                "pocet_barev": 1
+              }
+            }
+          ],
+          "klavesnice": {
+            "efekt": "vlastni"
+          }
+        }
+      }
+    ],
+    "hlasitost_klavesnice": {
+      "zapnuto": true,
+      "klavesy": [
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66
+      ],
+      "smer": "zdola",
+      "barva_od": "#00ff00",
+      "barva_do": "#8000ff",
+      "pozadi": "#0a0a0a",
+      "ztlumeno": "#ff0000",
+      "ostatni": "efekt",
+      "doba_s": 2.0
+    },
+    "reakce_klavesnice": {
+      "zapnuto": true,
+      "rezim": "klavesa",
+      "barva": "duha",
+      "doba": 1.0
     }
   },
   "ikona_programu": {

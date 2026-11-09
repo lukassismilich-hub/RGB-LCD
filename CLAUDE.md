@@ -106,6 +106,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 2. ~~Automatické spuštění po startu Windows~~ – hotovo (`autostart_zapnout.bat`). Bez ikony v liště jde aplikaci ukončit jen přes `ukoncit.bat` (zabití ve Správci úloh přeskočí zálohu chlazení!).
 3. **Ikona v systémové liště.**
 4. Klávesnice G815: vybrat efekty vhodné pro souběh s ventilátory (možná všechny – uživatel zatím neví) a přepínání / ovládání efektů klávesami G1–G5.
+5. Klávesnice G815: efekty jen na část kláves – víc efektů najednou, každý na své skupině kláves (např. numerická klávesnice déšť Matrix, zbytek vlna).
 
 ## Pracovní postup
 - Před většími změnami udělej git commit.

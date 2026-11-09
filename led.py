@@ -14,8 +14,9 @@
 #     vlastni plosne efekty po klavesach (klavesnice_efekty.py, efekt "vlastni" = efekt_klavesnice),
 #     nebo cela klavesnice jednou barvou jako F140 / deska; reakce na stisk klaves (klavesy_stisk.py);
 #     casti klavesnice s vlastnim efektem pres zaklad (vrstvy_klavesnice, kb_layers); klavesy G1-G5
-#     prepinaji predvolby efektu, hudbu, playlist a skladbu na LCD, M1-M3 vyvolaji sady nastaveni
-#     klavesnice, MR + M ulozi sadu (klavesy_g.py); osvetleni G-klaves podle nastaveni kazde klavesy.
+#     prepinaji predvolby efektu, hudbu, playlist a skladbu na LCD, M1-M3 prepinaji tri nastaveni
+#     klavesnice (klavesy_g.py - vlakno pocita s config["led"] + profil aktivniho M); osvetleni G-klaves
+#     podle nastaveni kazde klavesy.
 #     Integrovanou pamet klavesnice aplikace sama vypne a pri konci / vypnuti rizeni zase zapne.
 # Liquidctl sam D_LED neovladne, kdyz ma hlavicka vypnute vestavene efekty (tak ji nechava GCC).
 # LED desky jinak ridi Gigabyte Control Center (GCC) - pokud bezi, nastaveni prepise.
@@ -135,12 +136,12 @@ def default_config():
         "grafika": dict(EXTRA_DEFAULT),
         "efekt_grafika": copy.deepcopy(fx.DEFAULT_EFFECT),
         "klavesnice": dict(EXTRA_DEFAULT),
-        "efekt_klavesnice": copy.deepcopy(fx.DEFAULT_EFFECT),
-        # casti klavesnice s vlastnim efektem pres zaklad: [{"nazev", "zapnuto", "klavesy": [zony], "efekt"}],
-        # dalsi v seznamu prekryje predchozi
-        "vrstvy_klavesnice": [],
-        # klavesy G1-G5: {"1": {"akce": "predvolba" / "hudba" / "styl", "cil", "nastaveni"}} (klavesy_g.py)
-        "klavesy_g": {},
+        # tri nastaveni klavesnice M1-M3 (klavesy_g.py): {"1": {"efekt_klavesnice", "vrstvy_klavesnice"
+        # (casti s vlastnim efektem: [{"nazev", "zapnuto", "klavesy": [zony], "efekt"}], dalsi prekryje
+        # predchozi), "klavesnice": {"efekt", "jas"}, "klavesy_g": {"1": {"akce", ...}}}, "2": ..., "3": ...}
+        "klavesnice_m": {},
+        # spolecne pojmenovane predvolby G-klaves: [{"id", "nazev", "cil", "nastaveni"}]
+        "predvolby": [],
         # playlist efektu: polozky = efekty (jako "efekt") + "opakovani"; strida se dokola v poradi,
         # plati pro vsechny ventilatory (a grafiku / klavesnici s efektem "jako F140 / deska")
         "playlist": copy.deepcopy(PLAYLIST_DEFAULT),
@@ -965,7 +966,7 @@ class LedWorker(threading.Thread):
                 last_wall = time.time()
                 continue
             now_wall, now = time.time(), time.monotonic()
-            base_cfg = lcfg                              # nastaveni z okna (bez predvoleb a sad klaves G / M)
+            base_cfg = lcfg                              # nastaveni z okna (profily M1-M3, bez predvoleb G)
             if base_cfg is not base_ref:                 # nove nastaveni z okna (po Ulozit)
                 k_base = json.dumps(base_cfg, sort_keys=True, default=str)
                 if base_key is not None and k_base != base_key:
@@ -1087,7 +1088,7 @@ class LedWorker(threading.Thread):
                     st["playlist"] = {"i": pl["i"], "pocet": pl["pocet"], "typ": pl["eff"].get("typ"),
                                       "zbyva": round(pl["zbyva"])}
                 if extra_on(lcfg, "klavesnice"):
-                    st["klavesy_g"] = self.gkeys.status()
+                    st["klavesy_g"] = self.gkeys.status(base_cfg)
                 if snap is not None:
                     st["hudba"] = {"styl": fx.music_style(lcfg.get("hudba") or {}, snap), "mix": round(snap["mix"], 2)}
                     frames += 1

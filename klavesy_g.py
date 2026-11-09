@@ -1,10 +1,14 @@
 # klavesy_g.py - klavesy G1-G5, M1-M3 a MR na klavesnici G815
 #
-# config["led"]["klavesy_g"] = {"1": {"akce": ..., ...}, ... "5": {...}} - akce G-klaves:
-#   "predvolba" + "cil" (klavesnice / ventilatory / vse) + "nastaveni" = vlastni nastaveni efektu
-#               (klavesnici upravuje okno primo - "Nastavuji: predvolba Gn", ventilatory se prevezmou
-#               ze stranky LED); stisk = prepnout na predvolbu, stejna G-klavesa znovu = zpet,
-#               jina G-klavesa s predvolbou prepne rovnou na svou
+# Tri nastaveni klavesnice M1-M3 (config["led"]["klavesnice_m"] = {"1": profil, "2": ..., "3": ...}),
+# klavesnice je vzdy v jednom z nich (M = prepnout, kontrolka sviti u aktivniho; posledni pouzite se
+# pamatuje v klavesnice_m.json - zapisuje bezici aplikace). Profil = podsviceni (PROFILE_KEYS: efekt,
+# casti, "klavesnice": efekt / jas) a akce i osvetleni G1-G5 ("klavesy_g" = {"1": {"akce", ...}}).
+# Spolecny seznam pojmenovanych predvoleb (config["led"]["predvolby"] = [{"id", "nazev", "cil",
+# "nastaveni"}]) - v kazdem M si G-klavesa vybere kteroukoli ("akce": "predvolba", "predvolba": id).
+# Akce G-klaves:
+#   "predvolba" = prepnout na predvolbu (klavesnice / ventilatory / vse podle "cil" predvolby), stejna
+#               G-klavesa znovu = zpet na nastaveni M, jina G-klavesa s predvolbou prepne rovnou na svou
 #   "hudba"     = hudebni vizualizer ze Spotify zapnout / vypnout
 #   "styl"      = dalsi styl vizualizeru (kdyz je vypnuty, zapne ho)
 #   "pl_dalsi" / "pl_predchozi" = playlist LED ventilatoru na dalsi / predchozi efekt
@@ -12,13 +16,9 @@
 #   "lcd"       = obrazovka "Prave hraje" na LCD Krakenu ukazat (na dobu z nastaveni) / schovat
 #   osvetleni klavesy (light()): "svetlo" kontrolka / efekt (klavesa sviti podle efektu), "barva_zap"
 #   (funkce zapnuta), "barva_vyp", "blik" + "barva_blik" = bliknuti pri stisku
-# Sady M1-M3 (soubor sady_klavesnice.json, ne config.json - uklada je i bezici aplikace z klavesnice):
-#   cele nastaveni klavesnice = podsviceni (efekt, casti, jas) i akce a osvetleni G-klaves (PARTS["sada"]).
-#   M1 = vyvolat sadu, stejna M znovu = zpet na nastaveni z okna; MR a pak M1-M3 (do 10 s) = ulozit
-#   prave svitici nastaveni klavesnice do sady (MR znovu = zrusit). Kontrolky M1-M3 / MR ukazuji
-#   aktivni sadu / ukladani.
-# Stav (State) drzi jen bezici aplikace v pameti - po startu plati nastaveni z okna. Ulozeni zmeny
-# v okne (vlakno LED pozna nove nastaveni) vrati predvolbu i sadu na nastaveni z okna (reset_selection).
+# Stav (State): aktivni M (soubor), predvolba, hudba, playlist jen v pameti. Ulozeni zmeny v okne vypne
+# predvolbu (reset_selection). Stary format (jedno nastaveni + sady_klavesnice.json + predvolby ulozene
+# primo u G-klavesy) prevede migrate() pri nacteni configu.
 # Stisky cte klavesnice.Direct (HID++ 0x8010 / 0x8020 / 0x8030 se softwarovym ovladanim G-klaves).
 
 import copy
@@ -34,30 +34,134 @@ log = logging.getLogger("rgb_lcd")
 KEYS = (1, 2, 3, 4, 5)
 M_KEYS = (1, 2, 3)
 ZONE = {n: 179 + n for n in KEYS}                 # zony podsviceni G1-G5 (0x8081)
-ACTIONS = [("", "nic"), ("predvolba", "předvolba efektu"), ("hudba", "hudba ze Spotify zap. / vyp."),
+ACTIONS = [("", "nic"), ("predvolba", "předvolba"), ("hudba", "hudba ze Spotify zap. / vyp."),
            ("styl", "další styl hudby"), ("pl_dalsi", "playlist LED – další efekt"),
            ("pl_predchozi", "playlist LED – předchozí efekt"), ("playlist", "playlist LED zap. / vyp."),
            ("lcd", "skladba na LCD Krakenu")]
 TOGGLES = ("predvolba", "hudba", "playlist", "lcd")   # akce se stavem zapnuto / vypnuto
 TARGETS = [("klavesnice", "klávesnice"), ("ventilatory", "ventilátory a grafika"), ("vse", "vše")]
-# co patri do predvolby / sady: klice config["led"] a vybrane polozky vnorenych slovniku
+# co patri do predvolby: klice config["led"] a vybrane polozky vnorenych slovniku
 PARTS = {
     "klavesnice": (("efekt_klavesnice", "vrstvy_klavesnice"), {"klavesnice": ("efekt", "jas")}),
     "ventilatory": (("stejne_pro_vse", "efekt", "efekt_f140", "efekt_deska", "playlist", "vlna", "vlna_smer",
                      "vlna_f140_spolu", "efekt_grafika"), {"grafika": ("efekt",)}),
-    "sada": (("efekt_klavesnice", "vrstvy_klavesnice", "klavesy_g"), {"klavesnice": ("efekt", "jas")}),
 }
+PROFILE_KEYS = ("efekt_klavesnice", "vrstvy_klavesnice", "klavesy_g")   # + "klavesnice": efekt, jas
 LIGHT_DEFAULT = {"svetlo": "kontrolka", "barva_zap": "#ffffff", "barva_vyp": "#2d2d2d", "blik": True,
                  "barva_blik": "#ffffff"}
 FLASH_S = 0.35                                    # bliknuti po stisku: 0,08 s tma, pak barva bliknuti
 FLASH_DARK_S = 0.08
-RECORD_S = 10.0                                   # MR: do kdy stisknout M1-M3
-SETS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sady_klavesnice.json")
-_sets_cache = (None, {})                          # (mtime, sady)
+_DIR = os.path.dirname(os.path.abspath(__file__))
+M_FILE = os.path.join(_DIR, "klavesnice_m.json")  # posledni pouzite M (zapisuje bezici aplikace)
+OLD_SETS_FILE = os.path.join(_DIR, "sady_klavesnice.json")   # stary format sad M1-M3 (jen migrace)
+
+
+# ----------------------------------------------------------------- profily M1-M3
+
+def default_profile():
+    import klavesnice_efekty as kbfx
+    return {"efekt_klavesnice": kbfx.default_effect("vlna"), "vrstvy_klavesnice": [], "klavesy_g": {},
+            "klavesnice": {"efekt": "vlastni", "jas": 100}}
+
+
+def profiles(lcfg):
+    """{"1": profil, "2": ..., "3": ...} z config["led"] (chybejici doplni - zapisuje do lcfg)."""
+    p = lcfg.get("klavesnice_m")
+    if not isinstance(p, dict):
+        p = lcfg["klavesnice_m"] = {}
+    for m in M_KEYS:
+        prof = p.get(str(m))
+        if not isinstance(prof, dict):
+            prof = p[str(m)] = default_profile()
+        d = None
+        for k in PROFILE_KEYS:
+            if k not in prof:
+                d = d or default_profile()
+                prof[k] = d[k]
+        kc = prof.get("klavesnice")
+        if not isinstance(kc, dict):
+            kc = prof["klavesnice"] = {}
+        kc.setdefault("efekt", "vlastni")
+        kc.setdefault("jas", 100)
+    return p
+
+
+def profile(lcfg, m):
+    return profiles(lcfg)[str(m if m in M_KEYS else 1)]
+
+
+def with_profile(lcfg, m):
+    """Nastaveni z okna s profilem Mm (novy slovnik, lcfg se nemeni - jen chybejici profily doplni)."""
+    prof = profile(lcfg, m)
+    out = dict(lcfg)
+    for k in PROFILE_KEYS:
+        out[k] = prof[k]
+    out["klavesnice"] = dict(lcfg.get("klavesnice") or {}, **prof["klavesnice"])
+    return out
+
+
+def copy_profile(lcfg, src, dst):
+    profiles(lcfg)[str(dst)] = copy.deepcopy(profile(lcfg, src))
+
+
+def describe_profile(prof):
+    acts = [f"G{n}" for n in actions(prof)]
+    return (f"{_kb_text(prof)}; jas {(prof.get('klavesnice') or {}).get('jas', 100)} %; "
+            + ("G-klávesy: " + ", ".join(acts) if acts else "G-klávesy bez akcí"))
+
+
+def load_m():
+    """Posledni pouzite M (1-3)."""
+    try:
+        with open(M_FILE, encoding="utf-8") as f:
+            m = int(json.load(f).get("m", 1))
+        return m if m in M_KEYS else 1
+    except (OSError, ValueError, TypeError, AttributeError):
+        return 1
+
+
+def save_m(m):
+    try:
+        tmp = M_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"m": m}, f)
+        os.replace(tmp, M_FILE)
+    except OSError as e:
+        log.warning("Klávesnice: aktivní M nejde uložit: %s", e)
+
+
+# ----------------------------------------------------------------- predvolby
+
+def presets(lcfg):
+    """Spolecny seznam pojmenovanych predvoleb (zapisuje do lcfg, kdyz chybi)."""
+    v = lcfg.get("predvolby")
+    if not isinstance(v, list):
+        v = lcfg["predvolby"] = []
+    return v
+
+
+def preset_by_id(lcfg, pid):
+    return next((p for p in presets(lcfg) if isinstance(p, dict) and p.get("id") == pid), None)
+
+
+def new_preset(lcfg, name=None):
+    ps = presets(lcfg)
+    pid = max([p.get("id", 0) for p in ps if isinstance(p, dict)] + [0]) + 1
+    names = {p.get("nazev") for p in ps if isinstance(p, dict)}
+    n = len(ps) + 1
+    while name is None or name in names:
+        name, n = f"Předvolba {n}", n + 1
+    p = {"id": pid, "nazev": name, "cil": "klavesnice", "nastaveni": {}}
+    ps.append(p)
+    return p
+
+
+def preset_name(p):
+    return str((p or {}).get("nazev") or f"Předvolba {(p or {}).get('id', '?')}")
 
 
 def actions(lcfg):
-    """{cislo G-klavesy: nastaveni akce} - jen prirazene."""
+    """{cislo G-klavesy: nastaveni akce} - jen prirazene (lcfg = profil nebo nastaveni s profilem)."""
     out = {}
     valid = {k for k, _t in ACTIONS if k}
     for n in KEYS:
@@ -76,8 +180,17 @@ def _parts(cil):
     return ("klavesnice", "ventilatory") if cil == "vse" else (cil,) if cil in PARTS else ()
 
 
+def has_keyboard(p):
+    """Meni predvolba podsviceni klavesnice?"""
+    return (p or {}).get("cil", "klavesnice") in ("klavesnice", "vse")
+
+
+def has_fans(p):
+    return (p or {}).get("cil") in ("ventilatory", "vse")
+
+
 def snapshot(lcfg, cil):
-    """Nastaveni efektu pro predvolbu / sadu (kopie z config["led"])."""
+    """Nastaveni efektu pro predvolbu (kopie z nastaveni s profilem)."""
     out = {}
     for part in _parts(cil):
         keys, subs = PARTS[part]
@@ -90,50 +203,40 @@ def snapshot(lcfg, cil):
     return out
 
 
-def has_keyboard(a):
-    """Meni predvolba podsviceni klavesnice?"""
-    return (a or {}).get("akce") == "predvolba" and (a or {}).get("cil", "klavesnice") in ("klavesnice", "vse")
-
-
-def has_fans(a):
-    return (a or {}).get("akce") == "predvolba" and (a or {}).get("cil") in ("ventilatory", "vse")
-
-
-def ensure_keyboard(a, lcfg):
-    """Predvolba bez nastaveni klavesnice ho dostane z okna (zacatek upravy). Vrati slovnik nastaveni."""
-    a.setdefault("cil", "klavesnice")
-    snap = a.get("nastaveni")
+def ensure_keyboard(p, cfg):
+    """Predvolba bez nastaveni klavesnice ho dostane z cfg (nastaveni s profilem M). Vrati nastaveni."""
+    snap = p.get("nastaveni")
     if not isinstance(snap, dict):
-        snap = a["nastaveni"] = {}
+        snap = p["nastaveni"] = {}
     keys, _subs = PARTS["klavesnice"]
     if any(k not in snap for k in keys):
-        base = snapshot(lcfg, "klavesnice")
+        base = snapshot(cfg, "klavesnice")
         for k in keys:
             if k not in snap and k in base:
                 snap[k] = base[k]
     kc = snap.get("klavesnice")
     if not isinstance(kc, dict):
         kc = snap["klavesnice"] = {}
-    src = lcfg.get("klavesnice") or {}
+    src = cfg.get("klavesnice") or {}
     kc.setdefault("efekt", src.get("efekt", "vlastni"))
     kc.setdefault("jas", src.get("jas", 100))
     return snap
 
 
-def take_fans(a, lcfg):
+def take_fans(p, lcfg):
     """Do predvolby prevzit nastaveni ventilatoru ze stranky LED (klavesnice v predvolbe zustane)."""
-    snap = a.get("nastaveni")
+    snap = p.get("nastaveni")
     if not isinstance(snap, dict):
-        snap = a["nastaveni"] = {}
+        snap = p["nastaveni"] = {}
     snap.update(snapshot(lcfg, "ventilatory"))
 
 
-def overlay(lcfg, preset):
-    """Nastaveni s predvolbou / sadou (novy slovnik, puvodni lcfg se nemeni)."""
-    a = preset or {}
-    snap = a.get("nastaveni") or {}
+def overlay(lcfg, p):
+    """Nastaveni s predvolbou (novy slovnik, puvodni lcfg se nemeni)."""
+    p = p or {}
+    snap = p.get("nastaveni") or {}
     out = dict(lcfg)
-    for part in _parts(a.get("cil")):
+    for part in _parts(p.get("cil", "klavesnice")):
         keys, subs = PARTS[part]
         for k in keys:
             if k in snap:
@@ -142,13 +245,6 @@ def overlay(lcfg, preset):
             if isinstance(snap.get(k), dict):
                 out[k] = dict(out.get(k) or {}, **snap[k])
     return out
-
-
-def load(lcfg, preset):
-    """Predvolbu / sadu nacist do nastaveni (okno - upravit a ulozit znovu)."""
-    new = overlay(lcfg, preset)
-    for k, v in new.items():
-        lcfg[k] = copy.deepcopy(v)
 
 
 def _kb_text(snap):
@@ -162,12 +258,12 @@ def _kb_text(snap):
     return txt + (f" + části: {n}" if n else "")
 
 
-def describe(preset):
+def describe(p):
     """Kratky popis predvolby pro okno."""
-    a = preset or {}
-    snap = a.get("nastaveni") or {}
+    p = p or {}
+    snap = p.get("nastaveni") or {}
     out = []
-    for x in _parts(a.get("cil", "klavesnice")):
+    for x in _parts(p.get("cil", "klavesnice")):
         if not any(k in snap for k in PARTS[x][0]):
             out.append("klávesnice: zatím nenastavená" if x == "klavesnice" else
                        "ventilátory: zatím nepřevzaté ze stránky LED")
@@ -187,72 +283,82 @@ def describe(preset):
     return "; ".join(out)
 
 
-# ----------------------------------------------------------------- sady M1-M3
+def users(lcfg, pid):
+    """Kde je predvolba prirazena: ["M1 G2", ...]."""
+    out = []
+    for m in M_KEYS:
+        for n, a in actions(profile(lcfg, m)).items():
+            if a["akce"] == "predvolba" and a.get("predvolba") == pid:
+                out.append(f"M{m} G{n}")
+    return out
 
-def load_sets():
-    """{cislo M: {"nastaveni", "ulozeno"}} ze sady_klavesnice.json (cte znovu jen po zmene souboru)."""
-    global _sets_cache
+
+# ----------------------------------------------------------------- migrace stareho formatu
+
+def migrate(lcfg):
+    """Stary format -> M1-M3 + spolecne predvolby. M1 = dosavadni nastaveni z okna, M2 / M3 = sady ze
+    sady_klavesnice.json (jinak kopie M1); predvolby ulozene u G-klaves se stanou pojmenovanymi.
+    Vrati True, kdyz neco prevedl."""
+    done = isinstance(lcfg.get("klavesnice_m"), dict) and lcfg["klavesnice_m"]
+    if done or not any(k in lcfg for k in PROFILE_KEYS):
+        for k in PROFILE_KEYS:
+            lcfg.pop(k, None)
+        profiles(lcfg)
+        presets(lcfg)
+        return False
+    seen = {}                                     # json nastaveni -> id (stejna predvolba ve vic sadach)
+
+    def conv(src, label):
+        prof = default_profile()
+        for k in ("efekt_klavesnice", "vrstvy_klavesnice"):
+            if k in src:
+                prof[k] = copy.deepcopy(src[k])
+        kc = src.get("klavesnice") or {}
+        for k in ("efekt", "jas"):
+            if k in kc:
+                prof["klavesnice"][k] = kc[k]
+        g = {}
+        for n, a in (src.get("klavesy_g") or {}).items():
+            if not isinstance(a, dict):
+                continue
+            a = copy.deepcopy(a)
+            snap, cil = a.pop("nastaveni", None), a.pop("cil", None)
+            if a.get("akce") == "predvolba":
+                key = json.dumps([cil, snap], sort_keys=True)
+                if key not in seen:
+                    p = new_preset(lcfg, f"Předvolba z G{n}" + ("" if label == "M1" else f" ({label})"))
+                    p["cil"] = cil or "klavesnice"
+                    p["nastaveni"] = snap or {}
+                    seen[key] = p["id"]
+                a["predvolba"] = seen[key]
+            g[str(n)] = a
+        prof["klavesy_g"] = g
+        return prof
+
+    m1 = conv(lcfg, "M1")
+    sets = {}
     try:
-        mt = os.path.getmtime(SETS_FILE)
-    except OSError:
-        _sets_cache = (None, {})
-        return {}
-    if mt != _sets_cache[0]:
-        try:
-            with open(SETS_FILE, encoding="utf-8") as f:
-                raw = json.load(f)
-            sets = {int(k): v for k, v in raw.items()
-                    if str(k).isdigit() and int(k) in M_KEYS and isinstance(v, dict) and v.get("nastaveni")}
-        except (OSError, ValueError) as e:
-            log.warning("Sady klávesnice (M1–M3) nejde načíst: %s", e)
-            sets = _sets_cache[1]
-        _sets_cache = (mt, sets)
-    return _sets_cache[1]
-
-
-def _write_sets(sets):
-    tmp = SETS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({str(k): v for k, v in sorted(sets.items())}, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, SETS_FILE)
-
-
-def save_set(n, lcfg):
-    """Nastaveni klavesnice z lcfg ulozit do sady Mn."""
-    sets = dict(load_sets())
-    sets[n] = {"nastaveni": snapshot(lcfg, "sada"), "ulozeno": time.strftime("%d. %m. %Y %H:%M")}
-    _write_sets(sets)
-
-
-def delete_set(n):
-    sets = dict(load_sets())
-    if sets.pop(n, None) is not None:
-        _write_sets(sets)
-
-
-def set_preset(s):
-    return {"cil": "sada", "nastaveni": (s or {}).get("nastaveni") or {}}
-
-
-def describe_set(s):
-    snap = (s or {}).get("nastaveni")
-    if not snap:
-        return "prázdná"
-    acts = [f"G{n}" for n in actions(snap)]
-    return (f"klávesnice: {_kb_text(snap)}; jas {(snap.get('klavesnice') or {}).get('jas', 100)} %; "
-            + ("G-klávesy: " + ", ".join(acts) if acts else "G-klávesy bez akcí")
-            + (f" (uloženo {s['ulozeno']})" if s.get("ulozeno") else ""))
+        with open(OLD_SETS_FILE, encoding="utf-8") as f:
+            sets = {str(k): v.get("nastaveni") for k, v in json.load(f).items() if isinstance(v, dict)}
+    except (OSError, ValueError, AttributeError):
+        pass
+    out = {"1": m1}
+    for m in ("2", "3"):
+        out[m] = conv(sets[m], "M" + m) if isinstance(sets.get(m), dict) else copy.deepcopy(m1)
+    lcfg["klavesnice_m"] = out
+    for k in PROFILE_KEYS:
+        lcfg.pop(k, None)
+    return True
 
 
 # ----------------------------------------------------------------- stav
 
 class State:
-    """Co je prave zapnute klavesami G / M (jen v pameti bezici aplikace)."""
+    """Co je prave zapnute klavesami G / M (aktivni M se pamatuje v souboru, zbytek jen v pameti)."""
 
-    def __init__(self):
+    def __init__(self, m=None):
+        self.m = m if m in M_KEYS else load_m()   # aktivni nastaveni klavesnice M1-M3
         self.active = None                        # cislo G-klavesy s aktivni predvolbou
-        self.mset = None                          # aktivni sada M1-M3
-        self.record_until = 0.0                   # MR: ukladani do sady ceka na M1-M3
         self.music = None                         # vizualizer zapnuty / vypnuty G-klavesou (None = jak v okne)
         self.style = None                         # styl vizualizeru vybrany G-klavesou
         self.playlist = None                      # playlist zapnuty / vypnuty G-klavesou
@@ -260,26 +366,25 @@ class State:
 
     # --- nastaveni
     def with_set(self, base):
-        """Nastaveni z okna s aktivni sadou M (klavesnice a akce G-klaves)."""
-        if self.mset is None:
-            return base
-        s = load_sets().get(self.mset)
-        if s is None:
-            self.mset = None                        # sada smazana
-            return base
-        return overlay(base, set_preset(s))
+        """Nastaveni z okna s profilem aktivniho M (podsviceni a akce G-klaves)."""
+        return with_profile(base, self.m)
+
+    def preset(self, cfg):
+        """Aktivni predvolba (slovnik ze seznamu), nebo None."""
+        if self.active is None:
+            return None
+        a = actions(cfg).get(self.active)
+        p = preset_by_id(cfg, a.get("predvolba")) if a is not None and a["akce"] == "predvolba" else None
+        if p is None:
+            self.active = None                      # predvolba zrusena / zmenena
+        return p
 
     def _with_preset(self, cfg):
-        if self.active is None:
-            return cfg
-        a = actions(cfg).get(self.active)
-        if a is None or a["akce"] != "predvolba" or not a.get("nastaveni"):
-            self.active = None                      # predvolba zrusena / zmenena
-            return cfg
-        return overlay(cfg, a)
+        p = self.preset(cfg)
+        return cfg if p is None else overlay(cfg, p)
 
     def apply(self, base):
-        """Nastaveni s tim, co je zapnute klavesami (novy slovnik; bez zmen = base)."""
+        """Nastaveni s tim, co je zapnute klavesami (novy slovnik)."""
         out = self._with_preset(self.with_set(base))
         if self.music is not None or self.style is not None:
             h = dict(out.get("hudba") or {})
@@ -293,10 +398,10 @@ class State:
         return out
 
     def reset_selection(self):
-        """V okne ulozena zmena: predvolba i sada zpet na nastaveni z okna."""
-        if self.active is not None or self.mset is not None:
-            self.active = self.mset = None
-            log.info("Klávesnice: uloženo nové nastavení – zpět na nastavení z okna (předvolba / sada vypnuta).")
+        """V okne ulozena zmena: predvolba zpet na nastaveni M."""
+        if self.active is not None:
+            self.active = None
+            log.info("Klávesnice: uloženo nové nastavení – předvolba vypnuta, platí M%d.", self.m)
 
     # --- stisky
     def press(self, n, base, cur_style=None):
@@ -309,12 +414,13 @@ class State:
             return None
         kind = a["akce"]
         if kind == "predvolba":
-            if self.active == n or not a.get("nastaveni"):
+            p = preset_by_id(cfg, a.get("predvolba"))
+            if self.active == n or p is None:
                 self.active = None
-                log.info("G%d: zpět na nastavení %s.", n, f"sady M{self.mset}" if self.mset else "z okna")
+                log.info("G%d: zpět na nastavení M%d.", n, self.m)
             else:
                 self.active = n
-                log.info("G%d: předvolba – %s.", n, describe(a))
+                log.info("G%d: předvolba „%s“ – %s.", n, preset_name(p), describe(p))
         elif kind == "hudba":
             on = not self.music_on(cfg)
             saved = bool((cfg.get("hudba") or {}).get("zapnuto"))
@@ -342,36 +448,20 @@ class State:
             return ("lcd",)
         return None
 
-    def press_m(self, n, base, current):
-        """Stisk M-klavesy n; current = prave platne nastaveni (apply) - pro ulozeni po MR."""
-        now = time.monotonic()
-        if now < self.record_until:
-            self.record_until = 0.0
-            cfg = self.with_set(base)
-            snap = dict(cfg)                        # podsviceni, jak prave sviti; akce G-klaves ze sady / okna
-            for k in ("efekt_klavesnice", "vrstvy_klavesnice", "klavesnice"):
-                if k in current:
-                    snap[k] = current[k]
-            save_set(n, snap)
-            self.mset, self.active = n, None
-            log.info("M%d: uloženo současné nastavení klávesnice (%s).", n, describe_set(load_sets().get(n)))
+    def press_m(self, n, base=None, current=None):
+        """Stisk M-klavesy n = prepnout na nastaveni klavesnice Mn (stejna M = vypnout predvolbu)."""
+        if n == self.m:
+            if self.active is not None:
+                self.active = None
+                log.info("M%d: předvolba vypnuta – zpět na nastavení M%d.", n, n)
             return
-        if self.mset == n:
-            self.mset = None
-            log.info("M%d: zpět na nastavení z okna.", n)
-        elif load_sets().get(n) is None:
-            log.info("M%d: sada je prázdná – MR a pak M%d do ní uloží současné nastavení.", n, n)
-        else:
-            self.mset, self.active = n, None
-            log.info("M%d: sada – %s.", n, describe_set(load_sets().get(n)))
+        self.m, self.active = n, None
+        save_m(n)
+        log.info("M%d: nastavení klávesnice M%d%s.", n, n,
+                 " – " + describe_profile(profile(base, n)) if base is not None else "")
 
     def press_mr(self):
-        if time.monotonic() < self.record_until:
-            self.record_until = 0.0
-            log.info("MR: ukládání do sady zrušeno.")
-        else:
-            self.record_until = time.monotonic() + RECORD_S
-            log.info("MR: stiskni M1–M3 – uloží se do ní současné nastavení klávesnice.")
+        log.info("MR: nemá přiřazenou funkci.")
 
     # --- stav pro kontrolky
     def music_on(self, cfg):
@@ -384,15 +474,9 @@ class State:
             return self.playlist
         return bool((cfg.get("playlist") or {}).get("zapnuto"))
 
-    def recording(self, now=None):
-        return (time.monotonic() if now is None else now) < self.record_until
-
     def m_leds(self, now=None):
-        """(maska kontrolek M1-M3, kontrolka MR): aktivni sada; pri ukladani (MR) blikaji vsechny M."""
-        now = time.monotonic() if now is None else now
-        if self.recording(now):
-            return (7 if int(now * 3) % 2 else 0), True
-        return (1 << (self.mset - 1) if self.mset else 0), False
+        """(maska kontrolek M1-M3, kontrolka MR): sviti kontrolka aktivniho M."""
+        return 1 << (self.m - 1), False
 
     def leds(self, base, now=None, lcd_on=False):
         """Osvetleni G-klaves {zona: (r, g, b)} (pred jasem) podle nastaveni kazde G-klavesy."""
@@ -416,10 +500,11 @@ class State:
         return out
 
     def busy(self, now=None):
-        """Bezi neco, co chce dalsi snimky (bliknuti, ukladani do sady)?"""
+        """Bezi neco, co chce dalsi snimky (bliknuti)?"""
         now = time.monotonic() if now is None else now
-        return self.recording(now) or any(now - t < FLASH_S for t in self.flash.values())
+        return any(now - t < FLASH_S for t in self.flash.values())
 
-    def status(self):
-        return {"aktivni": self.active, "sada": self.mset, "hudba": self.music, "styl": self.style,
-                "playlist": self.playlist, "uklada": self.recording()}
+    def status(self, base=None):
+        p = self.preset(self.with_set(base)) if base is not None else None
+        return {"m": self.m, "aktivni": self.active, "predvolba": preset_name(p) if p else None,
+                "hudba": self.music, "styl": self.style, "playlist": self.playlist}

@@ -6,13 +6,14 @@
 #     jako F140 / jako deska; parametry efektu, malovani klaves, reakce na stisk, jas
 #   - Casti klavesnice (vrstvy, config["led"]["vrstvy_klavesnice"]): vlastni efekt na vybranych klavesach
 #     pres zaklad; "Upravuji" prepina, ceho se tyka vyber efektu (self.target), klik na klavesu = do casti
-#   - Klavesy G1-G5 (config["led"]["klavesy_g"], klavesy_g.py): akce (predvolba, hudba, styl hudby, playlist,
-#     skladba na LCD) a osvetleni kazde G-klavesy; sady M1-M3 (sady_klavesnice.json - uklada se hned)
-#   - Predvolba G: "Nastavuji" v karte Podsviceni (self.preset) prepne celou kartu (efekt, casti, jas)
-#     na nastaveni predvolby (self.src) - nahled pak ukazuje predvolbu (preview_preset)
+#   - Nastaveni M1-M3 (config["led"]["klavesnice_m"], klavesy_g.py): vyber nahore (self.m) - podsviceni
+#     i klavesy G1-G5 na strance patri k vybranemu M (self.prof)
+#   - Klavesy G1-G5: akce (predvolba ze seznamu, hudba, styl hudby, playlist, skladba na LCD) a osvetleni
+#   - Predvolby (config["led"]["predvolby"], spolecne pro M1-M3): "Upravit klavesnici" prepne kartu
+#     Podsviceni (self.preset = id) na nastaveni predvolby (self.src) - nahled ukazuje predvolbu
 #   - Integrovana pamet: stav (cte se kazde 3 s, kdyz je stranka videt), zaloha. Pamet prepina
 #     vlakno LED samo podle "Ridit podsviceni z aplikace" (klavesnice.Direct).
-# Zmeny se projevi po Ulozit (config["led"]["klavesnice"], ["efekt_klavesnice"]).
+# Zmeny se projevi po Ulozit (config["led"]["klavesnice"], ["klavesnice_m"], ["predvolby"]).
 
 import os
 import random
@@ -53,7 +54,9 @@ class KeyboardEditor:
         self._last = None                         # posledni barvy v nahledu
         self.sel = set()                          # vybrane klavesy (vlastni barvy klaves)
         self.target = None                        # upravovana cast klavesnice (index vrstvy), None = zaklad
-        self.preset = None                        # upravovana predvolba (cislo G-klavesy), None = bezne podsviceni
+        self.preset = None                        # upravovana predvolba (id), None = nastaveni M
+        st = (getattr(app, "lstate", None) or {}).get("klavesy_g") or {}
+        self.m = st.get("m") if st.get("m") in klavesy_g.M_KEYS else klavesy_g.load_m()   # upravovane M1-M3
         self.layer_lbl = None
         self.items = {}
         self.sel_lbl = None
@@ -71,14 +74,14 @@ class KeyboardEditor:
         self.react.grid(row=2, column=0, sticky="ew", pady=(16, 0))
         self.gcard = V.card(body)
         self.gcard.grid(row=3, column=0, sticky="ew", pady=(16, 0))
-        self.mcard = V.card(body)
-        self.mcard.grid(row=4, column=0, sticky="ew", pady=(16, 0))
+        self.pcard = V.card(body)
+        self.pcard.grid(row=4, column=0, sticky="ew", pady=(16, 0))
         self.mem = V.card(body)
         self.mem.grid(row=5, column=0, sticky="ew", pady=(16, 0))
         self._build_top()
         self._build_light()
         self._build_g()
-        self._build_m()
+        self._build_presets()
         self._build_mem()
         self.refresh()
         self._run(self._read_mode)
@@ -93,39 +96,57 @@ class KeyboardEditor:
     def kc(self):
         return self.lcfg.setdefault("klavesnice", dict(KEY_DEFAULT))
 
+    @property
+    def prof(self):
+        """Upravovane nastaveni klavesnice M (profil v config["led"]["klavesnice_m"])."""
+        return klavesy_g.profile(self.lcfg, self.m)
+
     def preset_cfg(self):
-        """Upravovana predvolba G (nastaveni akce), nebo None = bezne podsviceni."""
+        """Upravovana predvolba (ze seznamu), nebo None = nastaveni M."""
         if self.preset is not None:
-            a = self.gcfg.get(str(self.preset))
-            if isinstance(a, dict) and klavesy_g.has_keyboard(a):
-                return a
+            p = klavesy_g.preset_by_id(self.lcfg, self.preset)
+            if p is not None and klavesy_g.has_keyboard(p):
+                return p
         self.preset = None
         return None
 
+    def m_cfg(self, lc=None):
+        """Nastaveni z okna s upravovanym M."""
+        return klavesy_g.with_profile(self.lcfg if lc is None else lc, self.m)
+
     @property
     def src(self):
-        """Co upravuje karta Podsviceni: config["led"], nebo nastaveni predvolby G."""
-        a = self.preset_cfg()
-        return self.lcfg if a is None else klavesy_g.ensure_keyboard(a, self.lcfg)
+        """Co upravuje karta Podsviceni: profil M, nebo nastaveni predvolby."""
+        p = self.preset_cfg()
+        return self.prof if p is None else klavesy_g.ensure_keyboard(p, self.m_cfg())
 
     @property
     def ekc(self):
-        """Efekt a jas klavesnice, ktere karta upravuje (bezne / predvolba)."""
-        return self.kc if self.preset_cfg() is None else self.src["klavesnice"]
+        """Efekt a jas klavesnice, ktere karta upravuje (M / predvolba)."""
+        kc = self.src.get("klavesnice")
+        if not isinstance(kc, dict):
+            kc = self.src["klavesnice"] = {"efekt": "vlastni", "jas": 100}
+        return kc
 
-    def view_cfg(self):
-        """Nastaveni, ktere ukazuje nahled (s upravovanou predvolbou)."""
-        a = self.preset_cfg()
-        return self.lcfg if a is None else klavesy_g.overlay(self.lcfg, a)
+    def view_cfg(self, lc=None):
+        """Nastaveni, ktere ukazuje nahled (upravovane M, pripadne s upravovanou predvolbou)."""
+        cfg = self.m_cfg(lc)
+        p = self.preset_cfg()
+        return cfg if p is None else klavesy_g.overlay(cfg, p)
 
-    def preview_preset(self):
-        """Cislo predvolby pro zivy nahled LED - jen kdyz je stranka Klavesnice videt."""
+    def preview_cfg(self, lc):
+        """Pro zivy nahled LED (editor_led): nastaveni s upravovanym M; predvolba jen, kdyz je stranka
+        Klavesnice videt. Vrati (nastaveni, cislo G-klavesy s predvolbou v tomto M nebo None)."""
         try:
-            if self.preset_cfg() is None or not self.top.winfo_ismapped():
-                return None
+            visible = self.top.winfo_ismapped()
         except tk.TclError:
-            return None
-        return self.preset
+            visible = False
+        p = self.preset_cfg() if visible else None
+        if p is None:
+            return self.m_cfg(lc), None
+        key = next((n for n, a in klavesy_g.actions(self.prof).items()
+                    if a["akce"] == "predvolba" and a.get("predvolba") == p.get("id")), None)
+        return klavesy_g.overlay(self.m_cfg(lc), p), key
 
     @property
     def layers(self):
@@ -175,8 +196,13 @@ class KeyboardEditor:
         V.card_title(f, "Klávesnice Logitech G815").grid(row=0, column=0, sticky="w", padx=20, pady=(14, 2))
         self.status = ttk.Label(f, font=V.FONT_B, wraplength=WRAP, justify="left")
         self.status.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 8))
+        self.mrow = ttk.Frame(f)
+        self.mrow.grid(row=2, column=0, sticky="w", padx=20, pady=(0, 2))
+        self._build_mrow()
+        self.m_lbl = ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left")
+        self.m_lbl.grid(row=3, column=0, sticky="w", padx=20, pady=(0, 8))
         c = self.canvas = tk.Canvas(f, width=KB_W, height=KB_H, bg=V.CARD, highlightthickness=0)
-        c.grid(row=2, column=0, sticky="w", padx=20, pady=(0, 6))
+        c.grid(row=4, column=0, sticky="w", padx=20, pady=(0, 6))
         c.create_rectangle(1, 1, KB_W - 1, KB_H - 1, outline="#262b33", fill="#111418")
         for z, _name, x, y, w, h in R.KEYS:
             x0, y0 = PAD + x * U + 2, PAD + y * U + 2
@@ -185,7 +211,7 @@ class KeyboardEditor:
         self.empty_txt = c.create_text(KB_W / 2, KB_H / 2 + U, fill=V.MUTED, font=V.FONT_B, text="")
         c.tag_bind("key", "<Button-1>", self._on_key)
         self.hint = ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left")
-        self.hint.grid(row=3, column=0, sticky="w", padx=20, pady=(0, 14))
+        self.hint.grid(row=5, column=0, sticky="w", padx=20, pady=(0, 14))
 
     def _on_key(self, _event):
         hit = self.canvas.find_withtag("current")
@@ -274,12 +300,14 @@ class KeyboardEditor:
         if bool(self.kc.get("zapnuto")) != bool(kc.get("zapnuto")):
             text += " – změna řízení se projeví po Uložit"
         g = st.get("klavesy_g") if self.app.running and kc.get("zapnuto") else None
-        if g and (g.get("sada") or g.get("aktivni")):
-            text += (" – teď platí " + self._now_text(g) + " (uložení změn v okně ji vypne, nebo znovu stiskni "
-                     "tu klávesu)")
+        if g and g.get("aktivni"):
+            text += (f" – teď platí předvolba „{g.get('predvolba') or '?'}“ (vypne ji stejná G-klávesa znovu "
+                     "nebo uložení změn v okně)")
         self.status.config(text=text + ".", foreground=color)
         self._g_status(st, saved)
-        pre = f"Náhled ukazuje předvolbu G{self.preset}. " if self.preset_cfg() is not None else ""
+        p = self.preset_cfg()
+        pre = (f"Náhled ukazuje předvolbu „{klavesy_g.preset_name(p)}“. " if p is not None
+               else f"Náhled ukazuje nastavení M{self.m}. ")
         if not self.kc.get("zapnuto"):
             hint = "Náhled ukáže efekt, až zapneš řízení podsvícení z aplikace."
         elif self.layer() is not None:
@@ -297,8 +325,6 @@ class KeyboardEditor:
         if not self.painting():
             self.sel.clear()                      # vyber klaves jen u vlastnich barev klaves
         self._build_light()
-        if self.preset is not None:
-            self._build_g()                       # popis predvolby u G-klavesy
         self._show_sel()
         self.refresh()
 
@@ -310,7 +336,8 @@ class KeyboardEditor:
         kc = self.kc
         pa = self.preset_cfg()
         f.columnconfigure(1, weight=1)
-        V.card_title(f, "Podsvícení" if pa is None else f"Podsvícení – předvolba G{self.preset}").grid(
+        V.card_title(f, f"Podsvícení – nastavení M{self.m}" if pa is None
+                     else f"Předvolba „{klavesy_g.preset_name(pa)}“").grid(
             row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 6))
         on = tk.BooleanVar(value=bool(kc.get("zapnuto")))
 
@@ -369,54 +396,45 @@ class KeyboardEditor:
         self._build_react()
         self._refit()
 
-    # ------------------------------------------------------------ predvolby G (co karta upravuje)
+    # ------------------------------------------------------------ upravovana predvolba (pruh v karte)
     def _preset_row(self, f, row):
-        """Nastavuji: bezne podsviceni / predvolba Gn (radek row, pod nim popis predvolby v row + 1)."""
-        keys = [n for n in klavesy_g.KEYS if klavesy_g.has_keyboard(self.gcfg.get(str(n)))]
-        if not keys:
-            return
-        ttk.Label(f, text="Nastavuji", style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),
-                                                                  pady=4)
-        pv = tk.StringVar(value="" if self.preset_cfg() is None else str(self.preset))
-
-        def on_p():
-            self.preset = int(pv.get()) if pv.get() else None
-            self.target = None
-            self.sel.clear()
-            self._rebuild()
-        V.segmented(f, pv, [("", "běžné podsvícení")] + [(str(n), f"předvolba G{n}") for n in keys],
-                    command=on_p, style="SegSmall.Toolbutton").grid(row=row, column=1, columnspan=2, sticky="w",
-                                                                   pady=4)
-        if self.preset_cfg() is None:
+        """Pruh v karte Podsviceni, kdyz se upravuje predvolba (radek row)."""
+        p = self.preset_cfg()
+        if p is None:
             return
         bf = ttk.Frame(f)
-        bf.grid(row=row + 1, column=0, columnspan=3, sticky="ew", padx=20, pady=(2, 6))
+        bf.grid(row=row, column=0, columnspan=3, sticky="ew", padx=20, pady=(2, 6))
         bf.columnconfigure(0, weight=1)
-        ttk.Label(bf, style="Small.TLabel", wraplength=WRAP - 160, justify="left", foreground=V.ACCENT, text=(
-            f"Takhle bude klávesnice svítit po stisku G{self.preset} (stejná klávesa znovu = zpět). Běžné "
-            "podsvícení ani sady M1–M3 se tím nemění. Náhled ukazuje předvolbu; na klávesnici platí po Uložit.")
+        used = klavesy_g.users(self.lcfg, p.get("id"))
+        ttk.Label(bf, style="Small.TLabel", wraplength=WRAP - 170, justify="left", foreground=V.ACCENT, text=(
+            "Upravuješ předvolbu – takhle bude klávesnice svítit po stisku G-klávesy, která ji má "
+            + (f"({', '.join(used)})" if used else "(zatím žádná – přiřaď ji v kartě Klávesy G1–G5)")
+            + ". Nastavení M1–M3 se tím nemění. Náhled ukazuje předvolbu; na klávesnici platí po Uložit.")
         ).grid(row=0, column=0, sticky="w")
 
-        def copy_base():
-            a = self.preset_cfg()
-            snap = a.get("nastaveni") or {}
+        def copy_m():
+            snap = p.get("nastaveni") or {}
             for k in ("efekt_klavesnice", "vrstvy_klavesnice", "klavesnice"):
                 snap.pop(k, None)
-            klavesy_g.ensure_keyboard(a, self.lcfg)
+            klavesy_g.ensure_keyboard(p, self.m_cfg())
             self.target = None
             self._rebuild()
 
         def done():
             self.preset = self.target = None
             self._rebuild()
-        ttk.Button(bf, text="Zkopírovat běžné", command=copy_base).grid(row=0, column=1, sticky="e", padx=(8, 0))
+            self._build_presets()
+        ttk.Button(bf, text=f"Zkopírovat z M{self.m}", command=copy_m).grid(row=0, column=1, sticky="e",
+                                                                              padx=(8, 0))
         ttk.Button(bf, text="Hotovo", command=done).grid(row=0, column=2, sticky="e", padx=(6, 0))
 
-    def edit_preset(self, n):
-        """Karta Podsviceni na predvolbu Gn (tlacitko Upravit u G-klavesy)."""
-        self.preset, self.target = n, None
+    def edit_preset(self, pid):
+        """Karta Podsviceni na predvolbu pid (tlacitko Upravit)."""
+        self.preset, self.target = pid, None
         self.sel.clear()
         self._rebuild()
+        self._build_g()
+        self._build_presets()
         try:
             self.scroll.canvas.yview_moveto(0)
         except tk.TclError:
@@ -803,30 +821,28 @@ class KeyboardEditor:
                 pass
         self.scroll.after_idle(fit)
 
-    # ------------------------------------------------------------ klavesy G1-G5
+    # ------------------------------------------------------------ klavesy G1-G5 (v nastaveni M)
     @property
     def gcfg(self):
-        g = self.lcfg.get("klavesy_g")
-        if not isinstance(g, dict):
-            g = self.lcfg["klavesy_g"] = {}
-        return g
+        return self.prof["klavesy_g"]
 
     def _build_g(self):
         f = self.gcard
         for w in f.winfo_children():
             w.destroy()
         f.columnconfigure(2, weight=1)
-        V.card_title(f, "Klávesy G1–G5").grid(row=0, column=0, columnspan=4, sticky="w", padx=20, pady=(14, 2))
+        V.card_title(f, f"Klávesy G1–G5 – nastavení M{self.m}").grid(row=0, column=0, columnspan=4, sticky="w",
+                                                                       padx=20, pady=(14, 2))
         self.g_lbl = ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left")
         self.g_lbl.grid(row=1, column=0, columnspan=4, sticky="w", padx=20, pady=(0, 8))
         names = [t for _k, t in klavesy_g.ACTIONS]
-        tnames = [t for _k, t in klavesy_g.TARGETS]
         notes = {"hudba": "vizualizér LED ze Spotify zapne / vypne",
                  "styl": "další styl vizualizéru (vypnutý vizualizér nejdřív zapne)",
                  "pl_dalsi": "playlist LED ventilátorů skočí na další efekt",
                  "pl_predchozi": "playlist LED ventilátorů skočí na předchozí efekt",
                  "playlist": "přepíná playlist LED ventilátorů / jeden efekt",
                  "lcd": "obrazovka Právě hraje (název, obal) na dobu z nastavení LCD, znovu = schovat"}
+        NEW = "+ nová předvolba…"
         row = 2
         for n in klavesy_g.KEYS:
             a = self.gcfg.get(str(n))
@@ -843,44 +859,47 @@ class KeyboardEditor:
                 old = self.gcfg.get(str(n)) if isinstance(self.gcfg.get(str(n)), dict) else {}
                 if k:
                     self.gcfg[str(n)] = dict(old, akce=k)
+                    if k == "predvolba" and klavesy_g.preset_by_id(self.lcfg, old.get("predvolba")) is None:
+                        ps = [p for p in klavesy_g.presets(self.lcfg) if isinstance(p, dict)]
+                        if ps:                          # prvni predvolba ze seznamu
+                            self.gcfg[str(n)]["predvolba"] = ps[0].get("id")
                 else:
                     self.gcfg.pop(str(n), None)
                 self._build_g()
-                self._build_light()
                 self._refit()
             cb.bind("<<ComboboxSelected>>", on_a)
             if kind == "predvolba":
-                tf = ttk.Frame(f)
-                tf.grid(row=row, column=2, columnspan=2, sticky="w", padx=(10, 20), pady=(10, 0))
-                tv = tk.StringVar(value=dict(klavesy_g.TARGETS).get(a.get("cil", "klavesnice"), tnames[0]))
-                tc = ttk.Combobox(tf, textvariable=tv, values=tnames, width=20, state="readonly")
-                tc.pack(side="left")
+                pf = ttk.Frame(f)
+                pf.grid(row=row, column=2, columnspan=2, sticky="w", padx=(10, 20), pady=(10, 0))
+                ps = [p for p in klavesy_g.presets(self.lcfg) if isinstance(p, dict)]
+                cur = klavesy_g.preset_by_id(self.lcfg, a.get("predvolba"))
+                pv = tk.StringVar(value=klavesy_g.preset_name(cur) if cur else "")
+                pc = ttk.Combobox(pf, textvariable=pv, values=[klavesy_g.preset_name(p) for p in ps] + [NEW],
+                                  width=26, state="readonly")
+                pc.pack(side="left")
 
-                def on_t(_e=None, n=n, tv=tv):
-                    a = self.gcfg[str(n)]
-                    a["cil"] = next(k for k, t in klavesy_g.TARGETS if t == tv.get())
-                    if klavesy_g.has_fans(a) and not any(k in (a.get("nastaveni") or {})
-                                                         for k in klavesy_g.PARTS["ventilatory"][0]):
-                        klavesy_g.take_fans(a, self.lcfg)    # zacatek: ventilatory jak jsou ted
+                def on_p(_e=None, n=n, pv=pv):
+                    if pv.get() == NEW:
+                        p = klavesy_g.new_preset(self.lcfg)
+                        self.gcfg[str(n)]["predvolba"] = p["id"]
+                        self.edit_preset(p["id"])
+                        return
+                    p = next((p for p in klavesy_g.presets(self.lcfg)
+                              if isinstance(p, dict) and klavesy_g.preset_name(p) == pv.get()), None)
+                    if p is not None:
+                        self.gcfg[str(n)]["predvolba"] = p.get("id")
                     self._build_g()
-                    self._build_light()
-                tc.bind("<<ComboboxSelected>>", on_t)
-                if klavesy_g.has_keyboard(a):
-                    editing = self.preset_cfg() is a
-                    eb = ttk.Button(tf, text="Upravuje se nahoře" if editing else "Upravit klávesnici",
-                                    command=lambda n=n: self.edit_preset(n))
+                    self._build_presets()
+                pc.bind("<<ComboboxSelected>>", on_p)
+                if cur is not None and klavesy_g.has_keyboard(cur):
+                    eb = ttk.Button(pf, text="Upravit", command=lambda pid=cur.get("id"): self.edit_preset(pid))
                     eb.pack(side="left", padx=(8, 0))
-                    if editing:
+                    if self.preset_cfg() is cur:
                         eb.state(["disabled"])
-                if klavesy_g.has_fans(a):
-                    def fans(n=n):
-                        klavesy_g.take_fans(self.gcfg[str(n)], self.lcfg)
-                        self._build_g()
-                    ttk.Button(tf, text="Převzít ventilátory ze stránky LED", command=fans).pack(
-                        side="left", padx=(6, 0))
                 row += 1
-                ttk.Label(f, style="Small.TLabel", text=klavesy_g.describe(a), wraplength=WRAP - 60,
-                          justify="left").grid(row=row, column=1, columnspan=3, sticky="w", pady=(2, 0))
+                ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 60, justify="left",
+                          text=klavesy_g.describe(cur) if cur else "Vyber předvolbu (seznam předvoleb je níže).").grid(
+                    row=row, column=1, columnspan=3, sticky="w", pady=(2, 0))
             elif kind in notes:
                 ttk.Label(f, style="Small.TLabel", text=notes[kind], wraplength=380, justify="left").grid(
                     row=row, column=2, columnspan=2, sticky="w", padx=(10, 20), pady=(10, 0))
@@ -891,14 +910,12 @@ class KeyboardEditor:
                 self._g_light(lf, self.gcfg[str(n)], kind in klavesy_g.TOGGLES)
                 row += 1
         ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
-            "Předvolba = dočasně jiné podsvícení: „Upravit klávesnici“ přepne kartu Podsvícení nahoře na "
-            "předvolbu (efekt, části, jas – náhled ji ukazuje), ventilátory se převezmou tak, jak jsou nastavené na "
-            "stránce LED. Stisk G-klávesy přepne na předvolbu, stejná G-klávesa znovu vrátí předchozí (běžné "
-            "nebo sadu M). Po startu aplikace a po uložení změn v okně platí nastavení z okna. Osvětlení: "
-            "kontrolka = barva podle toho, jestli je "
-            "funkce zapnutá; podle efektu = klávesa svítí jako ostatní. Platí po Uložit. G1–G5 a M1–M3 ovládá "
-            "aplikace, dokud řídí podsvícení – v G HUB je nech bez přiřazení nebo s nepoužívanou klávesou "
-            "(F20–F24).")).grid(row=row, column=0, columnspan=4, sticky="w", padx=20, pady=(12, 16))
+            f"Akce a osvětlení G1–G5 patří k nastavení M{self.m} – v každém M můžou být jiné. Předvolba = "
+            "dočasně jiné podsvícení ze seznamu předvoleb; stejná G-klávesa znovu vrátí nastavení M. Po startu "
+            "aplikace a po uložení změn v okně platí nastavení M bez předvolby. Osvětlení: kontrolka = barva podle "
+            "toho, jestli je funkce zapnutá; podle efektu = klávesa svítí jako ostatní. Platí po Uložit. G1–G5 a "
+            "M1–M3 ovládá aplikace, dokud řídí podsvícení – v G HUB je nech bez přiřazení.")).grid(
+            row=row, column=0, columnspan=4, sticky="w", padx=20, pady=(12, 16))
 
     def _g_light(self, f, a, toggle):
         """Osvetleni G-klavesy: kontrolka / podle efektu, barvy zapnuto / vypnuto, bliknuti pri stisku."""
@@ -946,73 +963,56 @@ class KeyboardEditor:
         if g is None:
             text = "Klávesy G a M začnou fungovat, až aplikace převezme klávesnici."
         else:
-            text = "Teď: " + self._now_text(g) + "."
-        if (saved.get("klavesy_g") or {}) != self.gcfg:
-            text += " Změny G-kláves se projeví po Uložit."
+            text = "Na klávesnici teď: " + self._now_text(g) + "."
+        if saved.get("klavesnice_m") != self.lcfg.get("klavesnice_m") or \
+                saved.get("predvolby") != self.lcfg.get("predvolby"):
+            text += " Změny klávesnice se projeví po Uložit."
         lbl.config(text=text)
         self._m_status(g)
 
     def _now_text(self, g):
-        on = []
-        if g.get("sada"):
-            on.append(f"sada M{g['sada']}")
+        on = [f"M{g.get('m') or 1}"]
         if g.get("aktivni"):
-            on.append(f"předvolba G{g['aktivni']}")
+            on.append(f"předvolba „{g.get('predvolba') or '?'}“ (G{g['aktivni']})")
         if g.get("hudba") is not None:
             on.append("hudba " + ("zapnutá" if g["hudba"] else "vypnutá"))
         if g.get("styl"):
             on.append("styl hudby: " + fx_style(g["styl"]))
         if g.get("playlist") is not None:
             on.append("playlist " + ("zapnutý" if g["playlist"] else "vypnutý"))
-        if g.get("uklada"):
-            on.append("MR – čeká na M1–M3")
-        return ", ".join(on) if on else "nastavení z okna"
+        return ", ".join(on)
 
-    # ------------------------------------------------------------ sady M1-M3
-    def _build_m(self):
-        f = self.mcard
+    # ------------------------------------------------------------ nastaveni M1-M3 (nahore)
+    def _build_mrow(self):
+        f = self.mrow
         for w in f.winfo_children():
             w.destroy()
-        f.columnconfigure(1, weight=1)
-        V.card_title(f, "Sady M1–M3").grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 2))
-        self.m_lbl = ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left")
-        self.m_lbl.grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 8))
-        sets = klavesy_g.load_sets()
-        self._m_seen = dict(sets)
-        row = 2
-        for n in klavesy_g.M_KEYS:
-            s_ = sets.get(n)
-            ttk.Label(f, text=f"M{n}", style="Bold.TLabel").grid(row=row, column=0, sticky="nw", padx=(20, 10),
-                                                                 pady=(8, 0))
-            ttk.Label(f, text=klavesy_g.describe_set(s_), wraplength=430, justify="left").grid(
-                row=row, column=1, sticky="w", pady=(8, 0))
-            bf = ttk.Frame(f)
-            bf.grid(row=row, column=2, sticky="e", padx=(10, 20), pady=(8, 0))
+        ttk.Label(f, text="Nastavení", style="Muted.TLabel").pack(side="left", padx=(0, 10))
+        mv = tk.StringVar(value=str(self.m))
 
-            def store(n=n):
-                klavesy_g.save_set(n, self.lcfg)
-                self._build_m()
+        def on_m():
+            self.set_m(int(mv.get()))
+        V.segmented(f, mv, [(str(m), f"M{m}") for m in klavesy_g.M_KEYS], command=on_m).pack(side="left")
+        others = [m for m in klavesy_g.M_KEYS if m != self.m]
+        ttk.Label(f, text=f"Zkopírovat M{self.m} do", style="Muted.TLabel").pack(side="left", padx=(18, 6))
+        for m in others:
+            def cp(m=m):
+                klavesy_g.copy_profile(self.lcfg, self.m, m)
+                self.m_msg.config(text=f"M{self.m} zkopírováno do M{m} (platí po Uložit).")
+            ttk.Button(f, text=f"M{m}", command=cp, width=4).pack(side="left", padx=(0, 4))
+        self.m_msg = ttk.Label(f, style="Small.TLabel")
+        self.m_msg.pack(side="left", padx=(10, 0))
 
-            def load(n=n):
-                klavesy_g.load(self.lcfg, klavesy_g.set_preset(klavesy_g.load_sets().get(n)))
-                self.app.reload_with(self.app.cfg)
-
-            def delete(n=n):
-                klavesy_g.delete_set(n)
-                self._build_m()
-            ttk.Button(bf, text="Uložit současné", command=store).pack(side="left")
-            for text, fn in (("Načíst do okna", load), ("Smazat", delete)):
-                b = ttk.Button(bf, text=text, command=fn)
-                b.pack(side="left", padx=(6, 0))
-                if s_ is None:
-                    b.state(["disabled"])
-            row += 1
-        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
-            "Sada = celé nastavení klávesnice: efekt, části klávesnice, jas a akce i osvětlení G1–G5. "
-            "M1 vyvolá sadu, stejná M znovu vrátí nastavení z okna (svítí kontrolka aktivní M). Uložení přímo "
-            "z klávesnice: MR a pak M1–M3 do 10 s uloží, jak klávesnice právě svítí (MR znovu = zrušit; při "
-            "ukládání blikají kontrolky M). „Uložit současné“ tady ukládá nastavení z okna hned, bez Uložit.")
-        ).grid(row=row, column=0, columnspan=3, sticky="w", padx=20, pady=(12, 16))
+    def set_m(self, m):
+        """Upravovat nastaveni klavesnice Mm (vse na strance pod tim)."""
+        self.m, self.preset, self.target = m, None, None
+        self.sel.clear()
+        self._build_mrow()
+        self._build_light()
+        self._build_g()
+        self._build_presets()
+        self._show_sel()
+        self.refresh()
 
     def _m_status(self, g):
         lbl = getattr(self, "m_lbl", None)
@@ -1021,16 +1021,89 @@ class KeyboardEditor:
                 return
         except tk.TclError:
             return
-        if klavesy_g.load_sets() != getattr(self, "_m_seen", None):
-            self._build_m()                       # sadu ulozila bezici aplikace (MR + M)
-            self._refit()
-            return
         if g is None:
             lbl.config(text="")
-        elif g.get("uklada"):
-            lbl.config(text="Ukládání (MR): stiskni M1, M2 nebo M3.")
         else:
-            lbl.config(text=f"Teď: sada M{g['sada']}." if g.get("sada") else "Teď: nastavení z okna.")
+            act = g.get("m") or 1
+            lbl.config(text=(f"Na klávesnici je teď M{act} (přepni klávesou M1–M3)." if act != self.m else
+                             f"M{act} je na klávesnici právě aktivní."))
+
+    # ------------------------------------------------------------ predvolby (spolecny seznam)
+    def _build_presets(self):
+        f = self.pcard
+        for w in f.winfo_children():
+            w.destroy()
+        f.columnconfigure(1, weight=1)
+        V.card_title(f, "Předvolby").grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Společné pro M1–M3 – v každém M ji můžeš dát na kteroukoli G-klávesu (akce „předvolba“). Změna "
+            "předvolby platí všude, kde je přiřazená.")).grid(row=1, column=0, columnspan=3, sticky="w", padx=20,
+                                                              pady=(0, 8))
+        tnames = [t for _k, t in klavesy_g.TARGETS]
+        row = 2
+        ps = klavesy_g.presets(self.lcfg)
+        for i, p in enumerate(ps):
+            if not isinstance(p, dict):
+                continue
+            nv = tk.StringVar(value=klavesy_g.preset_name(p))
+            e = ttk.Entry(f, textvariable=nv, width=26)
+            e.grid(row=row, column=0, sticky="w", padx=(20, 10), pady=(10, 0))
+
+            def on_name(*_a, p=p, nv=nv):
+                p["nazev"] = nv.get().strip() or f"Předvolba {p.get('id')}"
+            nv.trace_add("write", on_name)
+            e.bind("<Return>", lambda _e: (self._build_g(), self._build_light()))
+            e.bind("<FocusOut>", lambda _e: self._build_g())
+            bf = ttk.Frame(f)
+            bf.grid(row=row, column=1, columnspan=2, sticky="w", pady=(10, 0))
+            tv = tk.StringVar(value=dict(klavesy_g.TARGETS).get(p.get("cil", "klavesnice"), tnames[0]))
+            tc = ttk.Combobox(bf, textvariable=tv, values=tnames, width=17, state="readonly")
+            tc.pack(side="left")
+
+            def on_t(_e=None, p=p, tv=tv):
+                p["cil"] = next(k for k, t in klavesy_g.TARGETS if t == tv.get())
+                if klavesy_g.has_fans(p) and not any(k in (p.get("nastaveni") or {})
+                                                     for k in klavesy_g.PARTS["ventilatory"][0]):
+                    klavesy_g.take_fans(p, self.lcfg)        # zacatek: ventilatory jak jsou ted
+                self._build_presets()
+                self._build_g()
+                self._build_light()
+            tc.bind("<<ComboboxSelected>>", on_t)
+            if klavesy_g.has_keyboard(p):
+                eb = ttk.Button(bf, text="Upravit klávesnici", command=lambda pid=p.get("id"): self.edit_preset(pid))
+                eb.pack(side="left", padx=(8, 0))
+                if self.preset_cfg() is p:
+                    eb.state(["disabled"])
+            if klavesy_g.has_fans(p):
+                def fans(p=p):
+                    klavesy_g.take_fans(p, self.lcfg)
+                    self._build_presets()
+                ttk.Button(bf, text="Převzít ventilátory", command=fans).pack(side="left", padx=(6, 0))
+
+            def delete(i=i, p=p):
+                if self.preset == p.get("id"):
+                    self.preset = None
+                del klavesy_g.presets(self.lcfg)[i]
+                self._build_presets()
+                self._build_g()
+                self._build_light()
+            ttk.Button(bf, text="Smazat", command=delete).pack(side="left", padx=(6, 0))
+            row += 1
+            used = klavesy_g.users(self.lcfg, p.get("id"))
+            ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 40, justify="left", text=(
+                klavesy_g.describe(p) + " · " + ("přiřazená: " + ", ".join(used) if used else "zatím nepřiřazená"))
+            ).grid(row=row, column=0, columnspan=3, sticky="w", padx=(20, 20), pady=(2, 0))
+            row += 1
+
+        def add():
+            p = klavesy_g.new_preset(self.lcfg)
+            self.edit_preset(p["id"])
+        ttk.Button(f, text="+ Nová předvolba", command=add).grid(row=row, column=0, sticky="w", padx=20,
+                                                                  pady=(12, 0))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "„Upravit klávesnici“ přepne kartu Podsvícení nahoře na předvolbu (efekt, části, jas – náhled ji "
+            "ukazuje). Ventilátory se do předvolby převezmou tak, jak jsou teď nastavené na stránce LED.")).grid(
+            row=row + 1, column=0, columnspan=3, sticky="w", padx=20, pady=(8, 16))
 
     # ------------------------------------------------------------ integrovana pamet
     def _build_mem(self):

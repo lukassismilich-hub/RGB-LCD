@@ -7,6 +7,7 @@ import os
 import shutil
 
 import hudba
+import klavesy_g
 import led
 import program_ikona
 import prvky
@@ -169,6 +170,8 @@ def load():
             lc[group].setdefault(ch, json.loads(json.dumps(v)))
     for k in led.EXTRAS:                                 # omylem zapsane natoceni klavesnice/grafiky
         lc["argb"].pop(k, None)
+    if klavesy_g.migrate(lc):                           # klavesnice: jedno nastaveni + sady -> M1-M3
+        log.info("Klávesnice: nastavení převedeno na M1–M3 a pojmenované předvolby.")
     for scr in cfg["obrazovky"]:                        # stare jednobarevne bary -> prechod od/do
         for n in ("1", "2"):
             if "barva" + n in scr:

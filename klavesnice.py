@@ -28,6 +28,8 @@ SWID = 0x0A
 SWID_UI = 0x0B
 FEATURE_ONBOARD = 0x8100
 FEATURE_PERKEY = 0x8081
+ERR_BUSY = 8                                 # chyba HID++ 2.0: zarizeni je zaneprazdnene
+BUSY_TRIES = 20                              # kolikrat pri zaneprazdneni pockat a poslat znovu (celkem ~1 s)
 CHECK_S = 5                                  # jak casto overit, ze je pamet porad vypnuta
 FOREIGN_S = 3                                # cizi podsviceni (G HUB) videne za posledni 3 s = konflikt
 GHUB_BUSY = ("G HUB řídí podsvícení klávesnice sám (má u G815 vypnutou integrovanou paměť) a přepisoval by "
@@ -71,15 +73,19 @@ class G815:
     def __exit__(self, *exc):
         self.close()
 
-    def request(self, idx, func, params=(), timeout=0.3, tries=3):
+    def request(self, idx, func, params=(), timeout=0.3, tries=3, busy_tries=BUSY_TRIES):
         """Poslat prikaz a pockat na odpoved se stejnou funkci a nasim swid (odpoved trva ~2,3 ms).
         Klavesnice nesnese vic prikazu najednou (odpovedi se ztraceji) - vzdy jen jeden a cekat.
         Obcas odpoved neprijde (videno pri animaci) - prikaz se posle znovu (nastaveni barev
-        a rezimu jde poslat dvakrat bez skody)."""
+        a rezimu jde poslat dvakrat bez skody). Chyba HID++ 8 = klavesnice je zaneprazdnena
+        (videno hned po vypnuti pameti a pri stridani efektu, 9. 11. 2026) - chvili pockat a poslat znovu."""
         fs = (func << 4) | self.swid
         msg = [0x11, 0xFF, idx, fs] + list(params) + [0] * (16 - len(params))
+        busy = 0
         with _lock:
-            for _ in range(tries):
+            attempt = 0
+            while attempt < tries:
+                attempt += 1
                 while True:                        # zahodit stare zpravy (i od G HUB)
                     r = self.h.read(64)
                     if not r:
@@ -99,7 +105,13 @@ class G815:
                         if r[2] == idx and r[3] == fs:
                             return r[4:20]
                         if r[2] == 0xFF and r[3] == idx and r[4] == fs:
-                            raise HidppError(f"klávesnice odmítla příkaz (chyba HID++ {r[5]})")
+                            if r[5] == ERR_BUSY and busy < busy_tries:
+                                busy += 1
+                                attempt -= 1               # zaneprazdneni se nepocita mezi pokusy
+                                time.sleep(0.005 * busy)
+                                break
+                            raise HidppError(f"klávesnice odmítla příkaz (chyba HID++ {r[5]}"
+                                             f"{' – zaneprázdněná' if r[5] == ERR_BUSY else ''})")
         raise HidppError("klávesnice neodpovídá")
 
     def _note(self, r):

@@ -590,8 +590,9 @@ class Session:
     def _kb_error(self, e):
         """Chyba klavesnice: kdy to zkusit znovu (nenalezena 2 s, jinak 10 / 30 s - klavesnice.retry_after)."""
         import klavesnice
-        self.errors["klavesnice"] = str(e)
-        self.kb_retry_at = time.monotonic() + klavesnice.retry_after(e)
+        secs, text = klavesnice.retry_after(e)
+        self.errors["klavesnice"] = text
+        self.kb_retry_at = time.monotonic() + secs
 
     def retry_keyboard(self, lcfg):
         """Klavesnici zkusit znovu, kdyz uz je cas (vlastni casovani - ne po RETRY_S jako radice)."""
@@ -671,7 +672,7 @@ class Session:
             if which == "klavesnice":
                 self._kb_error(e)
                 secs = round(self.kb_retry_at - time.monotonic())
-            log.warning("LED: %s – %s, zkusím znovu za %d s.", self.NAMES[which], e, secs)
+            log.warning("LED: %s – %s, zkusím znovu za %d s.", self.NAMES[which], self.errors[which], secs)
             return
         self._drop_dev(getattr(self, which))
         setattr(self, which, None)

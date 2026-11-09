@@ -53,15 +53,28 @@ class GhubBusy(HidppError):
     """Podsviceni ridi G HUB sam (ma u klavesnice vypnutou pamet)."""
 
 
+def present():
+    """Je klavesnice pripojena? (hledani ~0,3 ms bez klavesnice, ~5 ms s ni)"""
+    try:
+        import hid
+        return any(d["usage_page"] == 0xFF43 and d["usage"] == 0x602 for d in hid.enumerate(VID, PID))
+    except Exception:
+        return True
+
+
 def retry_after(e):
-    """Za kolik sekund zkusit klavesnici znovu po chybe e: nenalezena 2 s (nic se neprepina),
-    G HUB ridi podsviceni 30 s (kazdy pokus pul sekundy posloucha), jinak 10 s (at klavesnice
-    neblika mezi pameti a aplikaci)."""
-    if isinstance(e, NotFound):
-        return 2
+    """(za kolik sekund zkusit klavesnici znovu, popis chyby cesky) po chybe e: nenalezena / odpojena
+    2 s (nic se neprepina - po pripojeni naskoci hned), G HUB ridi podsviceni 30 s (kazdy pokus pul
+    sekundy posloucha), jinak 10 s (at klavesnice neblika mezi pameti a aplikaci).
+    Odpojeni za behu hidapi hlasi jako "read error" / "write error" - proto se overi, ze klavesnice je."""
     if isinstance(e, GhubBusy):
-        return 30
-    return 10
+        return 30, str(e)
+    if isinstance(e, NotFound):
+        return 2, str(e)
+    if not present():
+        return 2, f"{NAME} odpojena"
+    text = {"read error": "chyba čtení z klávesnice", "write error": "chyba zápisu do klávesnice"}.get(str(e), str(e))
+    return 10, text
 
 
 class G815:

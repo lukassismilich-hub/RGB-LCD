@@ -110,6 +110,7 @@ Uživatel preferuje softwarové řešení, žádné hardwarové úpravy.
 2. ~~Automatické spuštění po startu Windows~~ – hotovo (`autostart_zapnout.bat`). Bez ikony v liště jde aplikaci ukončit jen přes `ukoncit.bat` (zabití ve Správci úloh přeskočí zálohu chlazení!).
 3. **Ikona v systémové liště.**
 4. Klávesnice G815: synchronizace s ventilátory („jako F140 / deska“) – 9. 11. 2026 uživatel odložil, volba je v okně skrytá a `led.kb_own` vrací vždy True (kód jedné barvy v `render` zůstal). ~~Přepínání efektů klávesami G1–G5, nastavení M1–M3 a předvolby~~ – hotovo (`klavesy_g.py`).
+6. Klávesnice G815: zapsat rozložení po klávesách do paměti (efekt 0x0C) – frameEnd s uložením nefunguje (6 pokusů 9. 11. 2026); další krok záznam USB při ukládání z G HUB: `usb_zaznam_start.bat` / `usb_zaznam_stop.bat` (jako správce, logman, bez instalace), pak rozbor `usb_zaznam.etl`.
 5. ~~Klávesnice G815: efekty jen na část kláves~~ – hotovo (části klávesnice, `vrstvy_klavesnice`).
 
 ## Pracovní postup

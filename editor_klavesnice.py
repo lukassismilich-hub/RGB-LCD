@@ -53,6 +53,23 @@ def fx_style(styl):
     return led_efekty.MUSIC_STYLES.get(styl, styl)
 
 
+class _Lazy(dict):
+    """Navrh, ktery se pri prvni zmene (e[k] = v) ulozi do nastaveni (attach)."""
+
+    def __init__(self, data, attach):
+        super().__init__(data)
+        self._attach = attach
+        self._target = None                        # ulozena kopie (obycejny slovnik v nastaveni)
+
+    def __setitem__(self, k, v):
+        super().__setitem__(k, v)
+        if self._target is None:
+            self._target = dict(self)
+            self._attach(self._target)
+        else:
+            self._target[k] = v
+
+
 class KeyboardEditor:
     def __init__(self, parent, app):
         self.app = app
@@ -1224,6 +1241,7 @@ class KeyboardEditor:
         self._build_light()
         self._build_g()
         self._build_presets()
+        self._build_mem_m()
         self._show_sel()
         self.refresh()
 
@@ -1335,7 +1353,137 @@ class KeyboardEditor:
             "uspání PC nebo vypnutí řízení ji zase zapne – klávesnice pak svítí podle profilu v paměti. "
             "V G HUB nech u klávesnice paměť zapnutou (jinak G HUB barvy přepisuje). "
             "Záloha jen čte obsah paměti do složky zalohy.")).grid(row=3, column=0, columnspan=3, sticky="w",
-                                                                   padx=20, pady=(4, 16))
+                                                                   padx=20, pady=(4, 10))
+        self.mem_m = ttk.Frame(f)
+        self.mem_m.grid(row=4, column=0, columnspan=3, sticky="ew", padx=20, pady=(0, 16))
+        self._build_mem_m()
+        self._run(self._read_mem_lights)
+
+    # ------------------------------------------------------------ podsviceni v pameti (bez aplikace)
+    def mem_cfg(self, m=None):
+        """Co se nahraje do pameti pro Mm: {"klavesy": efekt ({} = podle M), "logo": efekt / "jako"}."""
+        return klavesy_g.profile(self.lcfg, self.m if m is None else m)["pamet"]
+
+    def mem_lights(self, m):
+        import klavesnice_pamet as P
+        v = self.mem_cfg(m)
+        keys = v["klavesy"] or P.suggest(klavesy_g.profile(self.lcfg, m))[0]
+        logo = keys if v.get("logo", "jako") == "jako" else v["logo"]
+        return dict(keys), dict(logo)
+
+    def _build_mem_m(self):
+        import klavesnice_pamet as P
+        f = self.mem_m
+        for w in f.winfo_children():
+            w.destroy()
+        f.columnconfigure(1, weight=1)
+        v = self.mem_cfg()
+        auto = not v["klavesy"]
+        if auto:                                  # navrh podle M; prvni zmena ho ulozi do nastaveni M
+            def attach(d):
+                v["klavesy"] = d
+            e = _Lazy(P.suggest(klavesy_g.profile(self.lcfg, self.m))[0], attach)
+        else:
+            e = v["klavesy"]
+        ttk.Separator(f).grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+        ttk.Label(f, text=f"Bez aplikace – nastavení M{self.m} v paměti klávesnice", style="Bold.TLabel").grid(
+            row=1, column=0, columnspan=3, sticky="w")
+        cur = (getattr(self, "_mem_lights", None) or {}).get(self.m)
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            (f"V paměti teď (profil {self.m}): klávesy {P.describe(cur[0])}, logo {P.describe(cur[1])}. "
+             if cur else "Co je v paměti teď, se načítá… ")
+            + "Paměť umí jen vestavěné efekty – barvy jednotlivých kláves, části a efekty aplikace se uložit "
+              "nedají. Klávesnice tak svítí, když aplikace neběží (před přihlášením, po ukončení).")).grid(
+            row=2, column=0, columnspan=3, sticky="w", pady=(2, 6))
+
+        def rebuild():
+            self._build_mem_m()
+            self._refit()
+        self._label(f, 3, "Klávesy")
+        tv = tk.StringVar(value=e.get("typ", "cyklus"))
+
+        def on_t():
+            e["typ"] = tv.get()
+            rebuild()
+        V.segmented(f, tv, P.TYPES, command=on_t, style="SegSmall.Toolbutton").grid(row=3, column=1, sticky="w",
+                                                                                   pady=4)
+        r = 4
+        if e.get("typ") in ("barva", "dychani"):
+            self._label(f, r, "Barva")
+            cf = ttk.Frame(f)
+            cf.grid(row=r, column=1, sticky="w", pady=4)
+
+            def pick():
+                c = colorchooser.askcolor(color=e.get("barva", "#ffffff"), parent=self.mem)[1]
+                if c:
+                    e["barva"] = c
+                    V.set_swatch(sw, c)
+            sw = V.swatch(cf, e.get("barva", "#ffffff"), pick)
+            sw.pack(side="left")
+            r += 1
+        if e.get("typ") in ("dychani", "cyklus"):
+            e.setdefault("perioda_s", 5.0)
+            self._slider(f, r, "Délka cyklu", e, "perioda_s", 1.0, 20.0, 0.5, "{:.1f} s")
+            r += 1
+        if e.get("typ") != "vypnuto":
+            e.setdefault("jas", 100)
+            self._slider(f, r, "Jas", e, "jas", 10, 100, 5, "{:.0f} %")
+            r += 1
+        self._label(f, r, "Logo")
+        lf = ttk.Frame(f)
+        lf.grid(row=r, column=1, sticky="w", pady=4)
+        logo = v.get("logo", "jako")
+        lv = tk.StringVar(value="jako" if logo == "jako" else (logo.get("typ") if isinstance(logo, dict) else "jako"))
+
+        def on_l():
+            if lv.get() == "jako":
+                v["logo"] = "jako"
+            elif lv.get() == "vypnuto":
+                v["logo"] = {"typ": "vypnuto"}
+            else:
+                v["logo"] = {"typ": "barva", "barva": e.get("barva", "#ffffff"), "jas": 100}
+            rebuild()
+        V.segmented(lf, lv, [("jako", "jako klávesy"), ("vypnuto", "vypnuto"), ("barva", "jedna barva")],
+                    command=on_l, style="SegSmall.Toolbutton").pack(side="left")
+        if isinstance(logo, dict) and logo.get("typ") == "barva":
+            def pick_l():
+                c = colorchooser.askcolor(color=logo.get("barva", "#ffffff"), parent=self.mem)[1]
+                if c:
+                    logo["barva"] = c
+                    V.set_swatch(lsw, c)
+            lsw = V.swatch(lf, logo.get("barva", "#ffffff"), pick_l)
+            lsw.pack(side="left", padx=(10, 0))
+        r += 1
+        bf = ttk.Frame(f)
+        bf.grid(row=r, column=0, columnspan=3, sticky="w", pady=(8, 0))
+
+        def suggest():
+            v["klavesy"], v["logo"] = {}, "jako"
+            rebuild()
+        sb = ttk.Button(bf, text=f"Podle efektu M{self.m}", command=suggest)
+        sb.pack(side="left")
+        if auto:
+            sb.state(["disabled"])
+        ttk.Button(bf, text="Nahrát M1–M3 do paměti klávesnice",
+                   command=lambda: self._run(self._write_mem)).pack(side="left", padx=(6, 0))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            ("Teď navrženo automaticky podle efektu M (změní se s ním); po první úpravě zůstane, jak ho "
+             "nastavíš. " if auto else "")
+            + "Nahrání zapíše všechna tři M (každé svoje nastavení odsud) hned, bez Uložit; předtím udělá zálohu "
+            "celé paměti a po zápisu ji přečte a porovná. Nastavení odsud se do config.json uloží až po Uložit.")
+        ).grid(row=r + 1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+    def _read_mem_lights(self):
+        import klavesnice_pamet as P
+        self._mem_lights = P.read_lights()
+        self._mode = __import__("klavesnice").get_mode()
+        return None
+
+    def _write_mem(self):
+        import klavesnice_pamet as P
+        path = P.write_lights({m: self.mem_lights(m) for m in klavesy_g.M_KEYS})
+        self._mem_lights = P.read_lights()
+        return f"Nahráno do paměti klávesnice (M1–M3), záloha před zápisem: zalohy\\{os.path.basename(path)}"
 
     def _run(self, fn):
         """Prace s klavesnici ve vlakne (HID muze chvili trvat); vysledek ukaze _poll."""
@@ -1368,6 +1516,10 @@ class KeyboardEditor:
         elif job.get("zprava"):
             self.msg.config(text=job["zprava"], foreground=V.OK)
         self._show_mode()
+        if getattr(self, "_mem_shown", None) != getattr(self, "_mem_lights", None):
+            self._mem_shown = getattr(self, "_mem_lights", None)
+            self._build_mem_m()                   # co je v pameti (po nacteni / zapisu)
+            self._refit()
 
     def _tick(self):
         """Stav pameti obcas precist znovu (prepina ji vlakno LED v bezici aplikaci)."""

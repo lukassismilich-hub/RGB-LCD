@@ -83,6 +83,12 @@ def profiles(lcfg):
             kc = prof["klavesnice"] = {}
         kc.setdefault("efekt", "vlastni")
         kc.setdefault("jas", 100)
+        pm = prof.get("pamet")                      # podsviceni v pameti klavesnice (klavesnice_pamet.py)
+        if not isinstance(pm, dict):
+            pm = prof["pamet"] = {}
+        if not isinstance(pm.get("klavesy"), dict):
+            pm["klavesy"] = {}                      # {} = automaticky podle efektu M (suggest)
+        pm.setdefault("logo", "jako")
     return p
 
 

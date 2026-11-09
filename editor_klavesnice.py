@@ -4,6 +4,9 @@
 #     = vyber klaves (vlastni barvy klaves), jinak ukazkovy stisk (reakce na stisk).
 #   - Efekt: vlastni plosny efekt klavesnice (klavesnice_efekty, skupiny GROUPS) nebo jedna barva
 #     jako F140 / jako deska; parametry efektu, malovani klaves, reakce na stisk, jas
+#   - Casti klavesnice (vrstvy, config["led"]["vrstvy_klavesnice"]): vlastni efekt na vybranych klavesach
+#     pres zaklad; "Upravuji" prepina, ceho se tyka vyber efektu (self.target), klik na klavesu = do casti
+#   - Klavesy G1-G5 (config["led"]["klavesy_g"], klavesy_g.py): predvolba efektu / hudba / dalsi styl hudby
 #   - Integrovana pamet: stav (cte se kazde 3 s, kdyz je stranka videt), zaloha. Pamet prepina
 #     vlakno LED samo podle "Ridit podsviceni z aplikace" (klavesnice.Direct).
 # Zmeny se projevi po Ulozit (config["led"]["klavesnice"], ["efekt_klavesnice"]).
@@ -16,6 +19,8 @@ from tkinter import colorchooser, ttk
 
 import klavesnice_efekty as kbfx
 import klavesnice_rozlozeni as R
+import klavesy_g
+import led
 import vzhled as V
 
 POLL_MS = 3000               # stav integrovane pameti (prepina ji vlakno LED v bezici aplikaci)
@@ -32,6 +37,11 @@ WIDTH_LABEL = {"vlna": "Délka vlny", "kruh": "Šířka kruhů", "toceni": "Zkro
 KEEP = ("reakce", "reakce_barva", "reakce_doba", "klavesy", "zaklad")   # pri zmene efektu zustava
 
 
+def fx_style(styl):
+    import led_efekty
+    return led_efekty.MUSIC_STYLES.get(styl, styl)
+
+
 class KeyboardEditor:
     def __init__(self, parent, app):
         self.app = app
@@ -39,6 +49,8 @@ class KeyboardEditor:
         self._mode = None                         # rezim pameti klavesnice (klavesnice.MODE_*)
         self._last = None                         # posledni barvy v nahledu
         self.sel = set()                          # vybrane klavesy (vlastni barvy klaves)
+        self.target = None                        # upravovana cast klavesnice (index vrstvy), None = zaklad
+        self.layer_lbl = None
         self.items = {}
         self.sel_lbl = None
         parent.columnconfigure(0, weight=1)
@@ -53,10 +65,13 @@ class KeyboardEditor:
         self.light.grid(row=1, column=0, sticky="ew", pady=(16, 0))
         self.react = V.card(body)
         self.react.grid(row=2, column=0, sticky="ew", pady=(16, 0))
+        self.gcard = V.card(body)
+        self.gcard.grid(row=3, column=0, sticky="ew", pady=(16, 0))
         self.mem = V.card(body)
-        self.mem.grid(row=3, column=0, sticky="ew", pady=(16, 0))
+        self.mem.grid(row=4, column=0, sticky="ew", pady=(16, 0))
         self._build_top()
         self._build_light()
+        self._build_g()
         self._build_mem()
         self.refresh()
         self._run(self._read_mode)
@@ -72,7 +87,28 @@ class KeyboardEditor:
         return self.lcfg.setdefault("klavesnice", dict(KEY_DEFAULT))
 
     @property
+    def layers(self):
+        v = self.lcfg.get("vrstvy_klavesnice")
+        if not isinstance(v, list):
+            v = self.lcfg["vrstvy_klavesnice"] = []
+        return v
+
+    def layer(self):
+        """Upravovana cast klavesnice (vrstva), nebo None = zaklad."""
+        if self.target is not None and 0 <= self.target < len(self.layers) and isinstance(
+                self.layers[self.target], dict):
+            return self.layers[self.target]
+        self.target = None
+        return None
+
+    @property
     def eff(self):
+        lay = self.layer()
+        if lay is not None:                       # cast klavesnice: vlastni barvy klaves nema (ty umi zaklad)
+            e = lay.get("efekt")
+            if not isinstance(e, dict) or e.get("typ") not in kbfx.EFFECTS or e.get("typ") == "vlastni":
+                e = lay["efekt"] = kbfx.default_effect("dest")
+            return e
         e = self.lcfg.get("efekt_klavesnice")
         if not isinstance(e, dict) or e.get("typ") not in kbfx.EFFECTS:
             e = kbfx.default_effect("vlna")
@@ -83,7 +119,12 @@ class KeyboardEditor:
         return self.kc.get("efekt", "deska") == "vlastni"
 
     def painting(self):
-        return self.own() and self.eff.get("typ") == "vlastni"
+        return self.layer() is None and self.own() and self.eff.get("typ") == "vlastni"
+
+    def reacting(self):
+        """Ma nektery efekt klavesnice (zaklad nebo cast) reakci na stisk?"""
+        lc = dict(self.lcfg, klavesnice=dict(self.kc, zapnuto=True))
+        return any(e.get("reakce") for e in led.kb_effects(lc))
 
     # ------------------------------------------------------------ nahled a stav
     def _build_top(self):
@@ -109,7 +150,12 @@ class KeyboardEditor:
         z = next((int(t[1:]) for t in (self.canvas.gettags(hit[0]) if hit else ()) if t[:1] == "z"), None)
         if z is None:
             return
-        if self.painting():
+        lay = self.layer()
+        if lay is not None:                       # klavesa do casti / z casti
+            lay["klavesy"] = sorted(set(kbfx.part_zones(lay)) ^ {z})
+            self._show_sel()
+            self._layer_info()
+        elif self.painting():
             self.sel ^= {z}
             self._show_sel()
             self._sel_info()
@@ -117,8 +163,10 @@ class KeyboardEditor:
             kbfx.engine_for(self.app.leds.engine).press(z)
 
     def _show_sel(self):
+        lay = self.layer()
+        marked = set(kbfx.part_zones(lay)) if lay is not None else self.sel
         for z, it in self.items.items():
-            on = z in self.sel
+            on = z in marked
             self.canvas.itemconfig(it, outline="#ffffff" if on else ("" if self._last else "#2a3038"),
                                    width=2 if on else 1)
 
@@ -157,7 +205,7 @@ class KeyboardEditor:
                 return
         except tk.TclError:
             return
-        if self.own() and self.eff.get("reakce") and self.top.winfo_ismapped():
+        if self.kc.get("zapnuto") and self.reacting() and self.top.winfo_ismapped():
             z = random.choice([z for z in kbfx.ZONES if z < 112])
             kbfx.engine_for(self.app.leds.engine).press(z)
         self.top.after(DEMO_MS + random.randint(-300, 400), self._demo)
@@ -184,11 +232,14 @@ class KeyboardEditor:
         if bool(self.kc.get("zapnuto")) != bool(kc.get("zapnuto")):
             text += " – změna řízení se projeví po Uložit"
         self.status.config(text=text + ".", foreground=color)
+        self._g_status(st, saved)
         if not self.kc.get("zapnuto"):
             hint = "Náhled ukáže efekt, až zapneš řízení podsvícení z aplikace."
+        elif self.layer() is not None:
+            hint = "Klik na klávesu = přidat do části / odebrat z ní (klávesy části mají bílý rámeček)."
         elif self.painting():
             hint = "Klik na klávesu = vybrat / zrušit výběr; vybrané klávesy obarvíš níže."
-        elif self.own() and self.eff.get("reakce"):
+        elif self.reacting():
             hint = "Náhled ukazuje i ukázkové stisky; klik na klávesu = stisk."
         else:
             hint = "Náhled počítá barvy stejně jako aplikace (i s jasem). Na klávesnici se změna projeví po Uložit."
@@ -244,22 +295,130 @@ class KeyboardEditor:
             self._rebuild()
         V.segmented(f, src, [("vlastni", "efekt klávesnice"), ("f140", "jako F140"), ("deska", "jako deska")],
                     command=on_src).grid(row=3, column=1, columnspan=2, sticky="w", pady=4)
-        if not self.own():
+        self._parts_row(f, 4)
+        lay = self.layer()
+        if lay is not None:
+            lf = ttk.Frame(f)
+            lf.grid(row=5, column=0, columnspan=3, sticky="ew", padx=20, pady=(6, 0))
+            self._layer_controls(lf, lay)
+        elif not self.own():
             ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left",
                       text="Celá klávesnice jednou barvou – efekt se počítá jako pro jeden ventilátor "
                            f"({'F140' if kc.get('efekt') == 'f140' else 'ventilátory na desce'}, nastavení na "
-                           "stránce LED ventilátorů). Vhodné efekty pro souběh s ventilátory ještě vybereme.").grid(
-                row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 16))
+                           "stránce LED ventilátorů). Části klávesnice můžou mít i tak vlastní efekt.").grid(
+                row=5, column=0, columnspan=3, sticky="w", padx=20, pady=(4, 16))
             self._refit()
             return
         pf = ttk.Frame(f)
-        pf.grid(row=4, column=0, columnspan=3, sticky="ew", padx=20, pady=(6, 16))
-        self._effect_chooser(pf)
+        pf.grid(row=6, column=0, columnspan=3, sticky="ew", padx=20, pady=(6, 16))
+        self._effect_chooser(pf, exclude=("vlastni",) if lay is not None else ())
         self.react.grid()
         self._build_react()
         self._refit()
 
-    def _effect_chooser(self, f):
+    # ------------------------------------------------------------ casti klavesnice (vrstvy)
+    def _parts_row(self, f, row):
+        ttk.Label(f, text="Upravuji", style="Muted.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),
+                                                                 pady=4)
+        fr = ttk.Frame(f)
+        fr.grid(row=row, column=1, columnspan=2, sticky="w", pady=4)
+        opts = [("z", "celou klávesnici")]
+        for i, lay in enumerate(self.layers):
+            if isinstance(lay, dict):
+                name = str(lay.get("nazev") or f"Část {i + 1}")
+                opts.append((str(i), name + ("" if lay.get("zapnuto", True) else " (vyp.)")))
+        tv = tk.StringVar(value="z" if self.layer() is None else str(self.target))
+
+        def on_t():
+            self.target = None if tv.get() == "z" else int(tv.get())
+            self.sel.clear()
+            self._rebuild()
+        V.segmented(fr, tv, opts, command=on_t, style="SegSmall.Toolbutton").pack(side="left")
+
+        def add():
+            self.layers.append({"nazev": f"Část {len(self.layers) + 1}", "zapnuto": True, "klavesy": [],
+                                "efekt": kbfx.default_effect("dest")})
+            self.target = len(self.layers) - 1
+            self._rebuild()
+        ttk.Button(fr, text="+ Přidat část", command=add).pack(side="left", padx=(10, 0))
+
+    def _layer_controls(self, f, lay):
+        f.columnconfigure(1, weight=1)
+        self._label(f, 0, "Název")
+        nf = ttk.Frame(f)
+        nf.grid(row=0, column=1, sticky="w", pady=4)
+        nv = tk.StringVar(value=str(lay.get("nazev") or ""))
+
+        def on_name(*_a):
+            lay["nazev"] = nv.get().strip() or f"Část {self.target + 1}"
+        nv.trace_add("write", on_name)
+        e = ttk.Entry(nf, textvariable=nv, width=24)
+        e.pack(side="left")
+        e.bind("<Return>", lambda _e: self._rebuild())
+        ov = tk.BooleanVar(value=bool(lay.get("zapnuto", True)))
+
+        def on_on():
+            lay["zapnuto"] = ov.get()
+            self._rebuild()
+        ttk.Checkbutton(nf, text="zapnutá", variable=ov, command=on_on).pack(side="left", padx=(14, 0))
+        self._label(f, 1, "Klávesy")
+        gf = ttk.Frame(f)
+        gf.grid(row=1, column=1, sticky="w", pady=4)
+        names = {gid: name for gid, name, _z in kbfx.KEY_GROUPS}
+        default_names = {f"Část {i + 1}" for i in range(len(self.layers) + 1)}
+        groups = [g for g in kbfx.KEY_GROUPS if g[0] != "vse"] + [("nic", "vymazat", None)]
+        for i, (gid, name, zones) in enumerate(groups):
+            def add(gid=gid, zones=zones):
+                cur = set(kbfx.part_zones(lay))
+                if zones is None:
+                    cur = set()
+                else:
+                    zs = set(zones) & set(self.items)
+                    cur = cur - zs if zs <= cur else cur | zs
+                    if str(lay.get("nazev")) in default_names or not lay.get("nazev"):
+                        lay["nazev"] = names[gid]             # pojmenovat podle prvni vybrane skupiny
+                        nv.set(names[gid])
+                lay["klavesy"] = sorted(cur)
+                self._show_sel()
+                self._layer_info()
+            ttk.Button(gf, text=name, command=add).grid(row=i // 5, column=i % 5, sticky="ew", padx=2, pady=2)
+        self._label(f, 2, "Pořadí")
+        of = ttk.Frame(f)
+        of.grid(row=2, column=1, sticky="w", pady=4)
+
+        def move(step):
+            i, j = self.target, self.target + step
+            if 0 <= j < len(self.layers):
+                self.layers[i], self.layers[j] = self.layers[j], self.layers[i]
+                self.target = j
+                self._rebuild()
+
+        def remove():
+            del self.layers[self.target]
+            self.target = None
+            self._rebuild()
+        ttk.Button(of, text="◀ Níž", command=lambda: move(-1)).pack(side="left", padx=(0, 6))
+        ttk.Button(of, text="Výš ▶", command=lambda: move(1)).pack(side="left", padx=(0, 6))
+        ttk.Button(of, text="Odebrat část", command=remove).pack(side="left", padx=(12, 0))
+        self.layer_lbl = ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 40, justify="left")
+        self.layer_lbl.grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self._layer_info()
+        ttk.Separator(f).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+
+    def _layer_info(self):
+        lbl, lay = self.layer_lbl, self.layer()
+        try:
+            if lbl is None or lay is None or not lbl.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        n = len(kbfx.part_zones(lay))
+        pos = f"vrstva {self.target + 1} z {len(self.layers)}"
+        lbl.config(text=(f"Kláves v části: {n} ({pos} – vyšší vrstva překryje nižší). " if n else
+                         "Část zatím nemá klávesy – vyber skupinu nebo klikni na klávesy v náhledu. ")
+                   + "Efekt se počítá jen v rámci těchto kláves (vlna, kruh, déšť vyplní celou část).")
+
+    def _effect_chooser(self, f, exclude=()):
         eff = self.eff
         typ = eff.get("typ")
         f.columnconfigure(1, weight=1)
@@ -279,7 +438,7 @@ class KeyboardEditor:
         def fill():
             for w in chips.winfo_children():
                 w.destroy()
-            keys = [k for k, v in kbfx.EFFECTS.items() if v[1] == gv.get()]
+            keys = [k for k, v in kbfx.EFFECTS.items() if v[1] == gv.get() and k not in exclude]
             for i, k in enumerate(keys):
                 ttk.Radiobutton(chips, text=kbfx.EFFECTS[k][0], value=k, variable=tv, command=on_typ,
                                 style="Chip.Toolbutton").grid(row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
@@ -537,6 +696,115 @@ class KeyboardEditor:
             except tk.TclError:
                 pass
         self.scroll.after_idle(fit)
+
+    # ------------------------------------------------------------ klavesy G1-G5
+    @property
+    def gcfg(self):
+        g = self.lcfg.get("klavesy_g")
+        if not isinstance(g, dict):
+            g = self.lcfg["klavesy_g"] = {}
+        return g
+
+    def _build_g(self):
+        f = self.gcard
+        for w in f.winfo_children():
+            w.destroy()
+        f.columnconfigure(2, weight=1)
+        V.card_title(f, "Klávesy G1–G5").grid(row=0, column=0, columnspan=4, sticky="w", padx=20, pady=(14, 2))
+        self.g_lbl = ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left")
+        self.g_lbl.grid(row=1, column=0, columnspan=4, sticky="w", padx=20, pady=(0, 8))
+        names = [t for _k, t in klavesy_g.ACTIONS]
+        tnames = [t for _k, t in klavesy_g.TARGETS]
+        row = 2
+        for n in klavesy_g.KEYS:
+            a = self.gcfg.get(str(n))
+            a = a if isinstance(a, dict) else {}
+            kind = a.get("akce", "")
+            ttk.Label(f, text=f"G{n}", style="Bold.TLabel").grid(row=row, column=0, sticky="w", padx=(20, 10),
+                                                                 pady=(6, 0))
+            av = tk.StringVar(value=dict(klavesy_g.ACTIONS).get(kind, names[0]))
+            cb = ttk.Combobox(f, textvariable=av, values=names, width=26, state="readonly")
+            cb.grid(row=row, column=1, sticky="w", pady=(6, 0))
+
+            def on_a(_e=None, n=n, av=av):
+                k = next(k for k, t in klavesy_g.ACTIONS if t == av.get())
+                old = self.gcfg.get(str(n)) if isinstance(self.gcfg.get(str(n)), dict) else {}
+                if k:
+                    self.gcfg[str(n)] = dict(old, akce=k)
+                else:
+                    self.gcfg.pop(str(n), None)
+                self._build_g()
+                self._refit()
+            cb.bind("<<ComboboxSelected>>", on_a)
+            if kind == "predvolba":
+                tf = ttk.Frame(f)
+                tf.grid(row=row, column=2, columnspan=2, sticky="w", padx=(10, 20), pady=(6, 0))
+                tv = tk.StringVar(value=dict(klavesy_g.TARGETS).get(a.get("cil", "klavesnice"), tnames[0]))
+                tc = ttk.Combobox(tf, textvariable=tv, values=tnames, width=20, state="readonly")
+                tc.pack(side="left")
+
+                def on_t(_e=None, n=n, tv=tv):
+                    self.gcfg[str(n)]["cil"] = next(k for k, t in klavesy_g.TARGETS if t == tv.get())
+                    self._build_g()
+                tc.bind("<<ComboboxSelected>>", on_t)
+
+                def store(n=n):
+                    a = self.gcfg[str(n)]
+                    a["nastaveni"] = klavesy_g.snapshot(self.lcfg, a.setdefault("cil", "klavesnice"))
+                    self._build_g()
+
+                def load(n=n):
+                    klavesy_g.load(self.lcfg, self.gcfg[str(n)])
+                    self.app.reload_with(self.app.cfg)
+                ttk.Button(tf, text="Uložit současné", command=store).pack(side="left", padx=(8, 0))
+                lb = ttk.Button(tf, text="Načíst do okna", command=load)
+                lb.pack(side="left", padx=(6, 0))
+                if not a.get("nastaveni"):
+                    lb.state(["disabled"])
+                row += 1
+                ttk.Label(f, style="Small.TLabel", text=klavesy_g.describe(a), wraplength=WRAP - 60,
+                          justify="left").grid(row=row, column=1, columnspan=3, sticky="w", pady=(2, 0))
+            elif kind == "hudba":
+                ttk.Label(f, style="Small.TLabel", text="vizualizér LED ze Spotify zapne / vypne (kontrolka = zapnutý)",
+                          wraplength=360, justify="left").grid(row=row, column=2, columnspan=2, sticky="w",
+                                                               padx=(10, 20), pady=(6, 0))
+            elif kind == "styl":
+                ttk.Label(f, style="Small.TLabel", text="další styl vizualizéru (vypnutý vizualizér nejdřív zapne)",
+                          wraplength=360, justify="left").grid(row=row, column=2, columnspan=2, sticky="w",
+                                                               padx=(10, 20), pady=(6, 0))
+            row += 1
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Předvolba: nastav efekt (klávesnice na této stránce, ventilátory na stránce LED) a klikni na „Uložit "
+            "současné“. Stisk G-klávesy přepne na předvolbu, stejná G-klávesa znovu vrátí nastavení z okna. Po "
+            "startu aplikace platí vždy nastavení z okna. Přiřazená G-klávesa svítí tlumeně, zapnutá naplno. "
+            "Platí po Uložit. G-klávesy s akcí ovládá aplikace – v G HUB je nech bez přiřazení, jinak G HUB "
+            "provede i svou funkci.")).grid(row=row, column=0, columnspan=4, sticky="w", padx=20, pady=(12, 16))
+
+    def _g_status(self, st, saved):
+        lbl = getattr(self, "g_lbl", None)
+        try:
+            if lbl is None or not lbl.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        acts = klavesy_g.actions(saved)
+        g = st.get("klavesy_g") if self.app.running else None
+        if not acts:
+            text = "Žádná G-klávesa nemá akci – G1–G5 fungují podle klávesnice / G HUB."
+        elif g is None:
+            text = "G-klávesy začnou fungovat, až aplikace převezme klávesnici."
+        else:
+            on = []
+            if g.get("aktivni"):
+                on.append(f"předvolba G{g['aktivni']}")
+            if g.get("hudba") is not None:
+                on.append("hudba " + ("zapnutá" if g["hudba"] else "vypnutá"))
+            if g.get("styl"):
+                on.append("styl hudby: " + fx_style(g["styl"]))
+            text = "Teď: " + (", ".join(on) if on else "nastavení z okna") + "."
+        if klavesy_g.actions(self.lcfg) != acts:
+            text += " Změny G-kláves se projeví po Uložit."
+        lbl.config(text=text)
 
     # ------------------------------------------------------------ integrovana pamet
     def _build_mem(self):

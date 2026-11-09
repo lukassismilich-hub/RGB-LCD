@@ -12,7 +12,9 @@
 #     ve vlne za D_LED2 (karta je pod F140)
 #   - klavesnice Logitech G815 primo pres HID++ (klavesnice.Direct, bez G HUB, vlastni vlakno odesilani):
 #     vlastni plosne efekty po klavesach (klavesnice_efekty.py, efekt "vlastni" = efekt_klavesnice),
-#     nebo cela klavesnice jednou barvou jako F140 / deska; reakce na stisk klaves (klavesy_stisk.py).
+#     nebo cela klavesnice jednou barvou jako F140 / deska; reakce na stisk klaves (klavesy_stisk.py);
+#     casti klavesnice s vlastnim efektem pres zaklad (vrstvy_klavesnice, kb_layers); klavesy G1-G5
+#     prepinaji predvolby efektu a hudbu (klavesy_g.py), G-klavesy s akci sviti jako kontrolky.
 #     Integrovanou pamet klavesnice aplikace sama vypne a pri konci / vypnuti rizeni zase zapne.
 # Liquidctl sam D_LED neovladne, kdyz ma hlavicka vypnute vestavene efekty (tak ji nechava GCC).
 # LED desky jinak ridi Gigabyte Control Center (GCC) - pokud bezi, nastaveni prepise.
@@ -29,6 +31,7 @@ import threading
 import time
 
 import klavesnice_efekty as kbfx
+import klavesy_g
 import led_efekty as fx
 
 log = logging.getLogger("rgb_lcd")
@@ -132,6 +135,11 @@ def default_config():
         "efekt_grafika": copy.deepcopy(fx.DEFAULT_EFFECT),
         "klavesnice": dict(EXTRA_DEFAULT),
         "efekt_klavesnice": copy.deepcopy(fx.DEFAULT_EFFECT),
+        # casti klavesnice s vlastnim efektem pres zaklad: [{"nazev", "zapnuto", "klavesy": [zony], "efekt"}],
+        # dalsi v seznamu prekryje predchozi
+        "vrstvy_klavesnice": [],
+        # klavesy G1-G5: {"1": {"akce": "predvolba" / "hudba" / "styl", "cil", "nastaveni"}} (klavesy_g.py)
+        "klavesy_g": {},
         # playlist efektu: polozky = efekty (jako "efekt") + "opakovani"; strida se dokola v poradi,
         # plati pro vsechny ventilatory (a grafiku / klavesnici s efektem "jako F140 / deska")
         "playlist": copy.deepcopy(PLAYLIST_DEFAULT),
@@ -161,6 +169,26 @@ def kb_own(lcfg):
 def kb_effect(lcfg):
     """Vlastni efekt klavesnice (klavesnice_efekty), neznamy typ = vychozi."""
     return kbfx.valid(lcfg.get("efekt_klavesnice"))
+
+
+def kb_layers(lcfg):
+    """Zapnute casti klavesnice (vrstvy) s klavesami a znamym efektem."""
+    return [v for v in lcfg.get("vrstvy_klavesnice") or []
+            if isinstance(v, dict) and v.get("zapnuto", True) and kbfx.part_zones(v)
+            and (v.get("efekt") or {}).get("typ") in kbfx.EFFECTS]
+
+
+def kb_effects(lcfg):
+    """Vsechny efekty, ktere klavesnice prave pocita po klavesach (zaklad a casti)."""
+    if not extra_on(lcfg, "klavesnice"):
+        return []
+    out = [kb_effect(lcfg)] if kb_own(lcfg) else []
+    return out + [kbfx.valid(v["efekt"]) for v in kb_layers(lcfg)]
+
+
+def kb_music_on(lcfg):
+    """Ma nektery efekt klavesnice (zaklad nebo cast) hudbu - potrebuje zvuk ze Spotify?"""
+    return any(kbfx.info(e.get("typ"))[1] == "hudba" for e in kb_effects(lcfg))
 
 
 def hex_rgb(h):
@@ -226,7 +254,7 @@ def effect_for(lcfg, group):
 
 
 def is_animated(lcfg):
-    if extra_on(lcfg, "klavesnice") and kb_own(lcfg) and kbfx.is_animated(kb_effect(lcfg)):
+    if any(kbfx.is_animated(e) for e in kb_effects(lcfg)):
         return True
     groups = {g for _k, _n, g, _c in targets(lcfg)}
     items = playlist_items(lcfg)
@@ -327,14 +355,36 @@ def _orient(cols, shift, reverse):
     return [cols[(shift + sign * k) % n] for k in range(n)]
 
 
-def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, kb_music=None):
+def _kb_compose(engine, lcfg, base, dt, data, kb_music, kb_over):
+    """Barvy kazde klavesy (poradi kbfx.KEYS, pred jasem): zaklad = vlastni efekt klavesnice (base None)
+    nebo jedna barva jako F140 / deska, pres nej casti klavesnice a kontrolky G-klaves (kb_over)."""
+    kbe = kbfx.engine_for(engine)
+    if base is None:
+        cols = kbe.frame(kb_effect(lcfg), dt, data, kb_music)
+    else:
+        kbe.poll()
+        cols = [tuple(base)] * len(kbfx.KEYS)
+    layers = kb_layers(lcfg)
+    if layers or kbe.parts:
+        cols = kbe.layers(layers, cols, dt, data, kb_music)
+    if kb_over:
+        cols = list(cols)
+        for z, c in kb_over.items():
+            i = kbfx.INDEX.get(z)
+            if i is not None:
+                cols[i] = c
+    return cols
+
+
+def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, kb_music=None, kb_over=None):
     """{klic: [[r, g, b] x pocet LED]} s jasem - pro vlakno i nahled v nastaveni.
     orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat.
     music = snimek hudby ze Spotify (hudba.Music.led_snapshot / fx.music_demo): hudebni vizualizer
     pro vsechny cile, music["mix"] 0..1 = prolnuti s beznym efektem.
     Klavesnice s vlastnim efektem: barva kazde klavesy v poradi klavesnice_efekty.KEYS (engine
     klavesnice je kbfx.engine_for(engine)), vizualizer ventilatoru se na ni nepouzije; kb_music =
-    snimek zvuku pro jeji hudebni efekty (hudba.Music.kb_snapshot)."""
+    snimek zvuku pro jeji hudebni efekty (hudba.Music.kb_snapshot). Casti klavesnice (vrstvy) a kontrolky
+    G-klaves kb_over {zona: barva} se kresli i pres jednu barvu jako F140 / deska."""
     tg = targets(lcfg)
     wave = bool(lcfg.get("vlna"))
     offsets = wave_offsets(lcfg, [k for k, *_ in tg if k not in NO_WAVE])[0] if wave else {}
@@ -348,7 +398,7 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
         if key == "klavesnice" and kb_own(lcfg):
-            cols = kbfx.engine_for(engine).frame(kb_effect(lcfg), dt, data, kb_music)
+            cols = _kb_compose(engine, lcfg, None, dt, data, kb_music, kb_over)
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(group, EXTRA_DEFAULT).get("jas", 100)) / 100.0
             out[key] = fx.apply_brightness(cols, k)
             continue
@@ -374,6 +424,8 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
             if orient:
                 mc = _orient(mc, *orientation(lcfg, key))
             cols = mc if cols is None else [fx._mix(a, b, mix) for a, b in zip(cols, mc)]
+        if key == "klavesnice" and (kb_over or kb_layers(lcfg)):
+            cols = _kb_compose(engine, lcfg, cols[0], dt, data, kb_music, kb_over)
         if group in EXTRAS:
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(group, EXTRA_DEFAULT).get("jas", 100)) / 100.0
         else:
@@ -787,6 +839,7 @@ class LedWorker(threading.Thread):
         self._resume = threading.Event()
         self._shutdown = False               # konci Windows: LED zhasnout (ne klidny stav)
         self.music = None                    # hudba.Music - hudebni vizualizer, kdyz hraje Spotify
+        self.gkeys = klavesy_g.State()       # co je zapnute klavesami G1-G5 (jen v pameti)
         self.state = {"stav": "čeká"}
 
     def update(self, lcfg, data=None):
@@ -892,6 +945,14 @@ class LedWorker(threading.Thread):
                 last_wall = time.time()
                 continue
             now_wall, now = time.time(), time.monotonic()
+            base_cfg = lcfg                              # nastaveni z okna (bez predvoleb G-klaves)
+            kbd = session.kbd if session is not None else None
+            if kbd is not None:
+                kbd.want_g = bool(klavesy_g.actions(base_cfg))
+                kbd.on_gkey = self._wake.set             # stisk G-klavesy = hned novy snimek
+                for g in kbd.g_drain():
+                    self.gkeys.press(g, base_cfg, (self.state.get("hudba") or {}).get("styl"))
+            lcfg = self.gkeys.apply(base_cfg)
             resumed = now_wall - last_wall > RESUME_GAP_S
             last_wall = now_wall
             k_pl = json.dumps(lcfg.get("playlist"), sort_keys=True)
@@ -959,17 +1020,17 @@ class LedWorker(threading.Thread):
                             music_err = str(e)
                             log.warning("LED: hudba – %s", e)
                 kb_snap = None
-                kb_on = extra_on(lcfg, "klavesnice") and kb_own(lcfg)
-                keff = kb_effect(lcfg) if kb_on else {}
-                hook_on = self._keyboard_hook(engine, kb_on and bool(keff.get("reakce")), hook_on)
+                hook_on = self._keyboard_hook(engine, any(e.get("reakce") for e in kb_effects(lcfg)), hook_on)
                 if self.music is not None:            # hudebni efekty klavesnice chteji zvuk i bez vizualizeru
-                    self.music.extra_audio = kb_on and kbfx.info(keff.get("typ"))[1] == "hudba"
+                    self.music.extra_audio = kb_music_on(lcfg)
                     if self.music.extra_audio:
                         try:
                             kb_snap = self.music.kb_snapshot()
                         except Exception:
                             kb_snap = None
-                frame = render(engine, lcfg, now - t0, data, min(dt, 0.2), music=snap, kb_music=kb_snap)
+                kb_over = self.gkeys.leds(base_cfg, now) if extra_on(lcfg, "klavesnice") else None
+                frame = render(engine, lcfg, now - t0, data, min(dt, 0.2), music=snap, kb_music=kb_snap,
+                               kb_over=kb_over)
                 force = now - last_force > REFRESH_S
                 session.send(frame, force)
                 if force:
@@ -981,6 +1042,8 @@ class LedWorker(threading.Thread):
                 if pl:                                   # co prave hraje (okno nastaveni)
                     st["playlist"] = {"i": pl["i"], "pocet": pl["pocet"], "typ": pl["eff"].get("typ"),
                                       "zbyva": round(pl["zbyva"])}
+                if klavesy_g.actions(base_cfg):
+                    st["klavesy_g"] = self.gkeys.status()
                 if snap is not None:
                     st["hudba"] = {"styl": fx.music_style(lcfg.get("hudba") or {}, snap), "mix": round(snap["mix"], 2)}
                     frames += 1
@@ -1005,7 +1068,7 @@ class LedWorker(threading.Thread):
                 continue
             if snap is not None:                         # hudba: plynulejsi (udery jsou kratke)
                 self._quit.wait(max(0.0, 1 / fx.MUSIC_FPS - (time.monotonic() - now)))
-            elif is_animated(lcfg):
+            elif is_animated(lcfg) or self.gkeys.flashing():
                 self._quit.wait(max(0.0, 1 / fx.FPS - (time.monotonic() - now)))
             else:
                 self._wake.wait(1.0)

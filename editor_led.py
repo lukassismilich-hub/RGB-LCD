@@ -18,7 +18,7 @@ import time
 import tkinter as tk
 from tkinter import colorchooser, ttk
 
-import klavesnice_efekty as kbfx
+import klavesy_g
 import led
 import led_efekty as fx
 import vzhled as V
@@ -1433,10 +1433,11 @@ class LedEditor:
                               text="Test: " + led.TEST_MODES[self._test.get()] + " – takhle to má vypadat")
             else:
                 kb_music = None                                 # hudebni efekt klavesnice: simulovana hudba
-                if led.kb_own(lc) and kbfx.info(led.kb_effect(lc).get("typ"))[1] == "hudba":
+                if led.kb_music_on(lc):
                     kb_music = fx.music_demo(now - self.t0, fx.DEFAULT_PALETTE[:4])
+                kb_over = klavesy_g.State().leds(lc) if led.extra_on(lc, "klavesnice") else None
                 frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), orient=False, music=snap,
-                                   kb_music=kb_music)
+                                   kb_music=kb_music, kb_over=kb_over)
             if snap is not None:
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
                               text="♪ simulovaná hudba · " + fx.MUSIC_STYLES[fx.music_style(lc["hudba"], snap)])

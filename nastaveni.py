@@ -235,7 +235,7 @@ def _nav_icon(c, kind, color):
 class App(tk.Tk):
     last_page = 0            # vybrana stranka (zachova se pri "Vratit ulozene")
 
-    def __init__(self):
+    def __init__(self, cfg=None, saved=None):
         super().__init__()
         self.title("RGB-LCD – nastavení")
         try:
@@ -245,8 +245,8 @@ class App(tk.Tk):
         V.apply(self)
         self.geometry("1320x860")
         self.minsize(1180, 740)
-        self.cfg = config.load()
-        self.saved = copy.deepcopy(self.cfg)
+        self.cfg = config.load() if cfg is None else cfg
+        self.saved = copy.deepcopy(self.cfg if saved is None else saved)
         self.data, self.running, self.cstate, self.hist, self.astate, self.lstate = load_data()
         self.sel = 0
         self._preview_img = None
@@ -1399,6 +1399,12 @@ class App(tk.Tk):
             self._status_msg = None
             self._update_dirty()
         self.after(4000, done)
+
+    def reload_with(self, cfg):
+        """Okno postavit znovu s danym (neulozenym) nastavenim - napr. nactena predvolba G-klavesy."""
+        saved = self.saved
+        self.destroy()
+        App(cfg, saved).mainloop()
 
     def revert(self):
         self.cfg = copy.deepcopy(self.saved)

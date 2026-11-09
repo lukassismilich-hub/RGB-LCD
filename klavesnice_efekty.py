@@ -21,13 +21,7 @@ import klavesnice_rozlozeni as R
 FPS = 30
 KEYS = R.KEYS
 ZONES = [k[0] for k in KEYS]
-CX = [k[2] + k[4] / 2 for k in KEYS]                    # stred klavesy (u)
-CY = [k[3] + k[5] / 2 for k in KEYS]
-X0, X1 = min(k[2] for k in KEYS), max(k[2] + k[4] for k in KEYS)
-Y0, Y1 = min(k[3] for k in KEYS), max(k[3] + k[5] for k in KEYS)
-MIDX, MIDY = (X0 + X1) / 2, (Y0 + Y1) / 2
 INDEX = {z: i for i, z in enumerate(ZONES)}
-SPACE = INDEX.get(41, 0)
 
 DEFAULT_PALETTE = ["#ff0000", "#0060ff", "#00ff40", "#ffb000", "#b000ff", "#00e5ff", "#ff0080", "#ffffff"]
 
@@ -171,43 +165,113 @@ def _cyclic(cols, p):
     return _mix(cols[a], cols[(a + 1) % k], f * f * (3 - 2 * f))
 
 
-def _proj(deg):
-    """Poloha kazde klavesy ve smeru deg jako 0..1 (0 = kde smer zacina)."""
-    a = math.radians(deg)
-    dx, dy = math.cos(a), math.sin(a)
-    v = [x * dx + y * dy for x, y in zip(CX, CY)]
-    lo, hi = min(v), max(v)
-    return [(p - lo) / (hi - lo or 1) for p in v]
+class Geo:
+    """Geometrie klaves, pro ktere se efekt pocita - cela klavesnice nebo jen jeji cast (vrstva):
+    smer, stred, sloupce i mezernik se berou jen z techto klaves, efekt tak vyplni celou cast."""
+
+    def __init__(self, zones=None):
+        sel = None if zones is None else set(zones)
+        keys = [k for k in KEYS if sel is None or k[0] in sel]
+        self.n = len(keys)
+        self.zones = [k[0] for k in keys]
+        self.index = {z: i for i, z in enumerate(self.zones)}
+        self.cx = [k[2] + k[4] / 2 for k in keys]
+        self.cy = [k[3] + k[5] / 2 for k in keys]
+        self.x0 = min((k[2] for k in keys), default=0.0)
+        self.x1 = max((k[2] + k[4] for k in keys), default=1.0)
+        self.y0 = min((k[3] for k in keys), default=0.0)
+        self.y1 = max((k[3] + k[5] for k in keys), default=1.0)
+        mx, my = (self.x0 + self.x1) / 2, (self.y0 + self.y1) / 2
+        self.dist = [math.hypot(x - mx, y - my) for x, y in zip(self.cx, self.cy)]
+        self.ang = [math.atan2(y - my, x - mx) / (2 * math.pi) for x, y in zip(self.cx, self.cy)]
+        self.cols = sorted({round(x) for x in self.cx})             # sloupce pro dest
+        self.col_of = [self.cols.index(round(x)) for x in self.cx]
+        # vlny na udery jdou od mezerniku, v casti bez nej od klavesy dole uprostred
+        self.space = self.index.get(41, min(range(self.n), default=0,
+                                            key=lambda i: abs(self.cx[i] - mx) + abs(self.cy[i] - self.y1)))
+        self._proj = {}
+
+    def proj(self, eff):
+        """Poloha kazde klavesy ve smeru efektu jako 0..1 (0 = kde smer zacina)."""
+        d = int(get(eff, "smer") or 0) % 360
+        if d not in self._proj:
+            a = math.radians(d)
+            v = [x * math.cos(a) + y * math.sin(a) for x, y in zip(self.cx, self.cy)]
+            lo, hi = min(v, default=0.0), max(v, default=1.0)
+            self._proj[d] = [(p - lo) / (hi - lo or 1) for p in v]
+        return self._proj[d]
 
 
-_PROJ = {d: _proj(d) for d, _n in DIRECTIONS}
-_DIST = [math.hypot(x - MIDX, (y - MIDY) * 1.0) for x, y in zip(CX, CY)]
-_ANG = [math.atan2(y - MIDY, x - MIDX) / (2 * math.pi) for x, y in zip(CX, CY)]
-_COLS = sorted({round(x) for x in CX})                  # sloupce pro dest
-_COL_OF = [_COLS.index(round(x)) for x in CX]
+_GEOS = {}
 
 
-def proj(eff):
-    d = int(get(eff, "smer") or 0) % 360
-    return _PROJ.get(d) or _proj(d)
+def geo(zones=None):
+    key = None if zones is None else tuple(sorted(zones))
+    if key not in _GEOS:
+        _GEOS[key] = Geo(key)
+    return _GEOS[key]
+
+
+def part_zones(lay):
+    """Zony casti klavesnice (vrstvy) - jen existujici klavesy, serazene."""
+    out = set()
+    for z in (lay or {}).get("klavesy") or []:
+        try:
+            if int(z) in INDEX:
+                out.add(int(z))
+        except (TypeError, ValueError):
+            pass
+    return tuple(sorted(out))
 
 
 class Engine:
     """Pocita snimky klavesnice. Drzi stav castic, stisku a vyhlazenych senzoru."""
 
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, zones=None):
         self.rng = random.Random(seed)
+        self.g = geo(zones)                     # klavesy, pro ktere se efekt pocita (None = cela klavesnice)
         self.clock = 0.0
         self.state = {}
         self.presses = []                       # [(index klavesy, cas stisku, barva duhy)]
         self.source = None                      # funkce vracejici nove stisknute zony (hook Windows)
+        self.parts = {}                         # enginy casti klavesnice (vrstvy) - vlastni stav efektu
         self._n_press = 0
 
     def press(self, zone):
-        i = INDEX.get(zone)
+        i = self.g.index.get(zone)
         if i is not None:
             self._n_press += 1
             self.presses.append((i, self.clock, (self._n_press * 0.13) % 1.0))
+        for e in self.parts.values():            # stisk dostanou i casti klavesnice
+            e.press(zone)
+
+    def poll(self):
+        """Nove stisky z hooku Windows (ve frame() se vola samo)."""
+        if self.source is not None:
+            for z in self.source():
+                self.press(z)
+
+    def layers(self, layers, cols, dt=1 / FPS, data=None, music=None):
+        """Efekty na castech klavesnice pres zakladni barvy cols (poradi KEYS): kazda vrstva
+        {"klavesy": [zony], "efekt": {...}} se pocita jen v ramci svych klaves (vlastni geometrie)
+        a prekryje predchozi; vrstvy jsou uz vybrane (led.kb_layers). Stav efektu drzi engine casti."""
+        out = list(cols)
+        alive = set()
+        for n, lay in enumerate(layers):
+            zones = part_zones(lay)
+            if not zones:
+                continue
+            eff = valid(lay.get("efekt"))
+            key = (n, zones, eff.get("typ"))
+            e = self.parts.get(key)
+            if e is None:
+                e = self.parts[key] = Engine(zones=zones)
+            alive.add(key)
+            for z, c in zip(e.g.zones, e.frame(eff, dt, data, music)):
+                out[INDEX[z]] = c
+        for key in [k for k in self.parts if k not in alive]:
+            del self.parts[key]
+        return out
 
     def reset(self):
         self.state.clear()
@@ -216,12 +280,10 @@ class Engine:
     def frame(self, eff, dt=1 / FPS, data=None, music=None):
         dt = max(0.0, min(0.25, dt))
         self.clock += dt
-        if self.source is not None:
-            for z in self.source():
-                self.press(z)
+        self.poll()
         typ = eff.get("typ", "vlna")
         fn = getattr(self, "_" + typ, None) if typ in EFFECTS else None
-        cols = fn(eff, self.clock, dt, data, music) if fn else [(0.0, 0.0, 0.0)] * len(KEYS)
+        cols = fn(eff, self.clock, dt, data, music) if fn else [(0.0, 0.0, 0.0)] * self.g.n
         if eff.get("reakce"):
             cols = self._reaction(eff, cols)
         keep = self.clock - 4.0
@@ -254,10 +316,10 @@ class Engine:
 
     # -------------------------------------------------------------- klidne
     def _barva(self, eff, t, dt, data, music):
-        return [self._pal(eff)[0]] * len(KEYS)
+        return [self._pal(eff)[0]] * self.g.n
 
     def _prechod(self, eff, t, dt, data, music):
-        p = proj(eff)
+        p = self.g.proj(eff)
         if get(eff, "duha"):
             return [_hsv(v * 0.85) for v in p]
         pal = self._pal(eff)
@@ -269,12 +331,12 @@ class Engine:
         n = int(t // period)
         f = (t % period) / period
         k = math.sin(math.pi * f) ** 2
-        return [_scale(pal[n % len(pal)], k)] * len(KEYS)
+        return [_scale(pal[n % len(pal)], k)] * self.g.n
 
     def _vlastni(self, eff, t, dt, data, music):
         base = hex_rgb(get(eff, "zaklad") or "#000000")
         keys = get(eff, "klavesy") or {}
-        return [hex_rgb(keys[str(z)]) if str(z) in keys else base for z in ZONES]
+        return [hex_rgb(keys[str(z)]) if str(z) in keys else base for z in self.g.zones]
 
     # -------------------------------------------------------------- pohyb
     def _wave_color(self, eff, p):
@@ -285,17 +347,17 @@ class Engine:
     def _vlna(self, eff, t, dt, data, music):
         w = self._width(eff) / 5.0                          # delka jedne vlny jako podil klavesnice
         s = t * self._speed(eff, 0.25)
-        return [self._wave_color(eff, v / w - s) for v in proj(eff)]
+        return [self._wave_color(eff, v / w - s) for v in self.g.proj(eff)]
 
     def _kruh(self, eff, t, dt, data, music):
         w = self._width(eff) * 2.0                          # delka vlny v u
         s = t * self._speed(eff, 0.35) * (-1 if get(eff, "opacne") else 1)
-        return [self._wave_color(eff, d / w - s) for d in _DIST]
+        return [self._wave_color(eff, d / w - s) for d in self.g.dist]
 
     def _toceni(self, eff, t, dt, data, music):
         twist = (self._width(eff) - 1) / 30.0               # spirala: posun podle vzdalenosti
         s = t * self._speed(eff, 0.2) * (-1 if get(eff, "opacne") else 1)
-        return [self._wave_color(eff, a + d * twist - s) for a, d in zip(_ANG, _DIST)]
+        return [self._wave_color(eff, a + d * twist - s) for a, d in zip(self.g.ang, self.g.dist)]
 
     def _skener(self, eff, t, dt, data, music):
         col, bg = self._pal(eff)[0], self._bg(eff)
@@ -305,7 +367,7 @@ class Engine:
         pos = f if f <= 1 else 2 - f                        # tam a zpet
         pos = -w + pos * (1 + 2 * w)
         out = []
-        for v in proj(eff):
+        for v in self.g.proj(eff):
             k = max(0.0, 1 - abs(v - pos) / w)
             out.append(_mix(bg, col, k * k * (3 - 2 * k)))
         return out
@@ -318,7 +380,7 @@ class Engine:
         old, new = pal[n % len(pal)], pal[(n + 1) % len(pal)]
         edge = 0.08
         pos = -edge + f * (1 + 2 * edge)
-        return [_mix(new, old, (v - pos) / edge + 0.5) for v in proj(eff)]
+        return [_mix(new, old, (v - pos) / edge + 0.5) for v in self.g.proj(eff)]
 
     # -------------------------------------------------------------- castice
     def _dest(self, eff, t, dt, data, music):
@@ -327,16 +389,16 @@ class Engine:
         drops = self.state.setdefault("dest", [])           # [sloupec, y, rychlost]
         dens = self._width(eff)
         sp = self._speed(eff)
-        for c in range(len(_COLS)):
+        for c in range(len(self.g.cols)):
             if self.rng.random() < dens * 0.012 * sp * dt * FPS / 3:
-                drops.append([c, Y0 - 0.5, (3.0 + self.rng.random() * 4.0) * sp])
+                drops.append([c, self.g.y0 - 0.5, (3.0 + self.rng.random() * 4.0) * sp])
         for d in drops:
             d[1] += d[2] * dt
-        drops[:] = [d for d in drops if d[1] < Y1 + 4]
+        drops[:] = [d for d in drops if d[1] < self.g.y1 + 4]
         out = []
         tail = 2.5
-        for i in range(len(KEYS)):
-            c, y = _COL_OF[i], CY[i]
+        for i in range(self.g.n):
+            c, y = self.g.col_of[i], self.g.cy[i]
             best, is_head = 0.0, False
             for d in drops:
                 if d[0] != c:
@@ -351,7 +413,7 @@ class Engine:
 
     def _trpyt(self, eff, t, dt, data, music):
         pal, bg = self._pal(eff), self._bg(eff)
-        lv = self.state.setdefault("trpyt", [[0.0, pal[0]] for _ in KEYS])
+        lv = self.state.setdefault("trpyt", [[0.0, pal[0]] for _ in range(self.g.n)])
         chance = self._width(eff) * 0.004 * self._speed(eff) * dt * FPS
         fade = dt * 2.5 * self._speed(eff)
         out = []
@@ -368,12 +430,12 @@ class Engine:
         bursts = self.state.setdefault("ohnostroj", [])     # [x, y, cas, barva]
         sp = self._speed(eff)
         if self.rng.random() < self._width(eff) * 0.02 * sp * dt * FPS / 3:
-            i = self.rng.randrange(len(KEYS))
-            bursts.append([CX[i], CY[i], t, self.rng.choice(pal)])
+            i = self.rng.randrange(self.g.n)
+            bursts.append([self.g.cx[i], self.g.cy[i], t, self.rng.choice(pal)])
         life = 1.6 / max(0.5, sp ** 0.5)
         bursts[:] = [b for b in bursts if t - b[2] < life]
         out = []
-        for x, y in zip(CX, CY):
+        for x, y in zip(self.g.cx, self.g.cy):
             c = bg
             for bx, by, bt, bc in bursts:
                 age = (t - bt) / life
@@ -391,11 +453,11 @@ class Engine:
         sp = self._speed(eff)
         hmax = 1.5 + self._width(eff) * 0.5                 # vyska plamenu (u)
         out = []
-        for x, y in zip(CX, CY):
+        for x, y in zip(self.g.cx, self.g.cy):
             n = (math.sin(x * 0.9 + t * 3.1 * sp) + math.sin(x * 2.3 - t * 4.7 * sp) * 0.6
                  + math.sin(x * 0.37 + t * 1.3 * sp) * 0.8) / 2.4
             h = hmax * (0.65 + 0.35 * n)
-            fy = Y1 - y                                        # vyska od spodku
+            fy = self.g.y1 - y                                        # vyska od spodku
             k = max(0.0, 1 - fy / h)
             flick = 0.85 + 0.15 * math.sin(t * 11 * sp + x * 5.1 + y * 3.3)
             out.append(_scale(_gradient(pal, k), min(1.0, k * 1.6) * flick) if k > 0 else (0.0, 0.0, 0.0))
@@ -410,9 +472,9 @@ class Engine:
             v = bands[b] if b < len(bands) else 0.0
             sm[b] = v if v > sm[b] else sm[b] + (v - sm[b]) * min(1.0, dt * 6)
         out = []
-        for x, y in zip(CX, CY):
-            b = min(15, max(0, int((x - X0) / (X1 - X0) * 16)))
-            lvl = (Y1 - y) / (Y1 - Y0)                       # 0 dole .. 1 nahore
+        for x, y in zip(self.g.cx, self.g.cy):
+            b = min(15, max(0, int((x - self.g.x0) / (self.g.x1 - self.g.x0) * 16)))
+            lvl = (self.g.y1 - y) / (self.g.y1 - self.g.y0)                       # 0 dole .. 1 nahore
             out.append(_gradient(pal, lvl) if lvl <= sm[b] * 1.05 else bg)
         return out
 
@@ -428,11 +490,11 @@ class Engine:
     def _pulz(self, eff, t, dt, data, music):
         pal = self._music_pal(eff, music)
         if not music:
-            return [_scale(pal[0], 0.15)] * len(KEYS)
+            return [_scale(pal[0], 0.15)] * self.g.n
         flash, n = self._beat(music)
         col = pal[n % len(pal)]
         k = 0.15 + 0.45 * float(music.get("bass", 0)) + 0.4 * flash
-        return [_scale(_mix(col, (255, 255, 255), flash * 0.25), min(1.0, k))] * len(KEYS)
+        return [_scale(_mix(col, (255, 255, 255), flash * 0.25), min(1.0, k))] * self.g.n
 
     def _vlna_uder(self, eff, t, dt, data, music):
         pal, bg = self._music_pal(eff, music), self._bg(eff)
@@ -445,9 +507,9 @@ class Engine:
                 rings.append([t, pal[n % len(pal)], strength])
             self.state["vlna_uder_n"] = n
         rings[:] = [r for r in rings if t - r[0] < 1.6]
-        sx, sy = CX[SPACE], CY[SPACE]
+        sx, sy = self.g.cx[self.g.space], self.g.cy[self.g.space]
         out = []
-        for x, y in zip(CX, CY):
+        for x, y in zip(self.g.cx, self.g.cy):
             c = bg
             d0 = math.hypot((x - sx) * 0.8, (y - sy) * 1.6)
             for rt, rc, rs in rings:
@@ -474,18 +536,18 @@ class Engine:
     def _teplota(self, eff, t, dt, data, music):
         f = self._sensor_frac(eff, dt, data)
         pal = self._pal(eff)
-        return [_gradient(pal, f if f is not None else 0.0)] * len(KEYS)
+        return [_gradient(pal, f if f is not None else 0.0)] * self.g.n
 
     def _ukazatel(self, eff, t, dt, data, music):
         f = self._sensor_frac(eff, dt, data)
         pal, bg = self._pal(eff), self._bg(eff)
         row = ROWS.get(get(eff, "rada"), ROWS["cisla"])
-        out = [bg] * len(KEYS)
+        out = [bg] * self.g.n
         if f is None:
             return out
         n = len(row)
         for j, z in enumerate(row):
-            i = INDEX.get(z)
+            i = self.g.index.get(z)
             if i is None:
                 continue
             k = max(0.0, min(1.0, f * n - j))                # posledni klavesa jen castecne
@@ -511,8 +573,8 @@ class Engine:
                 out[i] = _mix(out[i], col, fade ** 0.7)
             else:                                            # vlnka od klavesy
                 r = age * 9.0
-                px, py = CX[i], CY[i]
-                for j, (x, y) in enumerate(zip(CX, CY)):
+                px, py = self.g.cx[i], self.g.cy[i]
+                for j, (x, y) in enumerate(zip(self.g.cx, self.g.cy)):
                     d = abs(math.hypot(x - px, (y - py) * 1.3) - r)
                     k = max(0.0, 1 - d / 1.2) * fade
                     if j == i:

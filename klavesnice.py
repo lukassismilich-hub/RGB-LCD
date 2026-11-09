@@ -9,6 +9,11 @@
 #     nechanou zapnutou pamet (settings.db: devices/g815/persistent_data/onboardMode/enabled), takze
 #     v rezimu z pocitace nic neposila a barvy neprepisuje (overeno 9. 11. 2026). Kdyby mel pamet
 #     vypnutou, posila ~20x za s sve podsviceni - aplikace to pozna a ohlasi (GHUB_BUSY).
+#   - klavesy G1-G5 (HID++ 0x8010 GKey): se softwarovym ovladanim (enableSoftwareControl) klavesnice
+#     misto vlastni funkce G-klavesy posle oznameni (bitova maska stisknutych, G1 = bit 0); overeno
+#     9. 11. 2026. Oznameni dostane kazdy, kdo ma rozhrani otevrene - i G HUB, ktery pak provede svou
+#     funkci G-klavesy (v G HUB je nutne G1-G5 nechat bez prirazeni). Direct ovladani zapne, jen kdyz
+#     ma nektera G-klavesa akci (klavesy_g.py), a pri konci ho vypne.
 #
 # HID++ jde pres rozhrani usage page 0xFF43, usage 0x602 (dlouhe zpravy 20 B, report 0x11).
 # G HUB na stejnem rozhrani posila sve prikazy (swid 0x0D) - nase maji swid 0x0A (vlakno LED)
@@ -28,6 +33,7 @@ SWID = 0x0A
 SWID_UI = 0x0B
 FEATURE_ONBOARD = 0x8100
 FEATURE_PERKEY = 0x8081
+FEATURE_GKEY = 0x8010
 ERR_BUSY = 8                                 # chyba HID++ 2.0: zarizeni je zaneprazdnene
 BUSY_TRIES = 20                              # kolikrat pri zaneprazdneni pockat a poslat znovu (celkem ~1 s)
 CHECK_S = 5                                  # jak casto overit, ze je pamet porad vypnuta
@@ -92,6 +98,8 @@ class G815:
         self._features = {}
         self.swid = swid
         self.foreign_t = None                      # kdy naposled poslal podsviceni nekdo jiny (G HUB)
+        self.gkeys = 0                             # stisknute G-klavesy (bitova maska z oznameni 0x8010)
+        self.on_gkey = None                        # funkce(cislo G-klavesy 1-5) pri stisku
 
     def close(self):
         try:
@@ -147,10 +155,33 @@ class G815:
         raise HidppError("klávesnice neodpovídá")
 
     def _note(self, r):
-        """Odpoved na cizi prikaz podsviceni po klavesach (G HUB) - zapamatovat cas."""
-        if (r and r[0] == 0x11 and (r[3] & 0x0F) not in (0, self.swid, SWID, SWID_UI)
+        """Zprava, ktera neni odpovedi na nas prikaz: stisk G-klavesy (oznameni 0x8010), nebo odpoved
+        na cizi prikaz podsviceni po klavesach (G HUB) - zapamatovat cas."""
+        if not r or r[0] not in (0x10, 0x11):
+            return
+        if (r[3] & 0x0F) == 0 and r[2] == self._features.get(FEATURE_GKEY) and r[2]:
+            mask = r[4] | (r[5] << 8)
+            new = mask & ~self.gkeys
+            self.gkeys = mask
+            for bit in range(16):
+                if new >> bit & 1 and self.on_gkey is not None:
+                    self.on_gkey(bit + 1)
+        elif (r[0] == 0x11 and (r[3] & 0x0F) not in (0, self.swid, SWID, SWID_UI)
                 and r[2] == self._features.get(FEATURE_PERKEY)):
             self.foreign_t = time.monotonic()
+
+    def poll(self):
+        """Precist zpravy, ktere prisly mimo odpovedi (stisky G-klaves) - nic neceka."""
+        with _lock:
+            while True:
+                r = self.h.read(64)
+                if not r:
+                    break
+                self._note(r)
+
+    def gkey_control(self, on):
+        """Softwarove ovladani G-klaves: True = stisky hlasit aplikaci, False = vlastni funkce klaves."""
+        self.request(self.feature(FEATURE_GKEY), 2, [1 if on else 0])
 
     def foreign(self, secs=FOREIGN_S):
         """Poslal nekdo jiny (G HUB) podsviceni za poslednich secs sekund?"""
@@ -304,6 +335,11 @@ class Direct:
         self._pending = None                       # (barvy, force) cekajici na odeslani
         self._quit = False
         self._thread = None
+        self.want_g = False                        # ma nektera G-klavesa akci (ovladani G-klaves z aplikace)
+        self._g_on = False                         # je softwarove ovladani G-klaves zapnute
+        self._g_lock = threading.Lock()
+        self._g = []                               # stisknute G-klavesy k vyzvednuti (g_drain)
+        self.on_gkey = None                        # funkce bez parametru pri stisku G-klavesy (probudit vlakno LED)
 
     def start(self):
         if self.ok:
@@ -316,12 +352,14 @@ class Direct:
             if self.ghub:                          # G HUB ma pamet vypnutou a posila sve barvy
                 raise GhubBusy(GHUB_BUSY)
             self.k = k
+            k.on_gkey = self._gkey
             self._host()
         except Exception:
             k.close()
             self.k = None
             raise
         self.ok, self.last, self.error, self._pending, self._quit = True, None, None, None, False
+        self._g_on, self._g = False, []
         self._thread = threading.Thread(target=self._loop, name="klavesnice_led", daemon=True)
         self._thread.start()
         return True
@@ -333,6 +371,28 @@ class Direct:
             self.last = None                       # po prepnuti poslat barvy znovu
             log.info("%s: integrovaná paměť vypnuta – podsvícení řídí aplikace.", NAME)
         self.checked = time.monotonic()
+
+    def _gkey(self, n):
+        with self._g_lock:
+            self._g.append(n)
+        if self.on_gkey is not None:
+            self.on_gkey()
+
+    def g_drain(self):
+        """Stisknute G-klavesy (1-5) od posledniho volani."""
+        with self._g_lock:
+            out, self._g = self._g, []
+        return out
+
+    def _gkeys(self, force=False):
+        """Softwarove ovladani G-klaves podle want_g (force = poslat znovu - po odpojeni / uspani
+        se klavesnice vrati k vlastnim funkcim G-klaves a zjistit to nejde)."""
+        want = bool(self.want_g)
+        if want != self._g_on or (want and force):
+            self.k.gkey_control(want)
+            if want != self._g_on:
+                log.info("%s: klávesy G1–G5 %s.", NAME, "ovládá aplikace" if want else "vráceny klávesnici")
+            self._g_on = want
 
     def color(self, rgb, force=False):
         """Cela klavesnice jednou barvou."""
@@ -358,7 +418,7 @@ class Direct:
             while True:
                 with self._cv:
                     if self._pending is None and not self._quit:
-                        self._cv.wait(1.0)
+                        self._cv.wait(0.05 if self._g_on else 1.0)     # stisky G-klaves cist i bez snimku
                     if self._quit:
                         return
                     item, self._pending = self._pending, None
@@ -367,6 +427,11 @@ class Direct:
                         self.ghub = True
                         raise GhubBusy(GHUB_BUSY)
                     self._host()
+                    self._gkeys(force=True)
+                else:
+                    self._gkeys()
+                if self._g_on:
+                    self.k.poll()
                 if item is not None:
                     self._send(*item)
         except Exception as e:
@@ -395,6 +460,13 @@ class Direct:
             self._thread.join(2.0)
             self._thread = None
         if self.k is not None:
+            if self._g_on:
+                try:
+                    self.k.gkey_control(False)           # G-klavesy zase s vlastni funkci
+                    log.info("%s: klávesy G1–G5 vráceny klávesnici.", NAME)
+                except Exception:
+                    pass
+                self._g_on = False
             if not self.ghub:
                 try:
                     self.k.set_onboard_mode(MODE_ONBOARD)

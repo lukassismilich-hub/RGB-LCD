@@ -69,8 +69,10 @@ Další:
 - Efekty počítá aplikace (~30 snímků/s) a posílá barvu každé LED zvlášť – stejně vypadají
   na ventilátorech NZXT, na ventilátorech připojených do desky Gigabyte i na pásku
   grafické karty.
-- 38 efektů: duha, dýchání, kometa, oheň, polární záře, plazma, vodopád, bouřka,
-  ohňostroj, barva podle teploty, hladina podle hodnoty senzoru…
+- 44 efektů: duha, dýchání, kometa, oheň, polární záře, plazma, vodopád, bouřka,
+  ohňostroj, štafeta přes celou skříň, skákající míčky, barva podle teploty, hladina
+  podle hodnoty senzoru… K libovolnému efektu jde přidat jiskření, sousední ventilátory
+  se mohou točit proti sobě a barvy jdou vybrat z hotových palet.
 - **Vlna přes celou skříň** – efekt putuje podle skutečného rozmístění ventilátorů
   (předek → horní ventilátory → zadek → grafika), nebo všechny synchronně.
 - Vlastní barvy jednotlivých LED, natočení ventilátorů, vyrovnání jasu mezi značkami.

@@ -34,12 +34,13 @@ TABS = [("efekt", "Efekt"), ("hudba", "Hudba"), ("synchro", "Synchronizace"),
 # skupiny efektu v okne (jen vzhled stranky; efekt, ktery v zadne skupine neni, pujde do "Ostatni")
 FX_GROUPS = [
     ("Klidné", ("vypnuto", "barva", "vlastni", "staticky_prechod", "prechod", "dychani", "duhove_dychani",
-                "dychajici_paleta", "stridani", "tep")),
-    ("Duha a palety", ("duha_toceni", "duha_prelevani", "plazma", "paleta", "vysece", "vlneni",
+                "dychajici_paleta", "stridani", "rozpousteni", "tep")),
+    ("Duha a palety", ("duha_toceni", "duha_prelevani", "plazma", "paleta", "vysece", "pracka", "vlneni",
                        "polarni_zare", "stirani")),
-    ("Pohyb", ("kometa", "dvojita_kometa", "divadlo", "odraz", "majak", "policie", "pretahovana")),
+    ("Pohyb", ("kometa", "dvojita_kometa", "stafeta", "obeznice", "skladani", "divadlo", "odraz", "majak",
+               "policie", "pretahovana")),
     ("Částice", ("trpyt", "duhovy_trpyt", "konfety", "ohnostroj", "blesky", "blikani", "stroboskop", "kapky")),
-    ("Zespodu", ("ohen", "plamen", "vodopad")),
+    ("Zespodu", ("ohen", "plamen", "vodopad", "micky")),
     ("Senzor", ("teplota", "hladina")),
 ]
 FAN_NAMES = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2",
@@ -493,6 +494,8 @@ class LedEditor:
                       [("dozadu", "zepředu dozadu"), ("dopredu", "zezadu dopředu")], "vlna_smer"),
                      ("F140", tk.BooleanVar(value=lc.get("vlna_f140_spolu", True)),
                       [(True, "jako jeden (oba stejně)"), (False, "postupně")], "vlna_f140_spolu")]
+        rows.append(("Otáčení", tk.BooleanVar(value=bool(lc.get("protismerne", False))),
+                     [(False, "všechny stejně"), (True, "sousední proti sobě (ozubená kola)")], "protismerne"))
         for r, (text, var, opts, key) in enumerate(rows, start=2):
             ttk.Label(f, text=text, style="Muted.TLabel").grid(row=r, column=0, sticky="w", padx=(20, 10), pady=3)
             V.segmented(f, var, opts, command=setter(key, var)).grid(row=r, column=1, sticky="w", pady=3)
@@ -510,6 +513,15 @@ class LedEditor:
         else:
             order = "všechny najednou: " + ", ".join(FAN_NAMES.get(k, k) for k in keys)
             note = "Všechny ventilátory i grafika mají stejnou fázi efektu."
+        if lc.get("protismerne"):
+            flip = led.mirrored(lc, keys)
+            note += (" Ozubená kola: zrcadlově (opačným směrem) běží " + ", ".join(
+                FAN_NAMES.get(k, k) for k in keys if k in flip) + ". Dva ventilátory na D_LED1 svítí vždy "
+                "stejně, vlastní barvy LED se nezrcadlí.")
+        relay = led.relay_slots(lc, keys)                    # stafeta jde postupne i bez vlny
+        note += " Efekt štafeta jde vždy postupně: " + " → ".join(
+            " + ".join(FAN_NAMES.get(k, k) for k in keys if relay.get(k, (0,))[0] == s)
+            for s in sorted({v[0] for v in relay.values()})) + "."
         ttk.Label(f, text="Pořadí", style="Muted.TLabel").grid(row=r, column=0, sticky="nw", padx=(20, 10),
                                                                pady=(8, 3))
         ttk.Label(f, text=order, font=V.FONT_B, wraplength=WRAP - 120, justify="left").grid(
@@ -562,6 +574,24 @@ class LedEditor:
                             command=lambda: eff.__setitem__("opacny_smer", dv.get())).grid(
                 row=row, column=1, sticky="w", padx=8)
             row += 1
+        if typ in fx.EFFECTS and typ != "vypnuto":          # bile jiskry pres libovolny efekt
+            ttk.Label(f, text="Jiskření navíc", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+            gf = ttk.Frame(f)
+            gf.grid(row=row, column=1, sticky="ew", padx=8)
+            gv2 = tk.IntVar(value=fx.glitter(eff))
+            gl = ttk.Label(gf, style="Muted.TLabel", width=9)
+
+            def show_glitter():
+                gl.config(text="bez jisker" if gv2.get() <= 0 else str(gv2.get()))
+
+            def on_glitter(_e=None):
+                eff["jiskreni"] = int(gv2.get())
+                show_glitter()
+            V.scale(gf, variable=gv2, from_=0, to=fx.MAX_GLITTER, length=150, command=on_glitter).pack(
+                side="left", fill="x", expand=True)
+            gl.pack(side="left", padx=(8, 0))
+            show_glitter()
+            row += 1
         if typ in fx.PAUSE_EFFECTS:                         # pauza naplno / se stejnou barvou
             ttk.Label(f, text="Pauza naplno" if typ == "dychani" else "Pauza", style="Muted.TLabel").grid(
                 row=row, column=0, sticky="w", pady=4)
@@ -599,7 +629,8 @@ class LedEditor:
                       "prechod": ["barva 1", "barva 2"], "teplota": ["studená", "střední", "horká"],
                       "dvojita_kometa": ["kometa 1", "kometa 2"], "policie": ["první", "druhá"],
                       "tep": ["barva"], "stroboskop": ["barva"], "divadlo": ["světla", "pozadí"],
-                      "odraz": ["světlo", "pozadí"], "blesky": ["blesk", "pozadí"]}.get(
+                      "odraz": ["světlo", "pozadí"], "blesky": ["blesk", "pozadí"],
+                      "stafeta": ["kometa", "pozadí"]}.get(
                 typ, [f"barva {i + 1}" for i in range(ncolors)])
             cols = eff.setdefault("barvy", list(fx.DEFAULT_EFFECT["barvy"]))
             while len(cols) < ncolors:
@@ -694,7 +725,23 @@ class LedEditor:
             for text, cmd, w in (("Duha", rainbow, None), ("Obrátit pořadí", reverse, None), ("↻", rotate, 3)):
                 ttk.Button(tf, text=text, command=cmd, width=w).pack(side="left", padx=(0, 4))
             row += 1
+        if hi > 1:                                          # hotova paleta nastavi barvy i jejich pocet
+            def preset(pid):
+                new = fx.preset_colors(pid, lo, hi)
+                eff["pocet_barev"] = len(new)
+                cols[:len(new)] = new
+                rebuild()
+            self._preset_box(f, preset).grid(row=row, column=1, sticky="w", padx=8, pady=(0, 4))
+            row += 1
         return row
+
+    @staticmethod
+    def _preset_box(parent, apply):
+        """Rozbalovaci seznam hotovych palet (fx.PALETTES); po vyberu zavola apply(id palety)."""
+        cb = ttk.Combobox(parent, values=[name for _i, name, _c in fx.PALETTES], state="readonly", width=22)
+        cb.set("Hotová paleta…")
+        cb.bind("<<ComboboxSelected>>", lambda _e: apply(fx.PALETTES[cb.current()][0]))
+        return cb
 
     def _pick_list(self, cols, i, b):
         c = colorchooser.askcolor(color=cols[i], parent=self.fx_frame)[1]
@@ -935,7 +982,13 @@ class LedEditor:
         note(c, 6, "Citlivost: vyšší = bere i slabší údery a výrazněji reaguje na tišší zvuk. Platí i pro "
                    "hudební efekty klávesnice, pokud nemají vlastní citlivost.", pady=(0, 6))
         note(c, 7, "Bluetooth sluchátka hrají o 150–250 ms později než reproduktory – o tolik zpozdi světla, "
-                   "aby údery seděly. S kabelem / reproduktory 0 ms.", pady=(0, 16))
+                   "aby údery seděly. S kabelem / reproduktory 0 ms.", pady=(0, 6))
+        dz = tk.BooleanVar(value=bool(mc.get("drop_zablesk", True)))
+        ttk.Checkbutton(c, text="Důraz na drop – bílý záblesk, který proběhne skříní", variable=dz,
+                        command=lambda: mc.__setitem__("drop_zablesk", dz.get())).grid(
+            row=8, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 0))
+        note(c, 9, "Drop / refrén = hudba náhle výrazně zesílí. Platí pro všechny styly; v náhledu se "
+                   "simulovanou hudbou přichází každých 16 s.", pady=(0, 16))
 
         # 4) barvy
         d = card(3, "Barvy")
@@ -974,12 +1027,17 @@ class LedEditor:
             V.segmented(d, nv, [(k, str(k)) for k in range(2, 6)], command=on_count).grid(
                 row=2, column=1, columnspan=2, sticky="w", pady=4)
             bf = ttk.Frame(d)
-            bf.grid(row=3, column=1, columnspan=2, sticky="w", pady=(4, 16))
+            bf.grid(row=3, column=1, columnspan=2, sticky="w", pady=(4, 6))
             for i in range(len(cols)):
                 b2 = V.swatch(bf, cols[i], None, text="hlavní" if i == 0 else ("doplňková" if i == 1 else str(i + 1)),
                               width=9)
                 b2.config(command=lambda i=i, b2=b2: self._pick_list(cols, i, b2))
                 b2.pack(side="left", padx=(0, 6), ipady=4)
+
+            def preset(pid):
+                cols[:] = fx.preset_colors(pid, 2, 5)
+                self._build_music()
+            self._preset_box(d, preset).grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, 16))
         self._music_refresh()
 
     def _music_palette(self):
@@ -1321,8 +1379,8 @@ class LedEditor:
         V.card_title(f, "Otočení svislých efektů a hudby").grid(row=0, column=0, columnspan=2, sticky="w",
                                                                padx=20, pady=(14, 2))
         ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
-            "Kde je „dole“ u svislých efektů (plamen, vodopád, hladina, přetahovaná) a stylů hudby (plameny, "
-            "spektrum, vlny…). Po srovnání natočení ventilátorů patří 0°; jiné otočení jen když chceš efekt "
+            "Kde je „dole“ u svislých efektů (plamen, vodopád, hladina, přetahovaná, skákající míčky) a stylů "
+            "hudby (plameny, spektrum, vlny, metronom, kopák a činely…). Po srovnání natočení ventilátorů patří 0°; jiné otočení jen když chceš efekt "
             "celý otočit (např. plamen shora). Platí pro všechny efekty, playlist i hudbu.")).grid(
             row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 6))
         cur = self._rotation()

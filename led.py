@@ -72,6 +72,7 @@ PLAYLIST_DEFAULT = {"zapnuto": False, "polozky": [], "prolinani": 1.0}
 # hudebni vizualizer (stejne jako hudba.LED_DEFAULTS - led.py hudbu nenacita, at nezavisi na numpy)
 MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "styly_stridat": list(fx.MUSIC_STYLES),
                  "citlivost": 5, "basy": 7, "jas": 100,
+                 "drop_zablesk": True,                 # duraz na drop: bily zablesk vlnou skrini
                  "barvy": "obal", "citlivost_barev": 7, "doplnit_barvy": True, "paleta": ["#ff2a6d", "#7b2cff", "#05d9e8"],
                  "zpozdeni_ms": 180, "navrat_s": 3, "otoceni": 0}
 MAX_REPEATS = 999
@@ -118,7 +119,8 @@ def default_config():
         "vlna": False,                             # efekt posunuty mezi ventilatory
         "vlna_smer": "dozadu",                     # "dozadu" = od predku skrine dozadu, "dopredu"
         "vlna_f140_spolu": True,                   # F140 ve vlne jako jeden ventilator
-        "f140_vpredu": "led1",                     # ktery F140 je bliz predku skrine (led1 / led2)
+        "protismerne": False,                      # ozubena kola: kazdy druhy ventilator zrcadlove (toci se opacne)
+        "f140_vpredu": "led1",                    # ktery F140 je bliz predku skrine (led1 / led2)
         "efekt": copy.deepcopy(fx.DEFAULT_EFFECT),
         "efekt_f140": copy.deepcopy(fx.DEFAULT_EFFECT),
         "efekt_deska": copy.deepcopy(fx.DEFAULT_EFFECT),
@@ -251,6 +253,27 @@ def wave_offsets(lcfg, keys):
     return {k: ((n - 1 - v) if back else v) / max(1, n) for k, v in pos.items()}, order
 
 
+def case_order(lcfg, keys):
+    """Cile v poradi ve skrini (predek ... zadek, grafika posledni), kazdy F140 zvlast."""
+    return wave_offsets(dict(lcfg, vlna_f140_spolu=False), keys)[1]
+
+
+def relay_slots(lcfg, keys):
+    """{klic: (poradi, pocet pozic)} pro stafetu - poradi ventilatoru jako u vlny (smer vlny, F140
+    jako jeden / postupne), ale i kdyz je vlna vypnuta."""
+    offs = wave_offsets(lcfg, keys)[0]
+    n = len({round(v, 6) for v in offs.values()})
+    top = max(offs.values(), default=0.0)
+    return {k: (round((top - v) * n), n) for k, v in offs.items()}     # nejvetsi posun jde prvni
+
+
+def mirrored(lcfg, keys):
+    """Ventilatory, ktere se pri "protismerne" (ozubena kola) toci opacne: kazdy druhy v poradi ve skrini."""
+    if not lcfg.get("protismerne"):
+        return set()
+    return {k for i, k in enumerate(case_order(lcfg, keys)) if i % 2}
+
+
 def effect_for(lcfg, group):
     if group in EXTRAS:                                    # vlastni efekt, nebo jako F140 / deska
         src = lcfg.get(group, {}).get("efekt", "deska")
@@ -269,8 +292,8 @@ def is_animated(lcfg):
     items = playlist_items(lcfg)
     if len(items) > 1:                                     # playlist strida efekty
         return True
-    return any((items[0] if items and follows_playlist(lcfg, g) else effect_for(lcfg, g)).get("typ")
-               in fx.ANIMATED for g in groups)
+    return any(fx.animated(items[0] if items and follows_playlist(lcfg, g) else effect_for(lcfg, g))
+               for g in groups)
 
 
 # ----------------------------------------------------------------- playlist
@@ -422,14 +445,18 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
     G-klaves kb_over {zona: barva} a ukazatel hlasitosti kb_top se kresli i pres jednu barvu jako F140 / deska."""
     tg = targets(lcfg)
     wave = bool(lcfg.get("vlna"))
-    offsets = wave_offsets(lcfg, [k for k, *_ in tg if k not in NO_WAVE])[0] if wave else {}
+    wkeys = [k for k, *_ in tg if k not in NO_WAVE]
+    offsets = wave_offsets(lcfg, wkeys)[0] if wave else {}
     span = max(offsets.values(), default=0.0)
+    slots = relay_slots(lcfg, wkeys)                       # poradi ve skrini pro stafetu
+    flip = mirrored(lcfg, wkeys)                           # ozubena kola: kazdy druhy ventilator zrcadlove
     pl = playlist_at(lcfg, t, span)
     mix = max(0.0, min(1.0, float(music.get("mix", 1.0)))) if music else 0.0
     if mix > 0:
         meff = (lcfg.get("hudba") or {})
-        order = wave_offsets(dict(lcfg, vlna_f140_spolu=False), [k for k, *_ in tg if k not in NO_WAVE])[1]
+        order = case_order(lcfg, wkeys)
         place = {k: i / max(1, len(order) - 1) for i, k in enumerate(order)}      # 0 predek .. 1 zadek
+        hop = {k: (i, len(order)) for i, k in enumerate(order)}                   # skakani po skrini
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
         if key == "klavesnice" and kb_own(lcfg):
@@ -440,9 +467,12 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
 
         def one(eff, tt):
             c = engine.frame(eff, tt, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0),
-                             span=span)
-            if orient and eff.get("typ") not in ("vlastni", "vypnuto"):   # vlastni barvy jsou uz po LED
-                c = _orient(c, *orientation(lcfg, key))
+                             span=span, slot=slots.get(key))
+            if eff.get("typ") not in ("vlastni", "vypnuto"):              # vlastni barvy jsou uz po LED
+                if key in flip:
+                    c = fx.mirror(c)
+                if orient:
+                    c = _orient(c, *orientation(lcfg, key))
             return c
         if mix >= 1.0:
             cols = None
@@ -455,7 +485,9 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
             cols = one(effect_for(lcfg, group), t)
         if mix > 0:                                        # hudba: uder jde vlnou od ventilatoru, ktery je napred
             delay = (span - offsets.get(key, 0.0)) / span if wave and span > 0 else 0.0
-            mc = engine.music(meff, music, key, n, place.get(key, 0.0), delay, dt)
+            mc = engine.music(meff, music, key, n, place.get(key, 0.0), delay, dt, slot=hop.get(key))
+            if key in flip:
+                mc = fx.mirror(mc)
             if orient:
                 mc = _orient(mc, *orientation(lcfg, key))
             cols = mc if cols is None else [fx._mix(a, b, mix) for a, b in zip(cols, mc)]

@@ -37,6 +37,7 @@ import klavesnice_efekty as kbfx
 import klavesnice_rozlozeni as R
 import klavesy_g
 import led
+import led_efekty as fx
 import vzhled as V
 
 POLL_MS = 3000               # stav integrovane pameti (prepina ji vlakno LED v bezici aplikaci)
@@ -49,8 +50,24 @@ KEY_DEFAULT = {"zapnuto": False, "efekt": "vlastni", "jas": 100, "barva": "#ffff
 # popisek posuvniku "sirka" podle efektu
 WIDTH_LABEL = {"vlna": "Délka vlny", "kruh": "Šířka kruhů", "toceni": "Zkroucení", "skener": "Šířka",
                "dest": "Hustota", "trpyt": "Hustota", "ohnostroj": "Četnost", "plamen": "Výška plamene",
-               "jiskry": "Množství", "dest_hudba": "Hustota"}
-OPP_LABEL = {"kruh": "Dovnitř", "hlasitost": "Od středu do stran"}      # popisek "opacne" podle efektu
+               "jiskry": "Množství", "dest_hudba": "Hustota", "plazma": "Velikost vzoru",
+               "polarni_zare": "Šířka závěsů", "radar": "Délka stopy", "bourka": "Hustota deště",
+               "ohnostroj_hudba": "Množství", "plazma_hudba": "Velikost vzoru", "tetris": "Množství kostek"}
+SPEED_LABEL = {"bourka": "Četnost blesků", "spektrogram": "Rychlost posunu", "dj": "Rychlost toku",
+               "zaznam": "Rychlost posunu"}
+OPP_LABEL = {"kruh": "Dovnitř", "hlasitost": "Od středu do stran", "vlna": "Opačně (kosočtverec dovnitř)",
+             "radar": "Proti směru hodin", "dj": "Od krajů ke středu",
+             "zaznam": "Zleva doprava"}      # popisek "opacne" podle efektu
+# co znamenaji barvy efektu (v poradi) a kratka napoveda pod nastavenim
+COLOR_NOTE = {"radar": "Barvy: paprsek, cíle.", "bourka": "Barvy: blesk, déšť.",
+              "had": "Barvy: hlava, ocas, potrava. Had leze za potravou a roste; když se zamotá, začne znovu.",
+              "zivot": "Barvy podle stáří buňky (nová → stará). Když obrazec vymře nebo se zacyklí, zaseje se "
+                       "nový; stisk klávesy přidá buňky (se zapnutou reakcí na stisk nebo ukazatelem hlasitosti).",
+              "dj": "Barvy: basy, středy, výšky – barva okamžiku vzniká uprostřed a teče do stran.",
+              "spektrogram": "Barvy od slabého zvuku po silný. Spodní řada = spektrum teď (vlevo basy, vpravo "
+                             "výšky), řady se posouvají nahoru.",
+              "zaznam": "Barvy od prostřední řady k okrajům.",
+              "tetris": "Každý úder shodí kostku; plná spodní řada blikne a zmizí, drop smaže vše."}
 KEEP = ("klavesy", "zaklad")   # pri zmene efektu zustava
 # zalozky stranky (nahled a vyber M1-M3 jsou pevne nad nimi)
 TABS = [("podsviceni", "Podsvícení"), ("g", "Klávesy G1–G5"), ("predvolby", "Předvolby"),
@@ -97,6 +114,7 @@ class KeyboardEditor:
         self.items = {}
         self.sel_lbl = None
         self.vol_pick = False                     # klik na klavesu = do ukazatele hlasitosti / z nej
+        self.center_pick = False                  # klik na klavesu = stred efektu (kruh, toceni, radar)
         self._vdemo = (None, False)
         self._vov = hlasitost.Overlay()
         self._back = None                         # zalozka, ze ktere se slo upravit predvolbu (Hotovo se vrati)
@@ -352,6 +370,8 @@ class KeyboardEditor:
         if tab == "prekryvy" and self.vol_pick and self.vcfg["zapnuto"]:
             return "hlasitost"
         if tab == "podsviceni":
+            if self.center_pick and "stred" in kbfx.info(self.eff.get("typ"))[2]:
+                return "stred"                    # klik = stred kruhu / toceni / radaru
             if self.layer() is not None:
                 return "cast"
             if self.painting():
@@ -364,7 +384,11 @@ class KeyboardEditor:
         if z is None:
             return
         mode = self.click_mode()
-        if mode == "hlasitost":                   # klavesa do ukazatele hlasitosti / z nej
+        if mode == "stred":                       # stred efektu na kliknutou klavesu
+            self.eff["stred"] = str(z)
+            self.center_pick = False
+            self._rebuild()
+        elif mode == "hlasitost":                 # klavesa do ukazatele hlasitosti / z nej
             self.vcfg["klavesy"] = sorted(set(self.vcfg["klavesy"]) ^ {z})
             self._show_sel()
             self._vol_info()
@@ -465,6 +489,8 @@ class KeyboardEditor:
         mode = self.click_mode()
         if not self.kc.get("zapnuto"):
             hint = "Náhled ukáže efekt, až zapneš řízení podsvícení z aplikace."
+        elif mode == "stred":
+            hint = "Klikni na klávesu, která má být středem efektu."
         elif mode == "hlasitost":
             hint = "Klik na klávesu = přidat do ukazatele hlasitosti / odebrat z něj (bílý rámeček)."
         elif mode == "cast":
@@ -778,6 +804,18 @@ class KeyboardEditor:
                 b.pack(side="left", padx=2)
                 btns.append(b)
             row += 1
+            if hi > 1:                                       # hotova paleta nastavi barvy i jejich pocet
+                def preset(_e=None):
+                    new = fx.preset_colors(fx.PALETTES[pb.current()][0], lo, hi)
+                    eff["barvy"], eff["pocet_barev"] = new, len(new)
+                    if "duha" in names:
+                        eff["duha"] = False
+                    self._rebuild()
+                pb = ttk.Combobox(f, values=[n for _i, n, _c in fx.PALETTES], state="readonly", width=22)
+                pb.set("Hotová paleta…")
+                pb.bind("<<ComboboxSelected>>", preset)
+                pb.grid(row=row, column=1, sticky="w", pady=(0, 4))
+                row += 1
         if "duha" in names:
             dv = tk.BooleanVar(value=bool(kbfx.get(eff, "duha")))
             ttk.Checkbutton(f, text="Plná duha místo barev", variable=dv,
@@ -800,8 +838,40 @@ class KeyboardEditor:
             V.segmented(f, sv, kbfx.DIRECTIONS, command=lambda: eff.__setitem__("smer", int(sv.get())),
                         style="SegSmall.Toolbutton").grid(row=row, column=1, sticky="w", pady=4)
             row += 1
+        if "tvar" in names:                                  # tvar vlny: rovna / sipka / kosoctverec
+            self._label(f, row, "Tvar")
+            shv = tk.StringVar(value=kbfx.get(eff, "tvar") or "rovna")
+            V.segmented(f, shv, kbfx.SHAPES, command=lambda: eff.__setitem__("tvar", shv.get()),
+                        style="SegSmall.Toolbutton").grid(row=row, column=1, sticky="w", pady=4)
+            row += 1
+        if "stred" in names:                                 # stred efektu: stred klavesnice / vybrana klavesa
+            self._label(f, row, "Střed")
+            cf = ttk.Frame(f)
+            cf.grid(row=row, column=1, sticky="w", pady=4)
+            cur = str(kbfx.get(eff, "stred") or "")
+            named = dict(kbfx.CENTERS)
+            opts = list(kbfx.CENTERS)
+            if cur not in named:                             # klavesa vybrana klikem
+                name = next((k[1] for k in R.KEYS if str(k[0]) == cur), cur)
+                opts.append((cur, f"klávesa {name}"))
+            cb = ttk.Combobox(cf, values=[n for _z, n in opts], state="readonly", width=24)
+            cb.current(next(i for i, (z, _n) in enumerate(opts) if z == cur))
+
+            def on_center(_e=None):
+                eff["stred"] = opts[cb.current()][0]
+            cb.bind("<<ComboboxSelected>>", on_center)
+            cb.pack(side="left")
+            pick = tk.BooleanVar(value=self.center_pick)
+
+            def on_pick():
+                self.center_pick = pick.get()
+                self._show_sel()
+                self.refresh()
+            ttk.Checkbutton(cf, text="vybrat klikem na klávesu v náhledu", variable=pick, command=on_pick).pack(
+                side="left", padx=(12, 0))
+            row += 1
         if "rychlost" in names:
-            self._slider(f, row, "Rychlost", eff, "rychlost", 1, 10)
+            self._slider(f, row, SPEED_LABEL.get(typ, "Rychlost"), eff, "rychlost", 1, 10)
             row += 1
         if "sirka" in names:
             self._slider(f, row, WIDTH_LABEL.get(typ, "Šířka"), eff, "sirka", 1, 10)
@@ -863,6 +933,10 @@ class KeyboardEditor:
             row += 1
         if "klavesy" in names:
             row = self._paint(f, eff, row)
+        if typ in COLOR_NOTE:
+            ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 40, justify="left", text=COLOR_NOTE[typ]).grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            row += 1
         if kbfx.info(typ)[1] == "hudba":
             ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 40, justify="left",
                       text="Reaguje na hudbu ze Spotify (zvuk zachytává jen Spotify). Citlivost je společná "

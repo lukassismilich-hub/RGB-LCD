@@ -183,6 +183,7 @@ class Analyzer:
     RANGE_DB = 26.0                       # rozsah od spicky dolu, ktery se mapuje na 0..1
     RELEASE_DB_S = 2.5                    # jak rychle klesa spicka automatickeho zesileni
     KEEP_S = 1.5                          # historie snimku (zpozdeni az 0,5 s + rezerva)
+    HAT_RATIO = 1.15                      # prah virblu / cinelu vuci prahu uderu (vysky kolisaji vic nez basy)
 
     def __init__(self):
         import numpy as np
@@ -214,6 +215,9 @@ class Analyzer:
         self.short_db = collections.deque(maxlen=70)      # celkovy vykon ~1,5 s
         self.long_db = collections.deque(maxlen=560)      # ~12 s
         self.last_beat = -1e9
+        self.high_hist = collections.deque(maxlen=47)     # energie vysek za ~1 s (virbl / cinely)
+        self.prev_high = 0.0
+        self.last_hat = -1e9
         self.last_drop = -1e9
         self.ibi = collections.deque(maxlen=8)            # intervaly mezi udery
         self.phase = 0.0
@@ -221,8 +225,9 @@ class Analyzer:
         with self.lock:
             self.frames = collections.deque()             # (t, snimek)
             self.beats = collections.deque(maxlen=16)     # (t, sila, poradi)
+            self.hats = collections.deque(maxlen=24)      # (t, sila, poradi) - virbl / cinely
             self.drops = collections.deque(maxlen=8)      # (t, poradi)
-            self.beat_n = self.drop_n = 0
+            self.beat_n = self.drop_n = self.hat_n = 0
 
     def new_track(self):
         """Nova skladba: tempo a dlouhodoby prumer (drop) pocitat znovu, at se neprenesou z predchozi."""
@@ -288,6 +293,19 @@ class Analyzer:
                     self.beats.append((t, k, self.beat_n))
             self.bass_hist.append(e)
             self.prev_bass = e
+            # virbl / cinely: stejne jako uder, ale ve vyskach (2-12 kHz) - kratsi odstup, strmejsi narust
+            eh = float(p[self.r_high[0]:self.r_high[1]].sum()) / self.norm
+            avg_h = (sum(self.high_hist) / len(self.high_hist)) if self.high_hist else eh
+            hat_c = beat_c * self.HAT_RATIO
+            if (len(self.high_hist) > 10 and eh > avg_h * hat_c and eh > self.prev_high * 1.3
+                    and t - self.last_hat > 0.11 and 10 * math.log10(eh + 1e-12) > self.FLOOR_DB):
+                k = float(max(0.35, min(1.0, (eh / max(avg_h, 1e-12) - hat_c) / hat_c + 0.5)))
+                self.last_hat = t
+                with self.lock:
+                    self.hat_n += 1
+                    self.hats.append((t, k, self.hat_n))
+            self.high_hist.append(eh)
+            self.prev_high = eh
             # drop / refren: kratkodoba uroven vyrazne nad dlouhodobou
             pw = 10 ** (db_all / 10)                       # prumery z vykonu, ne z dB (mezery mezi udery)
             self.short_db.append(pw)
@@ -331,9 +349,11 @@ class Analyzer:
             snap = dict(self.frames[i][1])
             beats = [(tq - t, k, n) for t, k, n in self.beats if t <= tq]
             n_beats = [n for t, _k, n in self.beats if t <= tq]
+            hats = [(tq - t, k, n) for t, k, n in self.hats if t <= tq]
             drops = [n for t, n in self.drops if t <= tq]
             last_t = self.frames[-1][0]
         snap["beats"] = beats[-4:]
+        snap["beats_hi"] = hats[-6:]
         snap["beat_n"] = n_beats[-1] if n_beats else 0
         snap["drop_n"] = drops[-1] if drops else 0
         snap["age"] = max(0.0, tq - last_t)                # stari dat (bez zpozdeni) - zachytavani vazne

@@ -1367,8 +1367,10 @@ class KeyboardEditor:
     def mem_lights(self, m):
         import klavesnice_pamet as P
         v = self.mem_cfg(m)
-        keys = v["klavesy"] or P.suggest(klavesy_g.profile(self.lcfg, m))[0]
-        logo = keys if v.get("logo", "jako") == "jako" else v["logo"]
+        keys = v["klavesy"] or {"typ": "ponechat"}         # vychozi: v pameti nic nemenit
+        logo = v.get("logo", "jako")
+        logo = {"typ": "ponechat"} if logo == "jako" and keys["typ"] == "ponechat" else (
+            keys if logo == "jako" else logo)
         return dict(keys), dict(logo)
 
     def _build_mem_m(self):
@@ -1379,10 +1381,10 @@ class KeyboardEditor:
         f.columnconfigure(1, weight=1)
         v = self.mem_cfg()
         auto = not v["klavesy"]
-        if auto:                                  # navrh podle M; prvni zmena ho ulozi do nastaveni M
+        if auto:                                  # vychozi "nechat, jak je"; prvni zmena se ulozi do nastaveni M
             def attach(d):
                 v["klavesy"] = d
-            e = _Lazy(P.suggest(klavesy_g.profile(self.lcfg, self.m))[0], attach)
+            e = _Lazy({"typ": "ponechat"}, attach)
         else:
             e = v["klavesy"]
         ttk.Separator(f).grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 10))
@@ -1405,8 +1407,8 @@ class KeyboardEditor:
         def on_t():
             e["typ"] = tv.get()
             rebuild()
-        V.segmented(f, tv, P.TYPES, command=on_t, style="SegSmall.Toolbutton").grid(row=3, column=1, sticky="w",
-                                                                                   pady=4)
+        V.segmented(f, tv, [P.KEEP] + P.TYPES, command=on_t, style="SegSmall.Toolbutton").grid(
+            row=3, column=1, sticky="w", pady=4)
         r = 4
         if e.get("typ") in ("barva", "dychani"):
             self._label(f, r, "Barva")
@@ -1425,7 +1427,7 @@ class KeyboardEditor:
             e.setdefault("perioda_s", 5.0)
             self._slider(f, r, "Délka cyklu", e, "perioda_s", 1.0, 20.0, 0.5, "{:.1f} s")
             r += 1
-        if e.get("typ") != "vypnuto":
+        if e.get("typ") not in ("vypnuto", "ponechat"):
             e.setdefault("jas", 100)
             self._slider(f, r, "Jas", e, "jas", 10, 100, 5, "{:.0f} %")
             r += 1
@@ -1438,12 +1440,13 @@ class KeyboardEditor:
         def on_l():
             if lv.get() == "jako":
                 v["logo"] = "jako"
-            elif lv.get() == "vypnuto":
-                v["logo"] = {"typ": "vypnuto"}
+            elif lv.get() in ("vypnuto", "ponechat"):
+                v["logo"] = {"typ": lv.get()}
             else:
                 v["logo"] = {"typ": "barva", "barva": e.get("barva", "#ffffff"), "jas": 100}
             rebuild()
-        V.segmented(lf, lv, [("jako", "jako klávesy"), ("vypnuto", "vypnuto"), ("barva", "jedna barva")],
+        V.segmented(lf, lv, [("jako", "jako klávesy"), ("ponechat", "nechat, jak je"), ("vypnuto", "vypnuto"),
+                             ("barva", "jedna barva")],
                     command=on_l, style="SegSmall.Toolbutton").pack(side="left")
         if isinstance(logo, dict) and logo.get("typ") == "barva":
             def pick_l():
@@ -1458,17 +1461,14 @@ class KeyboardEditor:
         bf.grid(row=r, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         def suggest():
-            v["klavesy"], v["logo"] = {}, "jako"
+            v["klavesy"], v["logo"] = P.suggest(klavesy_g.profile(self.lcfg, self.m))[0], "jako"
             rebuild()
-        sb = ttk.Button(bf, text=f"Podle efektu M{self.m}", command=suggest)
-        sb.pack(side="left")
-        if auto:
-            sb.state(["disabled"])
+        ttk.Button(bf, text=f"Navrhnout podle efektu M{self.m}", command=suggest).pack(side="left")
         ttk.Button(bf, text="Nahrát M1–M3 do paměti klávesnice",
                    command=lambda: self._run(self._write_mem)).pack(side="left", padx=(6, 0))
         ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
-            ("Teď navrženo automaticky podle efektu M (změní se s ním); po první úpravě zůstane, jak ho "
-             "nastavíš. " if auto else "")
+            ("Teď se v paměti nic nezmění („nechat, jak je“ – tvoje rozložení po klávesách z G HUB zůstane). "
+             if auto else "")
             + "Nahrání zapíše všechna tři M (každé svoje nastavení odsud) hned, bez Uložit; předtím udělá zálohu "
             "celé paměti a po zápisu ji přečte a porovná. Nastavení odsud se do config.json uloží až po Uložit.")
         ).grid(row=r + 1, column=0, columnspan=3, sticky="w", pady=(6, 0))

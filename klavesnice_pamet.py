@@ -1,14 +1,17 @@
 # klavesnice_pamet.py - podsviceni v integrovane pameti G815 (onboard profily 1-3 = M1-M3)
 #
-# Profil (sektor 1-3, 256 B, format 4): od bajtu 208 ctyri zaznamy podsviceni po 11 B - klavesy, logo,
-# klavesy v usporem rezimu, logo v usporem rezimu (G HUB tam dava stejny efekt s jasem 50 %).
+# Profil (sektor 1-3, 256 B, format 4): od bajtu 208 ctyri zaznamy podsviceni po 11 B - logo, klavesy,
+# logo v usporem rezimu, klavesy v usporem rezimu (G HUB tam dava stejny efekt s jasem 50 %). Poradi
+# podle RGB efektu 0x8071 (overeno 9. 11. 2026): skupina 0 = logo (vypnuto, barva, cyklus, dychani),
+# skupina 1 = klavesy (navic vlna 0x04, 0x0B a 0x0C = rozlozeni po klavesach ulozene v klavesnici -
+# G HUB ho uklada mimo sektory profilu, jak, zatim nevime; frameEnd 0x8081 s ulozenim ho nemeni).
 # Na konci sektoru CRC-16/CCITT (init 0xFFFF) pres bajty 0-253, big endian. Zaznamy (overeno na
 # obsahu pameti 9. 11. 2026, formaty podle libratbag hidpp20):
 #   00 ...                                    vypnuto
 #   01 R G B 00 ...                           jedna barva (bez jasu - jas = ztlumena barva)
 #   03 00 00 00 00 00 periodaH periodaL jas   cyklus barev (perioda ms, jas 1-100)
 #   0A R G B periodaH periodaL 01 jas         dychani (perioda ms, prubeh 1, jas 1-100)
-#   04 / 0C ...                               vlna / jiny efekt z G HUB - neznamy format, jen se ukaze
+#   04 / 0B / 0C ...                          vlna / ? / rozlozeni po klavesach - zaznam se jen ponecha
 # Zapis (HID++ 0x8100): funkce 6 memoryAddrWrite [sektor, offset 0, delka], 7 memoryWrite po 16 B,
 # 8 memoryWriteEnd - jako G HUB / libratbag. Pred zapisem zaloha, po zapisu cteni a porovnani.
 # Pamet ma jen vestavene efekty: barvy jednotlivych klaves, casti a efekty aplikace se ulozit nedaji.
@@ -23,6 +26,7 @@ LIGHT_OFF = 208                                   # zacatek zaznamu podsviceni v
 LIGHT_LEN = 11
 SECTOR = 256
 TYPES = [("vypnuto", "vypnuto"), ("barva", "jedna barva"), ("dychani", "dýchání"), ("cyklus", "cyklus barev")]
+KEEP = ("ponechat", "nechat, jak je")             # zaznam v pameti nezmenit (napr. rozlozeni z G HUB)
 SAVE_JAS = 50                                     # usporny rezim: stejny efekt s timto jasem (jako G HUB)
 
 
@@ -88,7 +92,10 @@ def describe(e):
         return f"dýchání {e.get('barva')} {e.get('perioda_s', 0):g} s, jas {e.get('jas')} %"
     if t == "cyklus":
         return f"cyklus barev {e.get('perioda_s', 0):g} s, jas {e.get('jas')} %"
-    return {0x04: "vlna (z G HUB)", 0x0C: "efekt z G HUB"}.get(e.get("kod"), f"efekt z G HUB (typ {e.get('kod')})")
+    if t == "ponechat":
+        return "beze změny"
+    return {0x04: "vlna (z G HUB)", 0x0C: "rozložení po klávesách (z G HUB)"}.get(
+        e.get("kod"), f"efekt z G HUB (typ 0x{e.get('kod', 0):02X})")
 
 
 def with_lights(sector, keys, logo):
@@ -96,8 +103,8 @@ def with_lights(sector, keys, logo):
     s = bytearray(sector)
     if len(s) != SECTOR:
         raise ValueError("sektor profilu nemá 256 B")
-    recs = [keys, logo, dict(keys, jas=min(SAVE_JAS, int(keys.get("jas", 100)))),
-            dict(logo, jas=min(SAVE_JAS, int(logo.get("jas", 100))))]
+    recs = [logo, keys, dict(logo, jas=min(SAVE_JAS, int(logo.get("jas", 100)))),
+            dict(keys, jas=min(SAVE_JAS, int(keys.get("jas", 100))))]
     for i, e in enumerate(recs):
         if e.get("typ") not in dict(TYPES):           # neznamy efekt z G HUB: zaznam nechat, jak je
             continue
@@ -113,8 +120,8 @@ def read_lights(k=None):
         out = {}
         for m in (1, 2, 3):
             s = bytes(k.read_sector(m, SECTOR))
-            out[m] = (decode(s[LIGHT_OFF:LIGHT_OFF + LIGHT_LEN]),
-                      decode(s[LIGHT_OFF + LIGHT_LEN:LIGHT_OFF + 2 * LIGHT_LEN]))
+            out[m] = (decode(s[LIGHT_OFF + LIGHT_LEN:LIGHT_OFF + 2 * LIGHT_LEN]),   # klavesy
+                      decode(s[LIGHT_OFF:LIGHT_OFF + LIGHT_LEN]))                    # logo
         return out
     if k is not None:
         return go(k)
@@ -152,8 +159,9 @@ def write_lights(lights, progress=None):
             if crc16(cur[:SECTOR - 2]) != (cur[-2] << 8 | cur[-1]):
                 raise K.HidppError(f"profil {m} v paměti nemá platný kontrolní součet – nezapisuji")
             new = with_lights(cur, keys, logo)
-            if new != cur:
-                write_sector(k, m, new)
+            if new == cur:
+                continue
+            write_sector(k, m, new)
             if progress:
                 progress(n + 1, len(lights))
     log.info("%s: podsvícení profilů %s zapsáno do integrované paměti (záloha %s).", K.NAME,

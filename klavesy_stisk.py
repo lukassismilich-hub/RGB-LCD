@@ -5,7 +5,9 @@
 # a fronta drzi nejvys MAX_QUEUE stisku, ktere si vlakno LED hned vybere (drain).
 # Zona = kod HID - 3 (modifikatory 0xE0-0xE7 -> 104-111); scan kod (sada 1) se na HID prevadi
 # tabulkou. Klavesa vedle Enteru (scan 0x2B) je na ISO klavesnici zona 47 (#).
-# Spousti se jen kdyz efekt klavesnice ma reakci na stisk (led.py) - jinak hook nebezi.
+# Klavesy hlasitosti (posuvnik a ztlumeni na G815: VK_VOLUME_UP / DOWN / MUTE) jdou zvlast do fronty
+# drain_volume() - pro efekt hlasitosti (hlasitost.py); tady i injektovane (G HUB, jine programy).
+# Spousti se jen kdyz efekt klavesnice ma reakci na stisk nebo je zapnuty efekt hlasitosti (led.py).
 
 import collections
 import ctypes
@@ -40,6 +42,7 @@ _SCAN_E0 = {0x1C: 0x58, 0x1D: 0xE4, 0x35: 0x54, 0x37: 0x46, 0x38: 0xE6, 0x47: 0x
 # podle virtualniho kodu (scan kod je u nich nejednoznacny): NumLock, Pause, multimedia -> primo zona
 _VK_HID = {0x90: 0x53, 0x13: 0x48}
 _VK_ZONE = {0xB3: 155, 0xAD: 156, 0xB0: 157, 0xB1: 158}
+VK_VOLUME = {0xAD: "ztlumit", 0xAE: "-", 0xAF: "+"}
 
 
 def zone_of(vk, scan, flags):
@@ -82,6 +85,8 @@ class Watcher(threading.Thread):
     def __init__(self):
         super().__init__(name="klavesy_stisk", daemon=True)
         self._q = collections.deque(maxlen=MAX_QUEUE)
+        self._vq = collections.deque(maxlen=MAX_QUEUE)  # klavesy hlasitosti ("+", "-", "ztlumit")
+        self.on_volume = None                           # funkce bez parametru pri klavese hlasitosti (probudit)
         self._down = set()
         self._tid = None
         self._ready = threading.Event()
@@ -92,6 +97,10 @@ class Watcher(threading.Thread):
         try:
             if code == 0:
                 k = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+                if k.vkCode in VK_VOLUME and wparam in (WM_KEYDOWN, WM_SYSKEYDOWN):
+                    self._vq.append(VK_VOLUME[k.vkCode])
+                    if self.on_volume is not None:
+                        self.on_volume()
                 if not k.flags & LLKHF_INJECTED:
                     z = zone_of(k.vkCode, k.scanCode, k.flags)
                     if z is not None:
@@ -124,6 +133,13 @@ class Watcher(threading.Thread):
         out = []
         while self._q:
             out.append(self._q.popleft())
+        return out
+
+    def drain_volume(self):
+        """Klavesy hlasitosti od posledniho volani: ["+", "-", "ztlumit"]."""
+        out = []
+        while self._vq:
+            out.append(self._vq.popleft())
         return out
 
     def stop(self):

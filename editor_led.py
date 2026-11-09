@@ -1445,8 +1445,9 @@ class LedEditor:
                     kb_music = fx.music_demo(now - self.t0, self._music_palette())    # barvy jako ventilatory
                     kb_music["citlivost"] = (lc.get("hudba") or {}).get("citlivost", 5)
                 kb_over = gs.leds(self.lcfg) if led.extra_on(lc, "klavesnice") else None   # osvetleni G
+                kb_top = kbd.preview_top(now) if kbd is not None else None             # ukazka hlasitosti
                 frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), orient=False, music=snap,
-                                   kb_music=kb_music, kb_over=kb_over)
+                                   kb_music=kb_music, kb_over=kb_over, kb_top=kb_top)
             if snap is not None:
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
                               text="♪ simulovaná hudba · " + fx.MUSIC_STYLES[fx.music_style(lc["hudba"], snap)])

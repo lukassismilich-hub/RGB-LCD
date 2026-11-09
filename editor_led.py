@@ -5,7 +5,7 @@
 #     (FX_GROUPS), vlastni barvy LED (jen kdyz se efekt "vlastni barvy LED" pouziva)
 #   - Hudba: vizualizer Spotify v blocich (zapnuti, styl, reakce, barvy)
 #   - Synchronizace: synchronne / vlna, smer, F140 jako jeden, poradi vlny ve skrini
-#   - Dalsi zarizeni: graficka karta RTX 5070, dalsi zony desky, klavesnice G815 (zatim skryta,
+#   - Dalsi zarizeni: graficka karta RTX 5070, dalsi zony desky, klavesnice G815 (lze skryt
 #     led.KEYBOARD)
 #   - Zapojeni: ARGB hlavicky, ktery F140 je vpredu, natoceni ventilatoru + test, vyrovnani jasu,
 #     otoceni svislych efektu a hudby (spolecne pro vsechny efekty), klidny stav po ukonceni
@@ -26,6 +26,7 @@ PREVIEW_MS = 40
 PREVIEW_W, PREVIEW_H = 470, 180
 WRAP = 450                    # zalomeni textu v kartach zalozek (sirka leveho sloupce)
 PLAYLIST_ITEM_S = 20          # nova polozka playlistu trva asi tolik sekund (pocet opakovani podle delky)
+KB_POLL_MS = 3000            # stav integrovane pameti klavesnice v karte (prepina ji vlakno LED)
 _contrast = V.contrast
 
 TABS = [("efekt", "Efekt"), ("hudba", "Hudba"), ("synchro", "Synchronizace"),
@@ -153,6 +154,7 @@ class LedEditor:
         if led.KEYBOARD:
             self._build_keyboard()
             self._kb_run(self._kb_read_mode)               # aktualni rezim klavesnice
+            self.kb.after(KB_POLL_MS, self._kb_tick)       # a pak kazde 3 s (kdyz je karta videt)
         self._build_fans()
         self._build_sync()
         self._build_balance()
@@ -1143,24 +1145,19 @@ class LedEditor:
         f.columnconfigure(1, weight=1)
         V.card_title(f, "Klávesnice Logitech G815").grid(row=0, column=0, columnspan=3, sticky="w", padx=20,
                                                          pady=(14, 6))
-        # integrovana pamet - prepina se hned (neni soucast Ulozit)
+        # integrovana pamet - prepina ji vlakno LED samo podle "Ridit podsviceni z aplikace"
         ttk.Label(f, text="Integrovaná paměť", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(20, 10))
         self.kb_mode = ttk.Label(f, text="zjišťuji…", font=V.FONT_B)
         self.kb_mode.grid(row=1, column=1, sticky="w")
         bf = ttk.Frame(f)
         bf.grid(row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(6, 0))
-        self.kb_on = ttk.Button(bf, text="Zapnout paměť",
-                                command=lambda: self._kb_run(lambda: self._kb_set(klavesnice.MODE_ONBOARD)))
-        self.kb_on.pack(side="left", padx=(0, 6))
-        self.kb_off = ttk.Button(bf, text="Vypnout paměť",
-                                 command=lambda: self._kb_run(lambda: self._kb_set(klavesnice.MODE_HOST)))
-        self.kb_off.pack(side="left", padx=(0, 6))
-        ttk.Button(bf, text="Záloha", command=lambda: self._kb_run(self._kb_backup)).pack(side="left")
+        ttk.Button(bf, text="Záloha paměti", command=lambda: self._kb_run(self._kb_backup)).pack(side="left")
         self.kb_msg = ttk.Label(f, text="", style="Small.TLabel", wraplength=440, justify="left")
         self.kb_msg.grid(row=3, column=0, columnspan=3, sticky="w", padx=20, pady=(4, 0))
         ttk.Label(f, style="Small.TLabel", wraplength=440, justify="left", text=(
-            "Paměť se přepíná hned (bez Uložit). G HUB o přepnutí neví – jeho přepínač zůstane, jak byl. "
-            "Při zapnuté paměti si klávesnice svítí sama podle profilu v ní; barvy z aplikace se neprojeví. "
+            "Paměť přepíná aplikace sama: když řídí podsvícení, paměť vypne, a při ukončení aplikace, "
+            "uspání PC nebo vypnutí řízení ji zase zapne – klávesnice pak svítí podle profilu v paměti. "
+            "V G HUB nech u klávesnice paměť zapnutou (jinak G HUB barvy přepisuje). "
             "Záloha jen čte obsah paměti do složky zalohy.")).grid(row=4, column=0, columnspan=3, sticky="w",
                                                                    padx=20, pady=(4, 8))
         ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", padx=20, pady=6)
@@ -1171,12 +1168,12 @@ class LedEditor:
             kc["zapnuto"] = on.get()
             self._build_keyboard()
             self._kb_show_mode()
-        ttk.Checkbutton(f, text="Řídit podsvícení klávesnice z aplikace (přes G HUB)", variable=on,
+        ttk.Checkbutton(f, text="Řídit podsvícení klávesnice z aplikace", variable=on,
                         command=on_toggle).grid(row=6, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 4))
         self.kb_prev = tk.Canvas(f, width=120, height=34, bg=V.CARD, highlightthickness=0)
         self.kb_prev.grid(row=0, column=2, rowspan=2, sticky="e", padx=20, pady=(10, 0))
         if not kc.get("zapnuto"):
-            ttk.Label(f, style="Small.TLabel", text="Klávesnici teď řídí G HUB (nebo její paměť).").grid(
+            ttk.Label(f, style="Small.TLabel", text="Klávesnice svítí podle profilu v integrované paměti.").grid(
                 row=7, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 16))
             return
         ttk.Label(f, text="Efekt", style="Muted.TLabel").grid(row=7, column=0, sticky="w", padx=(20, 10), pady=4)
@@ -1245,11 +1242,16 @@ class LedEditor:
         self._kb_mode = klavesnice.get_mode()
         return None
 
-    def _kb_set(self, mode):
-        import klavesnice
-        klavesnice.set_mode(mode)
-        self._kb_mode = klavesnice.get_mode()
-        return f"Klávesnice přepnuta: {klavesnice.MODES.get(self._kb_mode, self._kb_mode)}."
+    def _kb_tick(self):
+        """Stav pameti obcas precist znovu (prepina ji vlakno LED v bezici aplikaci)."""
+        try:
+            if not self.kb.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if self.kb.winfo_ismapped():
+            self._kb_run(self._kb_read_mode)
+        self.kb.after(KB_POLL_MS, self._kb_tick)
 
     def _kb_backup(self):
         import klavesnice
@@ -1264,13 +1266,17 @@ class LedEditor:
             self.kb_mode.config(text="nezjištěno", foreground=V.MUTED)
             return
         onboard = m == klavesnice.MODE_ONBOARD
-        self.kb_mode.config(text="zapnutá" if onboard else "vypnutá (řízení z počítače)",
-                            foreground=V.WARN if onboard and self.lcfg.get("klavesnice", {}).get("zapnuto") else V.TEXT)
-        self.kb_on.config(state="disabled" if onboard else "normal")
-        self.kb_off.config(state="normal" if onboard else "disabled")
-        if onboard and self.lcfg.get("klavesnice", {}).get("zapnuto"):
-            self.kb_msg.config(text="Paměť je zapnutá – barvy z aplikace se na klávesnici neprojeví. "
-                                    "Vypni ji tlačítkem výše.", foreground=V.WARN)
+        want = bool(self.lcfg.get("klavesnice", {}).get("zapnuto"))
+        self.kb_mode.config(text="zapnutá – klávesnice svítí sama" if onboard else "vypnutá – podsvícení řídí aplikace",
+                            foreground=V.WARN if onboard == want else V.TEXT)
+        if onboard and want:
+            self.kb_msg.config(text="Paměť je ještě zapnutá – běžící aplikace ji vypne do pár sekund po Uložit.",
+                               foreground=V.WARN)
+        elif not onboard and not want:
+            self.kb_msg.config(text="Paměť je vypnutá – běžící aplikace ji zapne do pár sekund po Uložit.",
+                               foreground=V.WARN)
+        elif str(self.kb_msg.cget("foreground")) == str(V.WARN):
+            self.kb_msg.config(text="")
 
     # ------------------------------------------------ natoceni (synchronizace)
     def _build_sync(self):

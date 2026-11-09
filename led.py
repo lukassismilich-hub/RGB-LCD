@@ -10,8 +10,8 @@
 #   - ostatni zony desky (male LED, 12V RGB) = jen jedna barva / efekt cipu pres liquidctl
 #   - graficka karta RTX 5070 Eagle OC = jedna barva bocniho pasku pres I2C karty (grafika.py, NvAPI),
 #     ve vlne za D_LED2 (karta je pod F140)
-#   - klavesnice Logitech G815 = jedna barva cele klavesnice pres Logitech LED SDK z G HUB
-#     (klavesnice.py); funguje jen pri vypnute integrovane pameti klavesnice. Zatim skryta (KEYBOARD).
+#   - klavesnice Logitech G815 = jedna barva cele klavesnice primo pres HID++ (klavesnice.Direct, bez G HUB);
+#     integrovanou pamet klavesnice aplikace sama vypne a pri konci / vypnuti rizeni zase zapne.
 # Liquidctl sam D_LED neovladne, kdyz ma hlavicka vypnute vestavene efekty (tak ji nechava GCC).
 # LED desky jinak ridi Gigabyte Control Center (GCC) - pokud bezi, nastaveni prepise.
 #
@@ -54,7 +54,7 @@ ARGB_HEADERS = {"D_LED1": ("led6", 0x58, 0x01), "D_LED2": ("led7", 0x59, 0x02)}
 ARGB_ZONES = {v[0] for v in ARGB_HEADERS.values()}
 ARGB_MAX_LEDS = 32
 ARGB_FAN_LEDS = 14           # vychozi pocet LED ventilatoru na desce (8. 11. 2026 - LED 15 a 16 nesviti, drive 16)
-KEYBOARD = False             # klavesnice G815 zatim skryta (v okne i ve vlakne), kod zustava
+KEYBOARD = True              # klavesnice G815 (False = skryta v okne i ve vlakne)
 EXTRAS = ("grafika", "klavesnice")   # cile s jednou "LED" mimo ventilatory (bez natoceni)
 EXTRA_DEFAULT = {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffffff"}
 
@@ -507,11 +507,11 @@ class Session:
     nebo selze, druhy jede dal a chybejici se zkusi pripojit znovu (retry_missing)."""
 
     NAMES = {"nzxt": "NZXT RGB Controller (F140)", "fusion": "Gigabyte RGB Fusion (ventilátory na desce)",
-             "grafika": "grafická karta", "klavesnice": "klávesnice G815 (G HUB)"}
+             "grafika": "grafická karta", "klavesnice": "klávesnice G815"}
 
     def __init__(self, lcfg):
         self.nzxt = self.fusion = self.fdev = None
-        self.kbd = None                           # klavesnice.Sdk, kdyz ji aplikace ridi
+        self.kbd = None                           # klavesnice.Direct, kdyz ji aplikace ridi
         self.gpu = None                           # grafika.Gpu, kdyz ji aplikace ridi
         self.sync_zones = gpu_zones(lcfg)         # zony desky "jako grafika"
         self.orders = {k: (1, 0, 2) for k in ARGB_HEADERS}
@@ -545,17 +545,17 @@ class Session:
             self.errors["grafika"] = str(e)
 
     def setup_keyboard(self, lcfg):
-        """Klavesnice G815 pres Logitech LED SDK (G HUB): zapnout / vratit G HUBu."""
+        """Klavesnice G815 primo pres HID++: prevzit (vypne pamet) / vratit (zapne integrovanou pamet)."""
         want = extra_on(lcfg, "klavesnice")
         if not want:
             if self.kbd is not None:
-                self.kbd.stop()                   # klavesnice zpet G HUBu
+                self.kbd.stop()                   # klavesnice zpet na integrovanou pamet
                 self.kbd = None
             self.errors.pop("klavesnice", None)
             return
         if self.kbd is None:
             import klavesnice
-            self.kbd = klavesnice.Sdk()
+            self.kbd = klavesnice.Direct()
         try:
             if self.kbd.start():
                 self.errors.pop("klavesnice", None)
@@ -711,7 +711,7 @@ class Session:
             self.gpu.stop()                       # karta drzi posledni poslanou barvu
             self.gpu = None
         if self.kbd is not None:
-            self.kbd.stop()                       # klavesnice zpet G HUBu
+            self.kbd.stop()                       # klavesnice zpet na integrovanou pamet
             self.kbd = None
         for d in (self.nzxt, self.fusion):
             if d is not None:
@@ -855,7 +855,7 @@ class LedWorker(threading.Thread):
                         session.setup_zones(lcfg)
                     except Exception as e:
                         session._fail("fusion", e)
-                    session.setup_keyboard(lcfg)              # klavesnice zapnuta / vracena G HUBu
+                    session.setup_keyboard(lcfg)              # klavesnice prevzata / vracena na pamet
                     session.setup_gpu(lcfg)                   # grafika zapnuta / vypnuta
                     hw_key, last_force = key, 0.0
                 dt, prev = now - prev, now

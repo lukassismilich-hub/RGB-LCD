@@ -4,14 +4,16 @@
 #     Onboard Profiles 0x8100 (setMode 1 = pamet klavesnice, 2 = rizeni z pocitace) - stejne
 #     jako G HUB; G HUB o prepnuti z aplikace nevi (jeho prepinac zustane, jak byl)
 #   - zaloha integrovane pameti (jen cteni): popis pameti + vsechny sektory do zalohy/*.json
-#   - barvy z aplikace pres Logitech LED SDK z instalace G HUB (sdk_legacy_led_x64.dll):
-#     funguji jen v rezimu rizeni z pocitace (v integrovane pameti si klavesnice sviti sama);
-#     LogiLedShutdown vrati klavesnici G HUBu
+#   - barvy z aplikace primo pres HID++ (Per-key lighting 0x8081), bez G HUB (Direct): aplikace sama
+#     vypne integrovanou pamet (rezim rizeni z pocitace) a pri konci ji zase zapne. G HUB ma u G815
+#     nechanou zapnutou pamet (settings.db: devices/g815/persistent_data/onboardMode/enabled), takze
+#     v rezimu z pocitace nic neposila a barvy neprepisuje (overeno 9. 11. 2026). Kdyby mel pamet
+#     vypnutou, posila ~20x za s sve podsviceni - aplikace to pozna a ohlasi (GHUB_BUSY).
 #
 # HID++ jde pres rozhrani usage page 0xFF43, usage 0x602 (dlouhe zpravy 20 B, report 0x11).
-# G HUB na stejnem rozhrani posila sve prikazy (swid 0x0D) - nase maji swid 0x0A.
+# G HUB na stejnem rozhrani posila sve prikazy (swid 0x0D) - nase maji swid 0x0A (vlakno LED)
+# a 0x0B (okno nastaveni, SWID_UI), aby si odpovedi dvou procesu neprebiraly.
 
-import ctypes
 import json
 import logging
 import os
@@ -23,10 +25,15 @@ log = logging.getLogger("rgb_lcd")
 VID, PID = 0x046D, 0xC33F
 NAME = "Logitech G815"
 SWID = 0x0A
+SWID_UI = 0x0B
 FEATURE_ONBOARD = 0x8100
+FEATURE_PERKEY = 0x8081
+CHECK_S = 5                                  # jak casto overit, ze je pamet porad vypnuta
+FOREIGN_S = 3                                # cizi podsviceni (G HUB) videne za posledni 3 s = konflikt
+GHUB_BUSY = ("G HUB řídí podsvícení klávesnice sám (má u G815 vypnutou integrovanou paměť) a přepisoval by "
+             "barvy – v G HUB u klávesnice zapni „Integrovaná paměť“, vypínat ji bude aplikace")
 MODE_ONBOARD, MODE_HOST = 1, 2
 MODES = {MODE_ONBOARD: "integrovaná paměť", MODE_HOST: "řízení z počítače"}
-SDK_DLL = r"C:\Program Files\LGHUB\sdks\sdk_legacy_led_x64.dll"
 BASE = os.path.dirname(os.path.abspath(__file__))
 BACKUP_DIR = os.path.join(BASE, "zalohy")
 _lock = threading.Lock()                     # HID++ dotazy z vice vlaken okna
@@ -39,7 +46,7 @@ class HidppError(RuntimeError):
 class G815:
     """Spojeni HID++ s klavesnici (jen to, co aplikace potrebuje)."""
 
-    def __init__(self):
+    def __init__(self, swid=SWID_UI):
         import hid
         path = next((d["path"] for d in hid.enumerate(VID, PID)
                      if d["usage_page"] == 0xFF43 and d["usage"] == 0x602), None)
@@ -49,6 +56,8 @@ class G815:
         self.h.open_path(path)
         self.h.set_nonblocking(True)
         self._features = {}
+        self.swid = swid
+        self.foreign_t = None                      # kdy naposled poslal podsviceni nekdo jiny (G HUB)
 
     def close(self):
         try:
@@ -64,14 +73,18 @@ class G815:
 
     def request(self, idx, func, params=(), timeout=1.0):
         """Poslat prikaz a pockat na odpoved se stejnou funkci a nasim swid."""
-        fs = (func << 4) | SWID
+        fs = (func << 4) | self.swid
         with _lock:
-            while self.h.read(64):                 # zahodit stare zpravy (i od G HUB)
-                pass
+            while True:                            # zahodit stare zpravy (i od G HUB)
+                r = self.h.read(64)
+                if not r:
+                    break
+                self._note(r)
             self.h.write([0x11, 0xFF, idx, fs] + list(params) + [0] * (16 - len(params)))
             end = time.time() + timeout
             while time.time() < end:
                 r = self.h.read(64)
+                self._note(r)
                 if r and r[0] == 0x11:
                     if r[2] == idx and r[3] == fs:
                         return r[4:20]
@@ -79,6 +92,28 @@ class G815:
                         raise HidppError(f"klávesnice odmítla příkaz (chyba HID++ {r[5]})")
                 time.sleep(0.003)
         raise HidppError("klávesnice neodpovídá")
+
+    def _note(self, r):
+        """Odpoved na cizi prikaz podsviceni po klavesach (G HUB) - zapamatovat cas."""
+        if (r and r[0] == 0x11 and (r[3] & 0x0F) not in (0, self.swid, SWID, SWID_UI)
+                and r[2] == self._features.get(FEATURE_PERKEY)):
+            self.foreign_t = time.monotonic()
+
+    def foreign(self, secs=FOREIGN_S):
+        """Poslal nekdo jiny (G HUB) podsviceni za poslednich secs sekund?"""
+        return self.foreign_t is not None and time.monotonic() - self.foreign_t < secs
+
+    def sniff(self, secs):
+        """Chvili jen poslouchat (zjisti, jestli G HUB sam posila podsviceni)."""
+        end = time.monotonic() + secs
+        with _lock:
+            while time.monotonic() < end:
+                r = self.h.read(64)
+                if r:
+                    self._note(r)
+                else:
+                    time.sleep(0.005)
+        return self.foreign(secs + 0.1)
 
     def feature(self, code):
         if code not in self._features:
@@ -112,6 +147,16 @@ class G815:
             chunk = self.request(idx, 5, [sector >> 8, sector & 0xFF, o >> 8, o & 0xFF])
             out[o:o + 16] = list(chunk)
         return out[:size]
+
+    # ----------------------------------------------------- podsviceni po klavesach (0x8081)
+    def zones(self):
+        """Zony (klavesy, logo, G-klavesy, multimedia) - bitova mapa getInfo po strankach 112 zon."""
+        idx = self.feature(FEATURE_PERKEY)
+        out = []
+        for page in range(3):
+            bm = self.request(idx, 0, [0, page])[2:]
+            out += [page * 112 + i * 8 + bit for i, b in enumerate(bm) for bit in range(8) if b >> bit & 1]
+        return out
 
 
 def get_mode():
@@ -148,44 +193,86 @@ def backup_memory(progress=None):
     return path
 
 
-class Sdk:
-    """Logitech LED SDK z G HUB - barva cele klavesnice. Kdyz G HUB nebezi nebo SDK chybi,
-    ok = False a nic se neposila."""
+def _ranges(ids):
+    """Souvisle useky zon [(prvni, posledni)]."""
+    out = []
+    for z in sorted(ids):
+        if out and z == out[-1][1] + 1:
+            out[-1][1] = z
+        else:
+            out.append([z, z])
+    return [tuple(r) for r in out]
+
+
+class Direct:
+    """Barva cele klavesnice primo pres HID++ (0x8081) - bez G HUB a bez jeho SDK.
+    start() vypne integrovanou pamet (rezim rizeni z pocitace), stop() ji zase zapne - klavesnice
+    pak sviti podle profilu v pameti. Rezim se overuje kazdych CHECK_S s: po odpojeni, probuzeni PC
+    nebo restartu G HUB se klavesnice vrati do pameti a aplikace ji prepne znovu."""
 
     def __init__(self):
-        self.dll = None
+        self.k = None
         self.ok = False
         self.last = None
+        self.ranges = []
+        self.checked = 0.0
+        self.ghub = False                          # G HUB ridi podsviceni sam - pak rezim nemenit
 
     def start(self):
         if self.ok:
             return True
-        if not os.path.exists(SDK_DLL):
-            raise RuntimeError("Logitech G HUB (LED SDK) není nainstalovaný")
-        if self.dll is None:
-            self.dll = ctypes.CDLL(SDK_DLL)
-            self.dll.LogiLedInitWithName.argtypes = [ctypes.c_char_p]
-        if not self.dll.LogiLedInitWithName(b"RGB-LCD"):
-            raise RuntimeError("G HUB neodpovídá (běží G HUB?)")
-        self.dll.LogiLedSetTargetDevice(0x04)      # klavesnice s barvou kazde klavesy
+        k = G815(SWID)
+        try:
+            k.feature(FEATURE_PERKEY)
+            self.ranges = _ranges(k.zones())
+            self.ghub = k.onboard_mode() == MODE_HOST and k.sniff(0.5)
+            if self.ghub:                          # G HUB ma pamet vypnutou a posila sve barvy
+                raise HidppError(GHUB_BUSY)
+            self.k = k
+            self._host()
+        except Exception:
+            k.close()
+            self.k = None
+            raise
         self.ok, self.last = True, None
         return True
 
+    def _host(self):
+        """Vypnout integrovanou pamet, kdyby se mezitim zapnula."""
+        if self.k.onboard_mode() != MODE_HOST:
+            self.k.set_onboard_mode(MODE_HOST)
+            self.last = None                       # po prepnuti poslat barvy znovu
+            log.info("%s: integrovaná paměť vypnuta – podsvícení řídí aplikace.", NAME)
+        self.checked = time.monotonic()
+
     def color(self, rgb, force=False):
-        """rgb 0-255 -> SDK bere procenta 0-100."""
-        pct = tuple(int(round(max(0, min(255, v)) * 100 / 255)) for v in rgb)
-        if self.ok and (force or pct != self.last):
-            self.dll.LogiLedSetLighting(*pct)
-            self.last = pct
+        if not self.ok:
+            return
+        if time.monotonic() - self.checked > CHECK_S:
+            if self.k.foreign():
+                self.ghub = True
+                raise HidppError(GHUB_BUSY)
+            self._host()
+        rgb = tuple(int(max(0, min(255, v))) for v in rgb)
+        if force or rgb != self.last:
+            idx = self.k.feature(FEATURE_PERKEY)
+            for i in range(0, len(self.ranges), 3):            # setRangeRgbZones: 3 useky v prikazu
+                self.k.request(idx, 5, [v for a, b in self.ranges[i:i + 3] for v in (a, b) + rgb])
+            self.k.request(idx, 7, [0, 0, 0, 0])               # frameEnd = zobrazit
+            self.last = rgb
 
     def stop(self):
-        """Vratit klavesnici G HUBu."""
-        if self.ok:
-            try:
-                self.dll.LogiLedShutdown()
-            except Exception:
-                pass
-        self.ok, self.last = False, None
+        """Zapnout zpet integrovanou pamet (klavesnice sviti podle sveho profilu) a zavrit spojeni.
+        Kdyz podsviceni ridi G HUB sam, rezim se nemeni."""
+        if self.k is not None:
+            if not self.ghub:
+                try:
+                    self.k.set_onboard_mode(MODE_ONBOARD)
+                    log.info("%s: integrovaná paměť zapnuta.", NAME)
+                except Exception:
+                    pass
+            self.k.close()
+        self.k, self.ok, self.last = None, False, None
 
 
 if __name__ == "__main__":

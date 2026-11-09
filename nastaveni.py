@@ -196,7 +196,7 @@ def load_data():
 
 PAGES = [("lcd", "Kraken LCD", "Obrazovky displeje 240 × 240 a jejich rotace"),
          ("cool", "Chlazení", "Pumpa a ventilátory Krakenu"),
-         ("led", "LED ventilátorů", "2× F140 RGB Core (NZXT), ventilátory na desce, grafická karta a zóny desky"),
+         ("led", "LED ventilátorů", "2× F140 RGB Core (NZXT), ventilátory na desce, grafická karta, zóny desky a klávesnice"),
          ("alpha", "Alphacool LCD", "Monochromatický displej 240 × 128 – editor rozvržení")]
 
 

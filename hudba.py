@@ -31,6 +31,7 @@ import threading
 import time
 
 import led
+import led_efekty as fx
 
 log = logging.getLogger("rgb_lcd")
 
@@ -66,6 +67,15 @@ def led_settings(cfg):
     out = dict(LED_DEFAULTS)
     out.update(cfg or {})
     return out
+
+
+def music_palette(led_cfg, track):
+    """Barvy hudby pro ventilatory i klavesnici: z obalu skladby, nebo vlastni paleta vizualizeru
+    (config["led"]["hudba"]: barvy "obal" / "vlastni" + paleta)."""
+    c = led_cfg or {}
+    if c.get("barvy", "obal") == "obal" and track and track.get("paleta"):
+        return list(track["paleta"])
+    return [p for p in c.get("paleta", []) if isinstance(p, str)] or list(DEFAULT_PALETTE)
 
 
 def _num(v, default, lo, hi):
@@ -242,8 +252,8 @@ class Analyzer:
             x = (x[0::2] + x[1::2]) * (0.5 / 32768.0)
             self.buf = np.concatenate((self.buf, x))
         dt = self.HOP / self.rate
-        gamma = 1.6 - 0.1 * max(1, min(10, sens))         # citlivost: vyssi = vyraznejsi reakce na tichsi
-        beat_c = 1.7 - 0.05 * max(1, min(10, sens))       # prah uderu vuci prumeru basu
+        gamma = fx.music_gamma(sens)                      # citlivost: vyssi = vyraznejsi reakce na tichsi
+        beat_c = fx.beat_ratio(sens)                      # prah uderu vuci prumeru basu
         while len(self.buf) >= self.N:
             left = len(self.buf) - self.N                 # vzorky za timto oknem (zachycene pozdeji)
             t = now - left / self.rate
@@ -252,12 +262,18 @@ class Analyzer:
             p = np.abs(np.fft.rfft(frame * self.win)) ** 2
             db_all = self._db(p, self.r_all)
             snap = {}
-            for name, r, tau in (("bass", self.r_bass, 0.12), ("mid", self.r_mid, 0.25),
+            raw = {"level": round(db_all, 1)}                  # surove urovne v dB (efekty klavesnice si je
+            for name, r, tau in (("bass", self.r_bass, 0.12), ("mid", self.r_mid, 0.25),   # normuji samy)
                                  ("high", self.r_high, 0.08)):
-                snap[name] = self._envelope(name, self._level(name, self._db(p, r), dt, gamma), dt, tau)
+                db = self._db(p, r)
+                raw[name] = round(db, 1)
+                snap[name] = self._envelope(name, self._level(name, db, dt, gamma), dt, tau)
             snap["level"] = self._envelope("level", self._level("all", db_all, dt, gamma), dt, 0.3)
-            snap["bands"] = [round(self._envelope(f"b{i}", self._level(f"b{i}", self._db(p, r), dt, gamma), dt,
-                                                  0.15), 3) for i, r in enumerate(self.r_bands)]
+            bdb = [self._db(p, r) for r in self.r_bands]
+            snap["bands"] = [round(self._envelope(f"b{i}", self._level(f"b{i}", db, dt, gamma), dt, 0.15), 3)
+                             for i, db in enumerate(bdb)]
+            snap["bands_db"] = [round(db, 1) for db in bdb]
+            snap["db"] = raw
             # uder: energie basu nahle nad prumerem posledni sekundy a roste
             e = float(p[self.r_bass[0]:self.r_bass[1]].sum()) / self.norm
             avg = (sum(self.bass_hist) / len(self.bass_hist)) if self.bass_hist else e
@@ -631,11 +647,7 @@ class Music:
         if not pl.playing:
             snap["quiet"] = True
         tr = pl.track
-        if c.get("barvy") == "obal" and tr and tr.get("paleta"):
-            pal = tr["paleta"]
-        else:
-            pal = [p for p in c.get("paleta", []) if isinstance(p, str)] or DEFAULT_PALETTE
-        snap["paleta"] = pal
+        snap["paleta"] = music_palette(c, tr)
         snap["track_n"] = tr["n"] if tr else 0
         snap["mix"] = self._mix
         return snap
@@ -650,8 +662,9 @@ class Music:
         if snap is None or snap.get("age", 0) > 1.0:
             return None
         snap = dict(snap)
+        snap["citlivost"] = _num(self.led_cfg.get("citlivost"), 5, 1, 10)   # s ni analyza hleda udery
         tr = self.player.track
-        snap["paleta"] = (tr.get("paleta") if tr else None) or DEFAULT_PALETTE
+        snap["paleta"] = music_palette(self.led_cfg, tr)                 # stejne barvy jako ventilatory
         return snap
 
     # --- stav pro okno nastaveni

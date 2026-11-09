@@ -838,6 +838,17 @@ def _band_at(bands, x):
     return max(0.0, min(1.0, sum(vals) / len(vals)))
 
 
+def music_gamma(sens):
+    """Citlivost na hudbu 1-10 -> gama urovni (vyssi citlivost = vyraznejsi reakce na tissi zvuk).
+    Spolecna pro ventilatory (hudba.Analyzer) i efekty klavesnice (klavesnice_efekty.Levels)."""
+    return 1.6 - 0.1 * max(1.0, min(10.0, float(sens)))
+
+
+def beat_ratio(sens):
+    """Citlivost na hudbu 1-10 -> prah uderu (energie basu vuci prumeru posledni sekundy)."""
+    return 1.7 - 0.05 * max(1.0, min(10.0, float(sens)))
+
+
 def music_demo(t, paleta=None, track_n=0):
     """Simulovana hudba pro nahled v okne (120 uderu za minutu, hi-hat mezi udery, drop kazdych 16 s)."""
     period = 0.5

@@ -37,7 +37,9 @@ KB_W, KB_H = int(R.WIDTH * U) + 2 * PAD, int(R.HEIGHT * U) + 2 * PAD
 KEY_DEFAULT = {"zapnuto": False, "efekt": "vlastni", "jas": 100, "barva": "#ffffff"}
 # popisek posuvniku "sirka" podle efektu
 WIDTH_LABEL = {"vlna": "Délka vlny", "kruh": "Šířka kruhů", "toceni": "Zkroucení", "skener": "Šířka",
-               "dest": "Hustota", "trpyt": "Hustota", "ohnostroj": "Četnost", "plamen": "Výška plamene"}
+               "dest": "Hustota", "trpyt": "Hustota", "ohnostroj": "Četnost", "plamen": "Výška plamene",
+               "jiskry": "Množství", "dest_hudba": "Hustota"}
+OPP_LABEL = {"kruh": "Dovnitř", "hlasitost": "Od středu do stran"}      # popisek "opacne" podle efektu
 KEEP = ("reakce", "reakce_barva", "reakce_doba", "klavesy", "zaklad")   # pri zmene efektu zustava
 
 
@@ -641,7 +643,7 @@ class KeyboardEditor:
         if "barvy_hudba" in names:
             self._label(f, row, "Barvy z")
             hv = tk.StringVar(value=kbfx.get(eff, "barvy_hudba"))
-            V.segmented(f, hv, [("obal", "obalu alba"), ("vlastni", "výběru výše")],
+            V.segmented(f, hv, [("obal", "hudby (jako ventilátory)"), ("vlastni", "výběru výše")],
                         command=lambda: eff.__setitem__("barvy_hudba", hv.get())).grid(row=row, column=1, sticky="w",
                                                                                        pady=4)
             row += 1
@@ -663,8 +665,29 @@ class KeyboardEditor:
             row += 1
         if "opacne" in names:
             ov = tk.BooleanVar(value=bool(kbfx.get(eff, "opacne")))
-            ttk.Checkbutton(f, text="Dovnitř" if typ == "kruh" else "Opačný směr", variable=ov,
+            ttk.Checkbutton(f, text=OPP_LABEL.get(typ, "Opačný směr"), variable=ov,
                             command=lambda: eff.__setitem__("opacne", ov.get())).grid(row=row, column=1, sticky="w")
+            row += 1
+        if "citlivost" in names:
+            fan = (self.lcfg.get("hudba") or {}).get("citlivost", 5)
+            same = tk.BooleanVar(value=not kbfx.get(eff, "citlivost_vlastni"))
+
+            def on_same():
+                eff["citlivost_vlastni"] = not same.get()
+                if not same.get() and "citlivost" not in eff:
+                    eff["citlivost"] = fan
+                self._rebuild()
+            self._label(f, row, "Citlivost")
+            ttk.Checkbutton(f, text=f"Jako ventilátory ({fan})", variable=same, command=on_same).grid(
+                row=row, column=1, sticky="w", pady=4)
+            row += 1
+            if not same.get():
+                self._slider(f, row, "", eff, "citlivost", 1, 10)
+                row += 1
+        if "spicka" in names:
+            pv = tk.BooleanVar(value=bool(kbfx.get(eff, "spicka")))
+            ttk.Checkbutton(f, text="Držet špičku", variable=pv,
+                            command=lambda: eff.__setitem__("spicka", pv.get())).grid(row=row, column=1, sticky="w")
             row += 1
         if "senzor" in names:
             self._label(f, row, "Senzor")
@@ -699,8 +722,11 @@ class KeyboardEditor:
             row = self._paint(f, eff, row)
         if kbfx.info(typ)[1] == "hudba":
             ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 40, justify="left",
-                      text="Reaguje na hudbu ze Spotify (zvuk zachytává jen Spotify). V náhledu je simulovaná "
-                           "hudba; bez hudby svítí jen pozadí.").grid(row=row, column=0, columnspan=2, sticky="w",
+                      text="Reaguje na hudbu ze Spotify (zvuk zachytává jen Spotify). Citlivost je společná "
+                           "s ventilátory (LED → Hudba → Reakce na hudbu), stejné číslo = stejná reakce; vlastní "
+                           "nižší citlivost svítí jen při výraznějším zesílení a slabší údery vynechá, vyšší "
+                           "než u ventilátorů údery navíc nepřidá. V náhledu je simulovaná hudba; bez hudby "
+                           "svítí jen pozadí.").grid(row=row, column=0, columnspan=2, sticky="w",
                                                                       pady=(6, 0))
 
     # ------------------------------------------------------------ vlastni barvy klaves

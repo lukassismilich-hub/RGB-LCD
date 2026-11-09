@@ -929,10 +929,12 @@ class LedEditor:
         note(c, 2, "Vyšší = světla pumpují s basy: mezi údery ztmavnou, s kopákem se rozsvítí, záblesk úderu je "
                    "silnější a delší; středy a výšky (třpyt, přelévání barev) mají menší vliv. 0 = reaguje na vše "
                    "stejně.")
-        slider(c, 3, "Citlivost na údery", "citlivost", 1, 10, 1, lambda x: f"{x}")
+        slider(c, 3, "Citlivost", "citlivost", 1, 10, 1, lambda x: f"{x}")
         slider(c, 4, "Jas", "jas", 10, 100, 5, lambda x: f"{x} %")
         slider(c, 5, "Zpoždění světel", "zpozdeni_ms", 0, 500, 10, lambda x: f"{x} ms")
-        note(c, 6, "Bluetooth sluchátka hrají o 150–250 ms později než reproduktory – o tolik zpozdi světla, "
+        note(c, 6, "Citlivost: vyšší = bere i slabší údery a výrazněji reaguje na tišší zvuk. Platí i pro "
+                   "hudební efekty klávesnice, pokud nemají vlastní citlivost.", pady=(0, 6))
+        note(c, 7, "Bluetooth sluchátka hrají o 150–250 ms později než reproduktory – o tolik zpozdi světla, "
                    "aby údery seděly. S kabelem / reproduktory 0 ms.", pady=(0, 16))
 
         # 4) barvy
@@ -1440,7 +1442,8 @@ class LedEditor:
             else:
                 kb_music = None                                 # hudebni efekt klavesnice: simulovana hudba
                 if led.kb_music_on(lc):
-                    kb_music = fx.music_demo(now - self.t0, fx.DEFAULT_PALETTE[:4])
+                    kb_music = fx.music_demo(now - self.t0, self._music_palette())    # barvy jako ventilatory
+                    kb_music["citlivost"] = (lc.get("hudba") or {}).get("citlivost", 5)
                 kb_over = gs.leds(self.lcfg) if led.extra_on(lc, "klavesnice") else None   # osvetleni G
                 frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), orient=False, music=snap,
                                    kb_music=kb_music, kb_over=kb_over)

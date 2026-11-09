@@ -17,6 +17,7 @@ import math
 import random
 
 import klavesnice_rozlozeni as R
+import led_efekty as fx
 
 FPS = 30
 KEYS = R.KEYS
@@ -50,12 +51,33 @@ EFFECTS = {
                   {"barvy": ["#ff0040", "#ffb000", "#00a0ff", "#40ff00"], "pozadi": "#000000", "sirka": 5}),
     "plamen": ("plamen zespodu", "castice", ("barvy", "rychlost", "sirka"), (2, 4),
                {"barvy": ["#ff0000", "#ff6000", "#ffd000"], "sirka": 6}),
-    "spektrum": ("spektrum hudby", "hudba", ("barvy", "barvy_hudba", "pozadi"), (2, 4),
+    "spektrum": ("spektrum hudby", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost", "spicka"), (2, 4),
                  {"barvy": ["#00ff40", "#ffd000", "#ff0000"], "barvy_hudba": "vlastni", "pozadi": "#000000"}),
-    "pulz": ("pulz do rytmu", "hudba", ("barvy", "barvy_hudba"), (1, 8),
+    "spektrum_stred": ("spektrum od středu", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost", "spicka"),
+                       (2, 4), {"barvy": ["#00a0ff", "#b000ff", "#ff0080"], "barvy_hudba": "vlastni",
+                                "pozadi": "#000000"}),
+    "pasma_rady": ("pásma po řadách", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost", "spicka"), (2, 8),
+                   {"barvy": ["#ff0000", "#ffb000", "#00ff40", "#00a0ff", "#b000ff"], "barvy_hudba": "vlastni",
+                    "pozadi": "#000000"}),
+    "hlasitost": ("ukazatel hlasitosti", "hudba", ("barvy", "pozadi", "citlivost", "spicka", "opacne"), (2, 4),
+                  {"barvy": ["#00ff40", "#ffd000", "#ff0000"], "pozadi": "#000000"}),
+    "mozaika": ("mozaika pásem", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost"), (2, 8),
+                {"barvy": ["#ff0040", "#ffb000", "#00ff40", "#00a0ff"], "barvy_hudba": "obal", "pozadi": "#000000"}),
+    "kruh_basy": ("pulzující kruh z basů", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost"), (1, 8),
+                  {"barvy": ["#ffffff", "#ff0080", "#0060ff"], "barvy_hudba": "obal", "pozadi": "#000000"}),
+    "plamen_basy": ("plamen z basů", "hudba", ("barvy", "citlivost"), (2, 4),
+                    {"barvy": ["#ff0000", "#ff6000", "#ffd000"]}),
+    "pulz": ("pulz do rytmu", "hudba", ("barvy", "barvy_hudba", "citlivost"), (1, 8),
              {"barvy": ["#ff0040", "#00a0ff"], "barvy_hudba": "obal"}),
-    "vlna_uder": ("vlny od mezerníku na údery", "hudba", ("barvy", "barvy_hudba", "pozadi"), (1, 8),
+    "vlna_uder": ("vlny od mezerníku na údery", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost"), (1, 8),
                   {"barvy": ["#00a0ff", "#ff0080"], "barvy_hudba": "obal", "pozadi": "#000000"}),
+    "prebarveni": ("přebarvení na údery", "hudba", ("barvy", "barvy_hudba", "smer", "rychlost", "citlivost"),
+                   (2, 8), {"barvy": ["#ff0040", "#00a0ff", "#40ff00", "#ffb000"], "barvy_hudba": "obal",
+                            "smer": 0}),
+    "jiskry": ("jiskry do rytmu", "hudba", ("barvy", "barvy_hudba", "pozadi", "sirka", "citlivost"), (1, 8),
+               {"barvy": ["#ffffff", "#00a0ff", "#ff0080"], "barvy_hudba": "obal", "pozadi": "#000000", "sirka": 5}),
+    "dest_hudba": ("déšť do rytmu", "hudba", ("barvy", "barvy_hudba", "pozadi", "sirka", "citlivost"), (1, 8),
+                   {"barvy": ["#00ff40"], "barvy_hudba": "vlastni", "pozadi": "#000000", "sirka": 5}),
     "teplota": ("barva podle senzoru", "senzor", ("barvy", "senzor"), (2, 8),
                 {"barvy": ["#0060ff", "#00ff40", "#ffb000", "#ff0000"], "senzor": "CPU (Tctl/Tdie)",
                  "min": 40, "max": 90}),
@@ -68,7 +90,7 @@ GROUPS = [("klidne", "Klidné"), ("pohyb", "Pohyb"), ("castice", "Částice"), (
 STATIC = {"barva", "prechod", "vlastni"}               # bez animace (jen pri zmene / reakci na stisk)
 DEFAULT_EFFECT = {"typ": "vlna", "rychlost": 5, "smer": 0, "sirka": 6, "duha": True, "opacne": False,
                   "barvy": DEFAULT_PALETTE[:3], "pozadi": "#000000", "reakce": "", "reakce_barva": "#ffffff",
-                  "reakce_doba": 1.0}
+                  "reakce_doba": 1.0, "citlivost": 5, "citlivost_vlastni": False, "spicka": True}
 DIRECTIONS = [(0, "→"), (45, "↘"), (90, "↓"), (135, "↙"), (180, "←"), (225, "↖"), (270, "↑"), (315, "↗")]
 REACTIONS = [("", "bez reakce"), ("klavesa", "rozsvítit klávesu"), ("vlnka", "vlnka od klávesy")]
 ROWS = {"cisla": [27 + i for i in range(10)] + [42, 43],          # 1 ... 0, -, =
@@ -165,6 +187,68 @@ def _cyclic(cols, p):
     return _mix(cols[a], cols[(a + 1) % k], f * f * (3 - 2 * f))
 
 
+METER_FALL = 3.5            # jak rychle padaji ukazatele hudby (cela vyska za 0,3 s)
+PEAK_HOLD_S = 0.5           # spicka chvili drzi
+PEAK_FALL = 0.8
+
+
+class Levels:
+    """Urovne hudby 0..1 pro efekty klavesnice ze surovych dB (hudba.Analyzer: bands_db, db).
+    Analyza pro ventilatory ma u kazdeho pasma vlastni automaticke zesileni, takze je kazde pasmo
+    skoro porad u sveho maxima a spektrum svitilo naplno. Tady ma spektrum spolecnou spicku vsech
+    pasem (tichsi pasma jsou nizko) a spodek kazdeho pasma je jeho dolni obalka - ukazatel jde od
+    nuly, jen kdyz pasmo opravdu zesili. Citlivost 1-10 meni gamu stejne jako u ventilatoru
+    (led_efekty.music_gamma)."""
+    PEAK_FALL_DB = 3.0          # dB/s - spicka pomalu klesa
+    FLOOR_UP_S = 2.0            # spodek pasma (prumer posunuty dolu): roste pomaleji ...
+    FLOOR_DOWN_S = 1.5          # ... nez klesa
+    RANGE_DB = 30.0             # nejvys tolik dB pod spickou = nula
+    MIN_SPAN_DB = 8.0           # nejmensi rozsah (sum v tichu se neroztahne na plnou vysku)
+    TILT_DB = 0.8               # dB na pasmo navic smerem k vyskam (hudba ma ve vyskach mene energie) - odhad
+    SILENCE_DB = -62.0          # pod tim ticho (jako hudba.Analyzer.FLOOR_DB)
+    SOFT_DB = 6.0               # basy / stredy / vysky / hlasitost: spodek niz, at neskacou jen mezi 0 a 1
+
+    def __init__(self):
+        self.peak, self.floor = {}, {}
+
+    def _track(self, k, db, dt):
+        pk = self.peak.get(k)
+        pk = db if pk is None else max(db, pk - self.PEAK_FALL_DB * dt)
+        fl = self.floor.get(k)
+        if fl is None:
+            fl = db - 6.0
+        else:
+            fl += (db - fl) * min(1.0, dt / (self.FLOOR_DOWN_S if db < fl else self.FLOOR_UP_S))
+        self.peak[k], self.floor[k] = pk, fl
+        return pk, fl
+
+    def _map(self, db, top, fl, gamma):
+        top = max(top, self.SILENCE_DB + self.MIN_SPAN_DB)
+        bottom = min(max(fl, top - self.RANGE_DB, self.SILENCE_DB), top - self.MIN_SPAN_DB)
+        return max(0.0, min(1.0, (db - bottom) / (top - bottom))) ** gamma
+
+    def update(self, music, dt, sens=5.0):
+        gamma = fx.music_gamma(sens)
+        bdb = music.get("bands_db")
+        if not bdb:                           # starsi analyza / simulovana hudba v nahledu: 0..1 -> dB
+            bdb = [(float(v) - 1.0) * 30.0 for v in (music.get("bands") or [0.0] * 16)]
+        bdb = [float(db) + self.TILT_DB * i for i, db in enumerate(bdb)]
+        tr = [self._track(f"b{i}", db, dt) for i, db in enumerate(bdb)]
+        g = max((pk for pk, _fl in tr), default=0.0)
+        # vrchol pasma = napul mezi jeho spickou a spolecnou spickou: tvar spektra zustane videt
+        out = {"bands": [self._map(db, pk + 0.5 * (g - pk), fl, gamma) for db, (pk, fl) in zip(bdb, tr)]}
+        raw = music.get("db")
+        if not raw:                           # simulovana hudba: hodnoty 0..1 uz jsou pripravene
+            out.update({k: max(0.0, min(1.0, float(music.get(k, 0.0)))) ** gamma
+                        for k in ("bass", "mid", "high", "level")})
+            return out
+        for k in ("bass", "mid", "high", "level"):
+            db = float(raw.get(k, -120.0))
+            pk, fl = self._track(k, db, dt)
+            out[k] = self._map(db, pk, fl - self.SOFT_DB, gamma)
+        return out
+
+
 class Geo:
     """Geometrie klaves, pro ktere se efekt pocita - cela klavesnice nebo jen jeji cast (vrstva):
     smer, stred, sloupce i mezernik se berou jen z techto klaves, efekt tak vyplni celou cast."""
@@ -184,6 +268,21 @@ class Geo:
         mx, my = (self.x0 + self.x1) / 2, (self.y0 + self.y1) / 2
         self.dist = [math.hypot(x - mx, y - my) for x, y in zip(self.cx, self.cy)]
         self.ang = [math.atan2(y - my, x - mx) / (2 * math.pi) for x, y in zip(self.cx, self.cy)]
+        hh, ww = (self.y1 - self.y0) or 1.0, (self.x1 - self.x0) or 1.0
+        self.mx = mx
+        self.ylo = [(self.y1 - k[3] - k[5]) / hh for k in keys]       # spodni / horni hrana 0 (dole) .. 1
+        self.yhi = [(self.y1 - k[3]) / hh for k in keys]
+        self.xlo = [(k[2] - self.x0) / ww for k in keys]              # leva / prava hrana 0 .. 1
+        self.xhi = [(k[2] + k[4] - self.x0) / ww for k in keys]
+        rows = []                                                     # rady podle stredu (vysoke klavesy
+        for y in sorted(set(self.cy)):                                # se pridaji k blizsi rade)
+            if rows and y - rows[-1][-1] < 0.6:
+                rows[-1].append(y)
+            else:
+                rows.append([y])
+        self.nrows = max(1, len(rows))
+        top = {y: r for r, ys in enumerate(rows) for y in ys}
+        self.row_of = [self.nrows - 1 - top[y] for y in self.cy]      # 0 = dolni rada
         self.cols = sorted({round(x) for x in self.cx})             # sloupce pro dest
         self.col_of = [self.cols.index(round(x)) for x in self.cx]
         # vlny na udery jdou od mezerniku, v casti bez nej od klavesy dole uprostred
@@ -307,8 +406,13 @@ class Engine:
         return [hex_rgb(c) for c in palette(eff)] or [(255, 255, 255)]
 
     def _music_pal(self, eff, music):
+        """Barvy hudby jako u ventilatoru (z obalu / vlastni paleta vizualizeru - hudba.music_palette),
+        pri dropu posunute o jednu jako ve vizualizeru ventilatoru (led_efekty.Engine.music);
+        "barvy_hudba" "vlastni" = barvy efektu."""
         if get(eff, "barvy_hudba") == "obal" and music and music.get("paleta"):
-            return [hex_rgb(c) for c in music["paleta"]]
+            cols = [hex_rgb(c) for c in music["paleta"]]
+            d = int(music.get("drop_n", 0)) % len(cols)
+            return cols[d:] + cols[:d]
         return self._pal(eff)
 
     def _bg(self, eff):
@@ -464,19 +568,156 @@ class Engine:
         return out
 
     # -------------------------------------------------------------- hudba
-    def _spektrum(self, eff, t, dt, data, music):
+    def _sens(self, eff, music=None):
+        """Citlivost na hudbu 1-10: vlastni efektu, jinak jako ventilatory (music["citlivost"])."""
+        v = get(eff, "citlivost") if get(eff, "citlivost_vlastni") else (music or {}).get("citlivost", 5)
+        try:
+            return max(1.0, min(10.0, float(v or 5)))
+        except (TypeError, ValueError):
+            return 5.0
+
+    def _lv(self, eff, music, dt):
+        """Urovne hudby 0..1 pro tento snimek (Levels, citlivost efektu), None = bez hudby."""
+        if not music:
+            return None
+        c = self.state.get("_lv_c")
+        if c and c[0] == self.clock:
+            return c[1]
+        lv = self.state.get("_lv")
+        if lv is None:
+            lv = self.state["_lv"] = Levels()
+        out = lv.update(music, dt, self._sens(eff, music))
+        self.state["_lv_c"] = (self.clock, out)
+        return out
+
+    def _meter(self, key, vals, dt):
+        """Vyhlazene hodnoty ukazatelu (nahoru hned, dolu padaji) a drzene spicky."""
+        st = self.state.get(key)
+        if st is None or len(st[0]) != len(vals):
+            st = self.state[key] = ([0.0] * len(vals), [0.0] * len(vals), [0.0] * len(vals))
+        v, pk, pt = st
+        for i, x in enumerate(vals):
+            v[i] = x if x > v[i] else max(x, v[i] - METER_FALL * dt)
+            if v[i] >= pk[i]:
+                pk[i], pt[i] = v[i], self.clock
+            elif self.clock - pt[i] > PEAK_HOLD_S:
+                pk[i] = max(v[i], pk[i] - PEAK_FALL * dt)
+        return v, pk
+
+    def _bar_key(self, eff, col, bg, v, pk, lo, hi):
+        """Klavesa ukazatele mezi lo..hi (0..1): plna pod v, castecne na hrane, spicka nad."""
+        k = max(0.0, min(1.0, (v - lo) / ((hi - lo) or 1)))
+        c = _mix(bg, col, k)
+        if get(eff, "spicka") and pk > 0.06 and lo <= pk < hi and pk > v + 0.02:
+            c = _mix(col, (255, 255, 255), 0.35)
+        return c
+
+    def _spektrum(self, eff, t, dt, data, music, center=False):
         pal, bg = self._music_pal(eff, music), self._bg(eff)
-        bands = (music or {}).get("bands") or []
-        sm = self.state.setdefault("spektrum", [0.0] * 16)
-        for b in range(16):
-            v = bands[b] if b < len(bands) else 0.0
-            sm[b] = v if v > sm[b] else sm[b] + (v - sm[b]) * min(1.0, dt * 6)
+        lv = self._lv(eff, music, dt)
+        v, pk = self._meter("spektrum", (lv["bands"] if lv else [0.0] * 16), dt)
+        g = self.g
+        half = max(g.mx - g.x0, g.x1 - g.mx) or 1.0
+        out = []
+        for i in range(g.n):
+            if center:                                    # basy uprostred, vysky na krajich
+                b = int(abs(g.cx[i] - g.mx) / half * 16)
+            else:
+                b = int((g.cx[i] - g.x0) / ((g.x1 - g.x0) or 1) * 16)
+            b = min(15, max(0, b))
+            out.append(self._bar_key(eff, _gradient(pal, (g.ylo[i] + g.yhi[i]) / 2), bg, v[b], pk[b],
+                                     g.ylo[i], g.yhi[i]))
+        return out
+
+    def _spektrum_stred(self, eff, t, dt, data, music):
+        return self._spektrum(eff, t, dt, data, music, center=True)
+
+    def _pasma_rady(self, eff, t, dt, data, music):
+        """Kazda rada klaves = cast spektra (dole basy, nahore vysky), sviti zleva podle urovne."""
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        lv = self._lv(eff, music, dt)
+        g = self.g
+        nr = g.nrows
+        bands = lv["bands"] if lv else [0.0] * 16
+        vals = []
+        for r in range(nr):
+            a = r * 16 // nr
+            vals.append(max(bands[a:max(a + 1, (r + 1) * 16 // nr)]))
+        v, pk = self._meter("pasma_rady", vals, dt)
+        return [self._bar_key(eff, _gradient(pal, g.row_of[i] / max(1, nr - 1)), bg, v[g.row_of[i]],
+                              pk[g.row_of[i]], g.xlo[i], g.xhi[i]) for i in range(g.n)]
+
+    def _hlasitost(self, eff, t, dt, data, music):
+        pal, bg = self._pal(eff), self._bg(eff)
+        lv = self._lv(eff, music, dt)
+        v, pk = self._meter("hlasitost", [lv["level"] ** 1.5 if lv else 0.0], dt)   # hlasitost je skoro porad vysoko
+        g = self.g
+        out = []
+        for i in range(g.n):
+            lo, hi = g.xlo[i], g.xhi[i]
+            if get(eff, "opacne"):                            # od stredu do stran
+                lo, hi = sorted((abs(lo - 0.5) * 2, abs(hi - 0.5) * 2))
+                if g.xlo[i] < 0.5 < g.xhi[i]:
+                    lo = 0.0
+            out.append(self._bar_key(eff, _gradient(pal, (lo + hi) / 2), bg, v[0], pk[0], lo, hi))
+        return out
+
+    def _mozaika(self, eff, t, dt, data, music):
+        """Kazda klavesa patri k jednomu pasmu (pevne nahodne) a sviti podle jeho urovne."""
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        lv = self._lv(eff, music, dt)
+        v, _pk = self._meter("mozaika", (lv["bands"] if lv else [0.0] * 16), dt)
+        own = self.state.get("mozaika_pasma")
+        if own is None or len(own) != self.g.n:
+            r = random.Random(7)
+            own = self.state["mozaika_pasma"] = [r.randrange(16) for _ in range(self.g.n)]
+        return [_mix(bg, _gradient(pal, b / 15), min(1.0, v[b] * 1.3)) for b in own]
+
+    def _kruh_basy(self, eff, t, dt, data, music):
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        lv = self._lv(eff, music, dt)
+        v, _pk = self._meter("kruh_basy", [lv["bass"] if lv else 0.0, lv["high"] if lv else 0.0], dt)
+        rmax = max(self.g.dist, default=1.0) or 1.0
+        r = 0.6 + v[0] * rmax
+        out = []
+        for d in self.g.dist:
+            k = max(0.0, min(1.0, (r - d) / 1.2))
+            c = _mix(bg, _gradient(pal, d / rmax), k)
+            if v[1] > 0.4 and 0 < r - d < 1.2:              # vysky = svetly okraj kruhu
+                c = _mix(c, (255, 255, 255), (v[1] - 0.4) * 0.8)
+            out.append(c)
+        return out
+
+    def _plamen_basy(self, eff, t, dt, data, music):
+        pal = self._pal(eff)
+        lv = self._lv(eff, music, dt)
+        v, _pk = self._meter("plamen_basy", [lv["bass"] if lv else 0.0, lv["level"] if lv else 0.0], dt)
+        hmax = 0.6 + (v[0] * 0.7 + v[1] * 0.3) * (self.g.y1 - self.g.y0) * 1.1      # vyska plamene (u)
         out = []
         for x, y in zip(self.g.cx, self.g.cy):
-            b = min(15, max(0, int((x - self.g.x0) / (self.g.x1 - self.g.x0) * 16)))
-            lvl = (self.g.y1 - y) / (self.g.y1 - self.g.y0)                       # 0 dole .. 1 nahore
-            out.append(_gradient(pal, lvl) if lvl <= sm[b] * 1.05 else bg)
+            n = (math.sin(x * 0.9 + t * 3.1) + math.sin(x * 2.3 - t * 4.7) * 0.6
+                 + math.sin(x * 0.37 + t * 1.3) * 0.8) / 2.4
+            k = max(0.0, 1 - (self.g.y1 - y) / (hmax * (0.7 + 0.3 * n)))
+            flick = 0.85 + 0.15 * math.sin(t * 11 + x * 5.1 + y * 3.3)
+            out.append(_scale(_gradient(pal, k), min(1.0, k * 1.6) * flick) if k > 0 else (0.0, 0.0, 0.0))
         return out
+
+    def _hit(self, eff, music, key):
+        """Sila noveho uderu 0..1, jinak 0. Udery hleda analyza s citlivosti ventilatoru; nizsi vlastni
+        citlivost efektu ignoruje udery pod svym prahem - sila uderu k = (pomer - prah) / prah + 0,5
+        (hudba.Analyzer), takze prah c' odpovida k >= (c' - c) / c + 0,5. Vyssi vlastni citlivost
+        udery navic nepridava."""
+        if not music:
+            return 0.0
+        n = int(music.get("beat_n", 0))
+        last = self.state.get(key)
+        self.state[key] = n
+        if last is None or n == last:
+            return 0.0
+        st = max((s for a, s, _n in music.get("beats", []) if a < 0.25), default=0.8)
+        c = fx.beat_ratio(music.get("citlivost", 5))
+        need = (fx.beat_ratio(self._sens(eff, music)) - c) / c + 0.5
+        return st if st >= need else 0.0
 
     def _beat(self, music):
         """(sila posledniho uderu 0..1 podle stari, cislo uderu)."""
@@ -493,19 +734,15 @@ class Engine:
             return [_scale(pal[0], 0.15)] * self.g.n
         flash, n = self._beat(music)
         col = pal[n % len(pal)]
-        k = 0.15 + 0.45 * float(music.get("bass", 0)) + 0.4 * flash
+        k = 0.15 + 0.45 * self._lv(eff, music, dt)["bass"] + 0.4 * flash
         return [_scale(_mix(col, (255, 255, 255), flash * 0.25), min(1.0, k))] * self.g.n
 
     def _vlna_uder(self, eff, t, dt, data, music):
         pal, bg = self._music_pal(eff, music), self._bg(eff)
         rings = self.state.setdefault("vlna_uder", [])     # [cas, barva, sila]
-        last = self.state.get("vlna_uder_n")
-        if music:
-            n = int(music.get("beat_n", 0))
-            if last is not None and n != last:
-                strength = max((s for a, s, _n in music.get("beats", []) if a < 0.2), default=0.8)
-                rings.append([t, pal[n % len(pal)], strength])
-            self.state["vlna_uder_n"] = n
+        hit = self._hit(eff, music, "vlna_uder_n")
+        if hit:
+            rings.append([t, pal[int(music.get("beat_n", 0)) % len(pal)], hit])
         rings[:] = [r for r in rings if t - r[0] < 1.6]
         sx, sy = self.g.cx[self.g.space], self.g.cy[self.g.space]
         out = []
@@ -518,6 +755,77 @@ class Engine:
                 k = max(0.0, 1 - d / 1.6) * (1 - age / 1.6) * rs
                 c = _add(c, _scale(rc, k))
             out.append(c)
+        return out
+
+    def _prebarveni(self, eff, t, dt, data, music):
+        """Kazdy uder prejede klavesnici dalsi barvou palety ve zvolenem smeru."""
+        pal = self._music_pal(eff, music)
+        st = self.state.setdefault("prebarveni", {"old": pal[0], "new": pal[0], "t": -9.0, "i": 0, "k": 0.0})
+        dur = 0.35 / self._speed(eff)                     # jak dlouho barva prejizdi klavesnici
+        hit = self._hit(eff, music, "prebarveni_n")
+        if hit:
+            st["i"] += 1
+            k = max(0.0, min(1.0, (t - st["t"]) / dur))   # predchozi prejezd jeste nedobehl - prolnout
+            st["old"] = _mix(st["old"], st["new"], k)
+            st["new"], st["t"], st["k"] = pal[st["i"] % len(pal)], t, hit
+        front = (t - st["t"]) / dur * 1.25
+        flash = st["k"] * math.exp(-(t - st["t"]) / 0.25)
+        return [_scale(_mix(st["old"], st["new"], (front - p) * 4), 0.55 + 0.45 * flash) for p in self.g.proj(eff)]
+
+    def _jiskry(self, eff, t, dt, data, music):
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        lv = self.state.setdefault("jiskry", [[0.0, pal[0]] for _ in range(self.g.n)])
+        amount = self._width(eff) / 5.0
+        hit = self._hit(eff, music, "jiskry_n")
+        if hit:
+            col = pal[int(music.get("beat_n", 0)) % len(pal)]
+            for i in self.rng.sample(range(self.g.n), min(self.g.n, int(self.g.n * (0.08 + 0.17 * hit) * amount))):
+                lv[i][0], lv[i][1] = 1.0, col
+        levels = self._lv(eff, music, dt)
+        if levels:                                        # vysky = drobny trpyt mezi udery
+            for _ in range(int(levels["high"] ** 2 * 4 * amount * dt * FPS + self.rng.random())):
+                s = lv[self.rng.randrange(self.g.n)]
+                if s[0] < 0.5:
+                    s[0], s[1] = 0.7, self.rng.choice(pal)
+        fade = math.exp(-dt / 0.3)
+        out = []
+        for s in lv:
+            s[0] *= fade
+            out.append(_mix(bg, s[1], s[0] ** 1.3))
+        return out
+
+    def _dest_hudba(self, eff, t, dt, data, music):
+        """Dest Matrix: kapky padaji na udery (pocet podle sily), rychlost podle hlasitosti."""
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        drops = self.state.setdefault("dest_hudba", [])     # [sloupec, y, rychlost, barva]
+        lv = self._lv(eff, music, dt)
+        ncol = len(self.g.cols)
+        dens = self._width(eff) / 5.0
+        hit = self._hit(eff, music, "dest_hudba_n")
+        if hit:
+            for c in self.rng.sample(range(ncol), min(ncol, int(ncol * (0.15 + 0.35 * hit) * dens))):
+                drops.append([c, self.g.y0 - 0.5, 9.0 + self.rng.random() * 5.0, self.rng.choice(pal)])
+        if lv and self.rng.random() < lv["level"] * dens * 0.25 * dt * FPS:
+            drops.append([self.rng.randrange(ncol), self.g.y0 - 0.5, 4.0 + self.rng.random() * 3.0,
+                          self.rng.choice(pal)])
+        boost = 0.6 + (lv["level"] if lv else 0.0)
+        for d in drops:
+            d[1] += d[2] * boost * dt
+        drops[:] = [d for d in drops if d[1] < self.g.y1 + 3]
+        out = []
+        for i in range(self.g.n):
+            c, y = self.g.col_of[i], self.g.cy[i]
+            col = bg
+            for d in drops:
+                if d[0] != c:
+                    continue
+                dist = d[1] - y
+                if -0.5 <= dist < 0.5:
+                    col = _mix(d[3], (255, 255, 255), 0.5)
+                    break
+                if 0.5 <= dist < 2.2:
+                    col = _add(col, _scale(d[3], (1 - (dist - 0.5) / 1.7) ** 1.5))
+            out.append(col)
         return out
 
     # -------------------------------------------------------------- senzor
@@ -614,7 +922,8 @@ def engine_for(owner):
 if __name__ == "__main__":
     import time
     eng = Engine(1)
-    demo = {"bands": [0.5] * 16, "beats": [(0.05, 1.0, 3)], "beat_n": 3, "bass": 0.7, "paleta": ["#ff0000"]}
+    demo = {"bands": [0.5] * 16, "beats": [(0.05, 1.0, 3)], "beat_n": 3, "bass": 0.7, "paleta": ["#ff0000"],
+            "citlivost": 5}
     for typ in EFFECTS:
         e = dict(default_effect(typ), reakce="vlnka")
         eng.press(1)

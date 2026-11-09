@@ -1,8 +1,9 @@
 # klavesy_g.py - klavesy G1-G5, M1-M3 a MR na klavesnici G815
 #
 # config["led"]["klavesy_g"] = {"1": {"akce": ..., ...}, ... "5": {...}} - akce G-klaves:
-#   "predvolba" + "cil" (klavesnice / ventilatory / vse) + "nastaveni" = ulozene nastaveni efektu
-#               (snapshot() z okna); stisk = prepnout na predvolbu, stejna G-klavesa znovu = zpet,
+#   "predvolba" + "cil" (klavesnice / ventilatory / vse) + "nastaveni" = vlastni nastaveni efektu
+#               (klavesnici upravuje okno primo - "Nastavuji: predvolba Gn", ventilatory se prevezmou
+#               ze stranky LED); stisk = prepnout na predvolbu, stejna G-klavesa znovu = zpet,
 #               jina G-klavesa s predvolbou prepne rovnou na svou
 #   "hudba"     = hudebni vizualizer ze Spotify zapnout / vypnout
 #   "styl"      = dalsi styl vizualizeru (kdyz je vypnuty, zapne ho)
@@ -41,7 +42,7 @@ TOGGLES = ("predvolba", "hudba", "playlist", "lcd")   # akce se stavem zapnuto /
 TARGETS = [("klavesnice", "klávesnice"), ("ventilatory", "ventilátory a grafika"), ("vse", "vše")]
 # co patri do predvolby / sady: klice config["led"] a vybrane polozky vnorenych slovniku
 PARTS = {
-    "klavesnice": (("efekt_klavesnice", "vrstvy_klavesnice"), {"klavesnice": ("efekt",)}),
+    "klavesnice": (("efekt_klavesnice", "vrstvy_klavesnice"), {"klavesnice": ("efekt", "jas")}),
     "ventilatory": (("stejne_pro_vse", "efekt", "efekt_f140", "efekt_deska", "playlist", "vlna", "vlna_smer",
                      "vlna_f140_spolu", "efekt_grafika"), {"grafika": ("efekt",)}),
     "sada": (("efekt_klavesnice", "vrstvy_klavesnice", "klavesy_g"), {"klavesnice": ("efekt", "jas")}),
@@ -89,6 +90,44 @@ def snapshot(lcfg, cil):
     return out
 
 
+def has_keyboard(a):
+    """Meni predvolba podsviceni klavesnice?"""
+    return (a or {}).get("akce") == "predvolba" and (a or {}).get("cil", "klavesnice") in ("klavesnice", "vse")
+
+
+def has_fans(a):
+    return (a or {}).get("akce") == "predvolba" and (a or {}).get("cil") in ("ventilatory", "vse")
+
+
+def ensure_keyboard(a, lcfg):
+    """Predvolba bez nastaveni klavesnice ho dostane z okna (zacatek upravy). Vrati slovnik nastaveni."""
+    a.setdefault("cil", "klavesnice")
+    snap = a.get("nastaveni")
+    if not isinstance(snap, dict):
+        snap = a["nastaveni"] = {}
+    keys, _subs = PARTS["klavesnice"]
+    if any(k not in snap for k in keys):
+        base = snapshot(lcfg, "klavesnice")
+        for k in keys:
+            if k not in snap and k in base:
+                snap[k] = base[k]
+    kc = snap.get("klavesnice")
+    if not isinstance(kc, dict):
+        kc = snap["klavesnice"] = {}
+    src = lcfg.get("klavesnice") or {}
+    kc.setdefault("efekt", src.get("efekt", "vlastni"))
+    kc.setdefault("jas", src.get("jas", 100))
+    return snap
+
+
+def take_fans(a, lcfg):
+    """Do predvolby prevzit nastaveni ventilatoru ze stranky LED (klavesnice v predvolbe zustane)."""
+    snap = a.get("nastaveni")
+    if not isinstance(snap, dict):
+        snap = a["nastaveni"] = {}
+    snap.update(snapshot(lcfg, "ventilatory"))
+
+
 def overlay(lcfg, preset):
     """Nastaveni s predvolbou / sadou (novy slovnik, puvodni lcfg se nemeni)."""
     a = preset or {}
@@ -126,24 +165,26 @@ def _kb_text(snap):
 def describe(preset):
     """Kratky popis predvolby pro okno."""
     a = preset or {}
-    snap = a.get("nastaveni")
-    if not snap:
-        return "zatím neuložená"
+    snap = a.get("nastaveni") or {}
     out = []
-    parts = [x for x in _parts(a.get("cil")) if any(k in snap for k in PARTS[x][0])]
-    if "klavesnice" in parts:
-        out.append("klávesnice: " + _kb_text(snap))
-    if "ventilatory" in parts:
-        pl = snap.get("playlist") or {}
-        if pl.get("zapnuto") and pl.get("polozky"):
-            txt = f"playlist ({len(pl['polozky'])})"
-        elif snap.get("stejne_pro_vse", True):
-            txt = fx.EFFECTS.get((snap.get("efekt") or {}).get("typ"), ("?",))[0]
+    for x in _parts(a.get("cil", "klavesnice")):
+        if not any(k in snap for k in PARTS[x][0]):
+            out.append("klávesnice: zatím nenastavená" if x == "klavesnice" else
+                       "ventilátory: zatím nepřevzaté ze stránky LED")
+        elif x == "klavesnice":
+            jas = (snap.get("klavesnice") or {}).get("jas")
+            out.append("klávesnice: " + _kb_text(snap) + (f", jas {jas} %" if jas is not None else ""))
         else:
-            txt = " / ".join(fx.EFFECTS.get((snap.get(k) or {}).get("typ"), ("?",))[0]
-                             for k in ("efekt_f140", "efekt_deska"))
-        out.append(f"ventilátory: {txt}")
-    return "; ".join(out) or "uložená pro jiný cíl – ulož znovu"
+            pl = snap.get("playlist") or {}
+            if pl.get("zapnuto") and pl.get("polozky"):
+                txt = f"playlist ({len(pl['polozky'])})"
+            elif snap.get("stejne_pro_vse", True):
+                txt = fx.EFFECTS.get((snap.get("efekt") or {}).get("typ"), ("?",))[0]
+            else:
+                txt = " / ".join(fx.EFFECTS.get((snap.get(k) or {}).get("typ"), ("?",))[0]
+                                 for k in ("efekt_f140", "efekt_deska"))
+            out.append(f"ventilátory: {txt}")
+    return "; ".join(out)
 
 
 # ----------------------------------------------------------------- sady M1-M3

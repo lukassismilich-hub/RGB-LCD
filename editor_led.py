@@ -1406,6 +1406,11 @@ class LedEditor:
         c = self.preview
         c.delete("all")
         lc = self.lcfg
+        gs = klavesy_g.State()                                  # predvolba G upravovana na strance Klavesnice
+        kbd = getattr(self.app, "kbd", None)
+        gs.active = kbd.preview_preset() if kbd is not None else None
+        if gs.active is not None:
+            lc = gs.apply(lc)
         if not lc.get("zapnuto", True):
             c.create_text(PREVIEW_W / 2, PREVIEW_H / 2, text="Řízení LED vypnuto", fill=V.MUTED)
             self._kb_preview(None)
@@ -1435,7 +1440,7 @@ class LedEditor:
                 kb_music = None                                 # hudebni efekt klavesnice: simulovana hudba
                 if led.kb_music_on(lc):
                     kb_music = fx.music_demo(now - self.t0, fx.DEFAULT_PALETTE[:4])
-                kb_over = klavesy_g.State().leds(lc) if led.extra_on(lc, "klavesnice") else None
+                kb_over = gs.leds(self.lcfg) if led.extra_on(lc, "klavesnice") else None
                 frame = led.render(self.engine, lr, t, self.app.data, min(dt, 0.2), orient=False, music=snap,
                                    kb_music=kb_music, kb_over=kb_over)
             if snap is not None:

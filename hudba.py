@@ -343,6 +343,7 @@ class Music:
         self._mix_t = None
         self._active = False
         self._capturing = False
+        self.extra_audio = False          # zvuk chce i efekt klavesnice (hudba), i bez vizualizeru ventilatoru
         self._track_n = 0
         self.state = {}
         self._threads = []
@@ -529,7 +530,7 @@ class Music:
     def _want_audio(self):
         c = self.led_cfg
         pl = self.player
-        if not c.get("zapnuto") or not pl.seen:
+        if not (c.get("zapnuto") or self.extra_audio) or not pl.seen:
             return False
         return pl.playing or time.monotonic() - pl.since < 15.0      # chvili po pauze nechat bezet
 
@@ -621,6 +622,20 @@ class Music:
         snap["paleta"] = pal
         snap["track_n"] = tr["n"] if tr else 0
         snap["mix"] = self._mix
+        return snap
+
+    def kb_snapshot(self):
+        """Snimek zvuku pro hudebni efekty klavesnice (nezavisle na vizualizeru ventilatoru,
+        se stejnym zpozdenim), None = Spotify nehraje / bez zvuku. "paleta" = barvy z obalu."""
+        an = self.analyzer
+        if an is None or not self._capturing or not self.player.playing:
+            return None
+        snap = an.snapshot(time.monotonic() - _num(self.led_cfg.get("zpozdeni_ms"), 0.0, 0.0, MAX_DELAY_MS) / 1000.0)
+        if snap is None or snap.get("age", 0) > 1.0:
+            return None
+        snap = dict(snap)
+        tr = self.player.track
+        snap["paleta"] = (tr.get("paleta") if tr else None) or DEFAULT_PALETTE
         return snap
 
     # --- stav pro okno nastaveni

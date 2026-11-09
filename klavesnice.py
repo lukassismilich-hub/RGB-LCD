@@ -241,10 +241,12 @@ def encode(cols, last=None):
 
 
 class Direct:
-    """Barva cele klavesnice primo pres HID++ (0x8081) - bez G HUB a bez jeho SDK.
+    """Barvy klavesnice primo pres HID++ (0x8081) - bez G HUB a bez jeho SDK.
     start() vypne integrovanou pamet (rezim rizeni z pocitace), stop() ji zase zapne - klavesnice
-    pak sviti podle profilu v pameti. Rezim se overuje kazdych CHECK_S s: po odpojeni, probuzeni PC
-    nebo restartu G HUB se klavesnice vrati do pameti a aplikace ji prepne znovu."""
+    pak sviti podle profilu v pameti. Posila vlastni vlakno (snimek po klavesach ~60 ms, vlakno LED
+    na nej neceka): color() / keys() jen predaji posledni snimek, starsi neodeslany se zahodi.
+    Chyba vlakna se ohlasi pri dalsim color() / keys(). Rezim se overuje kazdych CHECK_S s:
+    po odpojeni, probuzeni PC nebo restartu G HUB se klavesnice vrati do pameti a vlakno ji prepne znovu."""
 
     def __init__(self):
         self.k = None
@@ -253,6 +255,11 @@ class Direct:
         self.zones = []
         self.checked = 0.0
         self.ghub = False                          # G HUB ridi podsviceni sam - pak rezim nemenit
+        self.error = None
+        self._cv = threading.Condition()
+        self._pending = None                       # (barvy, force) cekajici na odeslani
+        self._quit = False
+        self._thread = None
 
     def start(self):
         if self.ok:
@@ -270,7 +277,9 @@ class Direct:
             k.close()
             self.k = None
             raise
-        self.ok, self.last = True, None
+        self.ok, self.last, self.error, self._pending, self._quit = True, None, None, None, False
+        self._thread = threading.Thread(target=self._loop, name="klavesnice_led", daemon=True)
+        self._thread.start()
         return True
 
     def _host(self):
@@ -287,16 +296,39 @@ class Direct:
         self.keys({z: c for z in self.zones}, force)
 
     def keys(self, cols, force=False):
-        """Barvy klaves {zona: (r, g, b)}; posle jen zmenene (force = vse). Zony, ktere v cols
-        nejsou, zustanou, jak byly."""
+        """Barvy klaves {zona: (r, g, b)} k odeslani (zmenene; force = vse). Zony, ktere v cols
+        nejsou, zustanou, jak byly. Neceka na odeslani."""
+        if self.error is not None:
+            raise self.error
         if not self.ok:
             return
-        if time.monotonic() - self.checked > CHECK_S:
-            if self.k.foreign():
-                self.ghub = True
-                raise HidppError(GHUB_BUSY)
-            self._host()
         cols = {z: tuple(int(max(0, min(255, v))) for v in c) for z, c in cols.items()}
+        with self._cv:
+            if self._pending is not None:
+                force = force or self._pending[1]
+            self._pending = (cols, force)
+            self._cv.notify()
+
+    def _loop(self):
+        try:
+            while True:
+                with self._cv:
+                    if self._pending is None and not self._quit:
+                        self._cv.wait(1.0)
+                    if self._quit:
+                        return
+                    item, self._pending = self._pending, None
+                if time.monotonic() - self.checked > CHECK_S:
+                    if self.k.foreign():
+                        self.ghub = True
+                        raise HidppError(GHUB_BUSY)
+                    self._host()
+                if item is not None:
+                    self._send(*item)
+        except Exception as e:
+            self.error = e
+
+    def _send(self, cols, force):
         cmds = encode(cols, None if force else self.last)
         if not cmds:
             return
@@ -312,6 +344,12 @@ class Direct:
     def stop(self):
         """Zapnout zpet integrovanou pamet (klavesnice sviti podle sveho profilu) a zavrit spojeni.
         Kdyz podsviceni ridi G HUB sam, rezim se nemeni."""
+        if self._thread is not None:
+            with self._cv:
+                self._quit = True
+                self._cv.notify()
+            self._thread.join(2.0)
+            self._thread = None
         if self.k is not None:
             if not self.ghub:
                 try:

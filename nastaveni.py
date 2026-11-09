@@ -15,6 +15,7 @@ from PIL import ImageTk
 import config
 import hwinfo
 import kraken_prvky
+import led
 import program_ikona
 import screens
 import vzhled as V
@@ -196,8 +197,11 @@ def load_data():
 
 PAGES = [("lcd", "Kraken LCD", "Obrazovky displeje 240 × 240 a jejich rotace"),
          ("cool", "Chlazení", "Pumpa a ventilátory Krakenu"),
-         ("led", "LED ventilátorů", "2× F140 RGB Core (NZXT), ventilátory na desce, grafická karta, zóny desky a klávesnice"),
+         ("led", "LED ventilátorů", "2× F140 RGB Core (NZXT), ventilátory na desce, grafická karta a zóny desky"),
+         ("kbd", "Klávesnice", "Logitech G815 – podsvícení z aplikace a integrovaná paměť"),
          ("alpha", "Alphacool LCD", "Monochromatický displej 240 × 128 – editor rozvržení")]
+if not led.KEYBOARD:                                  # klavesnice skryta
+    PAGES = [p for p in PAGES if p[0] != "kbd"]
 
 
 def _nav_icon(c, kind, color):
@@ -217,6 +221,11 @@ def _nav_icon(c, kind, color):
                                (3.5, 3.5, 5.5, 5.5), (14.5, 14.5, 16.5, 16.5), (3.5, 16.5, 5.5, 14.5),
                                (14.5, 5.5, 16.5, 3.5)):
             c.create_line(x0, y0, x1, y1, fill=color, width=1.6)
+    elif kind == "kbd":
+        c.create_rectangle(1, 5, 19, 16, outline=color, width=1.6)
+        for x in (5, 8.5, 12, 15.5):
+            c.create_line(x - 0.8, 9, x + 0.8, 9, fill=color, width=1.6)
+        c.create_line(6, 12.5, 14, 12.5, fill=color, width=1.6)
     else:
         c.create_rectangle(2, 5, 18, 15, outline=color, width=1.6)
         c.create_line(5, 9, 9, 9, fill=color, width=1.6)
@@ -264,6 +273,10 @@ class App(tk.Tk):
         self._build_cool_page(cool_scroll.inner)
         from editor_led import LedEditor               # roluje si jen obsah zalozek, nahled zustava
         self.leds = LedEditor(self.pages["led"], self)
+        self.kbd = None
+        if "kbd" in self.pages:
+            from editor_klavesnice import KeyboardEditor
+            self.kbd = KeyboardEditor(self.pages["kbd"], self)
         alpha_scroll = V.ScrollFrame(self.pages["alpha"])
         alpha_scroll.pack(fill="both", expand=True)
         from editor_alphacool import AlphaEditor
@@ -1295,6 +1308,8 @@ class App(tk.Tk):
         self._draw_curves()
         self._update_alpha()
         self.leds.refresh()
+        if self.kbd is not None:
+            self.kbd.refresh()
         self._update_sidebar()
         self._update_program_card()
         self._update_music_card()

@@ -18,7 +18,7 @@ PATH = os.path.join(BASE, "config.json")
 BACKUP = os.path.join(BASE, "config.zaloha.json")        # nastaveni pred poslednim ulozenim
 BROKEN = os.path.join(BASE, "config.poskozeny.json")     # kopie poskozeneho souboru (pro kontrolu)
 # soubory jen pro okno nastaveni a nastroje - jejich zmena bezici aplikaci na pozadi nemeni
-UI_ONLY = {"nastaveni.py", "vzhled.py", "editor_alphacool.py", "editor_kraken.py", "editor_led.py",
+UI_ONLY = {"nastaveni.py", "vzhled.py", "editor_alphacool.py", "editor_kraken.py", "editor_led.py", "editor_klavesnice.py",
            "obrazky_vytvorit.py", "obrazky_z_predloh.py", "ikona_vytvorit.py", "test_lcd.py"}
 
 LIQUID = "@kapalina"       # teplota kapaliny primo z Krakenu

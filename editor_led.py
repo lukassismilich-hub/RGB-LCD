@@ -5,8 +5,8 @@
 #     (FX_GROUPS), vlastni barvy LED (jen kdyz se efekt "vlastni barvy LED" pouziva)
 #   - Hudba: vizualizer Spotify v blocich (zapnuti, styl, reakce, barvy)
 #   - Synchronizace: synchronne / vlna, smer, F140 jako jeden, poradi vlny ve skrini
-#   - Dalsi zarizeni: graficka karta RTX 5070, dalsi zony desky, klavesnice G815 (lze skryt
-#     led.KEYBOARD)
+#   - Dalsi zarizeni: graficka karta RTX 5070, dalsi zony desky (klavesnice G815 ma vlastni stranku -
+#     editor_klavesnice.py; barvu do jejiho nahledu posila _animate)
 #   - Zapojeni: ARGB hlavicky, ktery F140 je vpredu, natoceni ventilatoru + test, vyrovnani jasu,
 #     otoceni svislych efektu a hudby (spolecne pro vsechny efekty), klidny stav po ukonceni
 # Zmeny se na ventilatorech projevi po Ulozit. Format config.json se nemeni.
@@ -26,7 +26,6 @@ PREVIEW_MS = 40
 PREVIEW_W, PREVIEW_H = 470, 180
 WRAP = 450                    # zalomeni textu v kartach zalozek (sirka leveho sloupce)
 PLAYLIST_ITEM_S = 20          # nova polozka playlistu trva asi tolik sekund (pocet opakovani podle delky)
-KB_POLL_MS = 3000            # stav integrovane pameti klavesnice v karte (prepina ji vlakno LED)
 _contrast = V.contrast
 
 TABS = [("efekt", "Efekt"), ("hudba", "Hudba"), ("synchro", "Synchronizace"),
@@ -79,8 +78,6 @@ class LedEditor:
         self._test = tk.StringVar(value="")       # test natoceni: "" / "dole" / "obiha"
         self._test_t0 = self.t0
         self._test_job = None
-        self._kb_job = None                       # bezici prace s klavesnici (vlakno) a jeji vysledek
-        self._kb_mode = None
         self._custom_hosts = []                   # karty s kruhy vlastnich barev LED (Efekt, Zapojeni)
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=0)
@@ -126,9 +123,6 @@ class LedEditor:
         self.gpu.grid(row=0, column=0, sticky="ew")
         self.zones = V.card(t)
         self.zones.grid(row=1, column=0, sticky="ew", pady=(16, 0))
-        if led.KEYBOARD:                                   # klavesnice zatim skryta
-            self.kb = V.card(t)
-            self.kb.grid(row=2, column=0, sticky="ew", pady=(16, 0))
         # Zapojeni
         t = self.tabs["zapojeni"]
         self.fans = V.card(t)
@@ -151,10 +145,6 @@ class LedEditor:
         self._build_wave()
         self._build_gpu()
         self._build_zones_card()
-        if led.KEYBOARD:
-            self._build_keyboard()
-            self._kb_run(self._kb_read_mode)               # aktualni rezim klavesnice
-            self.kb.after(KB_POLL_MS, self._kb_tick)       # a pak kazde 3 s (kdyz je karta videt)
         self._build_fans()
         self._build_sync()
         self._build_balance()
@@ -1130,154 +1120,6 @@ class LedEditor:
         r, g, b = (round(255 * (v / 255) ** 0.5) for v in col[0])
         c.create_rectangle(6, 30, 114, 33, outline="", fill=f"#{r:02x}{g:02x}{b:02x}")
 
-    # ---------------------------------------------------------- klavesnice
-    def _build_keyboard(self):
-        self._build_keyboard_card()
-        if self._kb_mode is not None and (self._kb_job is None or "hotovo" in self._kb_job):
-            self._kb_show_mode()                  # po prestavbe karty znovu ukazat stav pameti
-
-    def _build_keyboard_card(self):
-        import klavesnice
-        f = self.kb
-        for w in f.winfo_children():
-            w.destroy()
-        kc = self.lcfg.setdefault("klavesnice", {"zapnuto": False, "efekt": "deska", "jas": 100, "barva": "#ffffff"})
-        f.columnconfigure(1, weight=1)
-        V.card_title(f, "Klávesnice Logitech G815").grid(row=0, column=0, columnspan=3, sticky="w", padx=20,
-                                                         pady=(14, 6))
-        # integrovana pamet - prepina ji vlakno LED samo podle "Ridit podsviceni z aplikace"
-        ttk.Label(f, text="Integrovaná paměť", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(20, 10))
-        self.kb_mode = ttk.Label(f, text="zjišťuji…", font=V.FONT_B)
-        self.kb_mode.grid(row=1, column=1, sticky="w")
-        bf = ttk.Frame(f)
-        bf.grid(row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(6, 0))
-        ttk.Button(bf, text="Záloha paměti", command=lambda: self._kb_run(self._kb_backup)).pack(side="left")
-        self.kb_msg = ttk.Label(f, text="", style="Small.TLabel", wraplength=440, justify="left")
-        self.kb_msg.grid(row=3, column=0, columnspan=3, sticky="w", padx=20, pady=(4, 0))
-        ttk.Label(f, style="Small.TLabel", wraplength=440, justify="left", text=(
-            "Paměť přepíná aplikace sama: když řídí podsvícení, paměť vypne, a při ukončení aplikace, "
-            "uspání PC nebo vypnutí řízení ji zase zapne – klávesnice pak svítí podle profilu v paměti. "
-            "V G HUB nech u klávesnice paměť zapnutou (jinak G HUB barvy přepisuje). "
-            "Záloha jen čte obsah paměti do složky zalohy.")).grid(row=4, column=0, columnspan=3, sticky="w",
-                                                                   padx=20, pady=(4, 8))
-        ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", padx=20, pady=6)
-        # rizeni podsviceni z aplikace
-        on = tk.BooleanVar(value=bool(kc.get("zapnuto")))
-
-        def on_toggle():
-            kc["zapnuto"] = on.get()
-            self._build_keyboard()
-            self._kb_show_mode()
-        ttk.Checkbutton(f, text="Řídit podsvícení klávesnice z aplikace", variable=on,
-                        command=on_toggle).grid(row=6, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 4))
-        self.kb_prev = tk.Canvas(f, width=120, height=34, bg=V.CARD, highlightthickness=0)
-        self.kb_prev.grid(row=0, column=2, rowspan=2, sticky="e", padx=20, pady=(10, 0))
-        if not kc.get("zapnuto"):
-            ttk.Label(f, style="Small.TLabel", text="Klávesnice svítí podle profilu v integrované paměti.").grid(
-                row=7, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 16))
-            return
-        ttk.Label(f, text="Efekt", style="Muted.TLabel").grid(row=7, column=0, sticky="w", padx=(20, 10), pady=4)
-        src = tk.StringVar(value=kc.get("efekt", "deska"))
-
-        def on_src():
-            kc["efekt"] = src.get()
-            self._build_keyboard()
-        V.segmented(f, src, [("f140", "jako F140"), ("deska", "jako deska"), ("vlastni", "vlastní")],
-                    command=on_src).grid(row=7, column=1, columnspan=2, sticky="w", pady=4)
-        ttk.Label(f, text="Jas", style="Muted.TLabel").grid(row=8, column=0, sticky="w", padx=(20, 10), pady=4)
-        jv = tk.IntVar(value=int(kc.get("jas", 100)))
-        jl = ttk.Label(f, width=5, text=f"{jv.get()} %", font=V.MONO, anchor="e")
-        jl.grid(row=8, column=2, sticky="e", padx=(8, 20))
-
-        def on_jas(_e=None):
-            kc["jas"] = int(jv.get())
-            jl.config(text=f"{int(jv.get())} %")
-        V.scale(f, variable=jv, from_=10, to=100, resolution=5, length=140, command=on_jas).grid(
-            row=8, column=1, sticky="ew", pady=4)
-        if kc.get("efekt") == "vlastni":
-            eff = self.lcfg.setdefault("efekt_klavesnice", dict(fx.DEFAULT_EFFECT))
-            pf = ttk.Frame(f)
-            pf.grid(row=9, column=0, columnspan=3, sticky="nsew", padx=20, pady=(4, 16))
-            self._effect_panel(pf, eff, 3, rebuild=self._build_keyboard, custom_note=False)
-        else:
-            ttk.Label(f, style="Small.TLabel", text="Celá klávesnice jednou barvou – efekt se počítá jako pro "
-                                                    "jeden ventilátor.").grid(row=9, column=0, columnspan=3,
-                                                                              sticky="w", padx=20, pady=(0, 16))
-
-    def _kb_run(self, fn):
-        """Prace s klavesnici ve vlakne (HID muze chvili trvat); vysledek ukaze _kb_poll."""
-        if self._kb_job is not None and "hotovo" not in self._kb_job:
-            return
-        job = self._kb_job = {}
-
-        def work():
-            try:
-                job["zprava"] = fn()
-            except Exception as e:
-                job["chyba"] = str(e)
-            finally:
-                job["hotovo"] = True
-        import threading
-        threading.Thread(target=work, name="klavesnice", daemon=True).start()
-        self.kb.after(100, self._kb_poll)
-
-    def _kb_poll(self):
-        job = self._kb_job
-        try:
-            if not self.kb.winfo_exists():
-                return
-        except tk.TclError:
-            return
-        if job is None or "hotovo" not in job:
-            self.kb.after(100, self._kb_poll)
-            return
-        if "chyba" in job:
-            self.kb_msg.config(text="Chyba: " + job["chyba"], foreground=V.ERR)
-        elif job.get("zprava"):
-            self.kb_msg.config(text=job["zprava"], foreground=V.OK)
-        self._kb_show_mode()
-
-    def _kb_read_mode(self):
-        import klavesnice
-        self._kb_mode = klavesnice.get_mode()
-        return None
-
-    def _kb_tick(self):
-        """Stav pameti obcas precist znovu (prepina ji vlakno LED v bezici aplikaci)."""
-        try:
-            if not self.kb.winfo_exists():
-                return
-        except tk.TclError:
-            return
-        if self.kb.winfo_ismapped():
-            self._kb_run(self._kb_read_mode)
-        self.kb.after(KB_POLL_MS, self._kb_tick)
-
-    def _kb_backup(self):
-        import klavesnice
-        path = klavesnice.backup_memory()
-        self._kb_mode = klavesnice.get_mode()
-        return f"Záloha uložena: zalohy\\{os.path.basename(path)}"
-
-    def _kb_show_mode(self):
-        import klavesnice
-        m = self._kb_mode
-        if m is None:
-            self.kb_mode.config(text="nezjištěno", foreground=V.MUTED)
-            return
-        onboard = m == klavesnice.MODE_ONBOARD
-        want = bool(self.lcfg.get("klavesnice", {}).get("zapnuto"))
-        self.kb_mode.config(text="zapnutá – klávesnice svítí sama" if onboard else "vypnutá – podsvícení řídí aplikace",
-                            foreground=V.WARN if onboard == want else V.TEXT)
-        if onboard and want:
-            self.kb_msg.config(text="Paměť je ještě zapnutá – běžící aplikace ji vypne do pár sekund po Uložit.",
-                               foreground=V.WARN)
-        elif not onboard and not want:
-            self.kb_msg.config(text="Paměť je vypnutá – běžící aplikace ji zapne do pár sekund po Uložit.",
-                               foreground=V.WARN)
-        elif str(self.kb_msg.cget("foreground")) == str(V.WARN):
-            self.kb_msg.config(text="")
-
     # ------------------------------------------------ natoceni (synchronizace)
     def _build_sync(self):
         """Posun LED 1 a smer cislovani kazdeho ventilatoru - aby se efekt na vsech tocil stejne."""
@@ -1565,6 +1407,7 @@ class LedEditor:
         lc = self.lcfg
         if not lc.get("zapnuto", True):
             c.create_text(PREVIEW_W / 2, PREVIEW_H / 2, text="Řízení LED vypnuto", fill=V.MUTED)
+            self._kb_preview(None)
         else:
             # bez natoceni ventilatoru = jak ma efekt vypadat (spodek dole, jako test natoceni)
             lr, t, info = lc, now - self.t0, None
@@ -1596,8 +1439,7 @@ class LedEditor:
                 name = fx.EFFECTS.get(info["eff"].get("typ"), ("?",))[0]
                 c.create_text(4, 2, anchor="nw", fill=V.MUTED, font=("Segoe UI", 8),
                               text=f"▶ {info['i'] + 1}/{info['pocet']}  {name} · ještě {_dur(info['zbyva'])}")
-            kb = frame.pop("klavesnice", None)
-            self._kb_preview(kb)
+            self._kb_preview(frame.pop("klavesnice", None))
             gpu = frame.pop("grafika", None)
             self._gpu_preview(gpu)
             order = led.wave_offsets(lc, list(frame))[1]          # jako ve skrini: vlevo predek, vpravo zadek
@@ -1635,23 +1477,10 @@ class LedEditor:
         self.preview.after(PREVIEW_MS, self._animate)
 
     def _kb_preview(self, kb):
-        """Barva klavesnice v jeji karte (obrys klavesnice)."""
-        c = getattr(self, "kb_prev", None)
-        try:
-            if c is None or not c.winfo_exists():
-                return
-        except tk.TclError:
-            return
-        c.delete("all")
-        if not kb:
-            return
-        r, g, b = (round(255 * (v / 255) ** 0.5) for v in kb[0])
-        col = f"#{r:02x}{g:02x}{b:02x}"
-        c.create_rectangle(2, 2, 118, 32, outline="#262b33", fill="#111418")
-        for row in range(3):
-            for i in range(10):
-                x, y = 8 + i * 11, 6 + row * 9
-                c.create_rectangle(x, y, x + 8, y + 6, outline="", fill=col)
+        """Barva klavesnice do nahledu na jeji strance (editor_klavesnice.py)."""
+        kv = getattr(self.app, "kbd", None)
+        if kv is not None:
+            kv.preview(kb)
 
     # ---------------------------------------------------------------- stav
     def refresh(self):

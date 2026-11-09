@@ -536,6 +536,7 @@ class Session:
     def __init__(self, lcfg):
         self.nzxt = self.fusion = self.fdev = None
         self.kbd = None                           # klavesnice.Direct, kdyz ji aplikace ridi
+        self.kb_retry_at = 0.0                    # kdy zkusit klavesnici znovu po chybe
         self.gpu = None                           # grafika.Gpu, kdyz ji aplikace ridi
         self.sync_zones = gpu_zones(lcfg)         # zony desky "jako grafika"
         self.orders = {k: (1, 0, 2) for k in ARGB_HEADERS}
@@ -584,12 +585,25 @@ class Session:
             if self.kbd.start():
                 self.errors.pop("klavesnice", None)
         except Exception as e:
-            self.errors["klavesnice"] = str(e)
+            self._kb_error(e)
+
+    def _kb_error(self, e):
+        """Chyba klavesnice: kdy to zkusit znovu (nenalezena 2 s, jinak 10 / 30 s - klavesnice.retry_after)."""
+        import klavesnice
+        self.errors["klavesnice"] = str(e)
+        self.kb_retry_at = time.monotonic() + klavesnice.retry_after(e)
+
+    def retry_keyboard(self, lcfg):
+        """Klavesnici zkusit znovu, kdyz uz je cas (vlastni casovani - ne po RETRY_S jako radice)."""
+        if "klavesnice" in self.errors and time.monotonic() >= self.kb_retry_at:
+            self.setup_keyboard(lcfg)
+            if "klavesnice" not in self.errors:
+                self.last.pop("klavesnice", None)          # poslat klavesnici cely snimek
+                return True
+        return False
 
     def retry_missing(self, lcfg):
         """Pripojit radice, ktere zatim nejedou. Vrati True, kdyz nejaky pribyl."""
-        if "klavesnice" in self.errors:
-            self.setup_keyboard(lcfg)
         if "grafika" in self.errors:
             self.setup_gpu(lcfg)
         if self.nzxt is not None and self.fusion is not None:
@@ -653,7 +667,11 @@ class Session:
             if dev is not None:
                 dev.stop()
             self.errors[which] = str(e)
-            log.warning("LED: %s – %s, zkusím znovu za %d s.", self.NAMES[which], e, RETRY_S)
+            secs = RETRY_S
+            if which == "klavesnice":
+                self._kb_error(e)
+                secs = round(self.kb_retry_at - time.monotonic())
+            log.warning("LED: %s – %s, zkusím znovu za %d s.", self.NAMES[which], e, secs)
             return
         self._drop_dev(getattr(self, which))
         setattr(self, which, None)
@@ -893,6 +911,8 @@ class LedWorker(threading.Thread):
                     hw_key, last_force, last_retry = key, 0.0, now
                     if not session.running:              # nejede ani jeden radic
                         raise RuntimeError("; ".join(session.error_text()))
+                elif session.retry_keyboard(lcfg):            # klavesnice ma kratsi casovani
+                    pass
                 elif session.errors and now - last_retry > RETRY_S:
                     last_retry = now                     # chybejici radic zkusit znovu, druhy jede dal
                     if session.retry_missing(lcfg):

@@ -176,7 +176,7 @@ class KeyboardEditor:
         elif not self.app.running:
             text, color = "Aplikace neběží – klávesnici převezme po spuštění", V.MUTED
         elif errs:
-            text, color = "Chyba: " + "; ".join(e.split(": ", 1)[-1] for e in errs) + " (zkouší znovu po 30 s)", V.ERR
+            text, color = "Chyba: " + "; ".join(e.split(": ", 1)[-1] for e in errs) + " (zkouší znovu)", V.ERR
         elif st.get("stav") in ("běží", "nastaveno"):
             text, color = "● Podsvícení řídí aplikace", V.OK
         else:

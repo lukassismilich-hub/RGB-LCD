@@ -45,6 +45,25 @@ class HidppError(RuntimeError):
     pass
 
 
+class NotFound(HidppError):
+    """Klavesnice neni pripojena (hledani stoji ~0,3 ms - jde zkouset casto)."""
+
+
+class GhubBusy(HidppError):
+    """Podsviceni ridi G HUB sam (ma u klavesnice vypnutou pamet)."""
+
+
+def retry_after(e):
+    """Za kolik sekund zkusit klavesnici znovu po chybe e: nenalezena 2 s (nic se neprepina),
+    G HUB ridi podsviceni 30 s (kazdy pokus pul sekundy posloucha), jinak 10 s (at klavesnice
+    neblika mezi pameti a aplikaci)."""
+    if isinstance(e, NotFound):
+        return 2
+    if isinstance(e, GhubBusy):
+        return 30
+    return 10
+
+
 class G815:
     """Spojeni HID++ s klavesnici (jen to, co aplikace potrebuje)."""
 
@@ -53,7 +72,7 @@ class G815:
         path = next((d["path"] for d in hid.enumerate(VID, PID)
                      if d["usage_page"] == 0xFF43 and d["usage"] == 0x602), None)
         if path is None:
-            raise HidppError(f"{NAME} nenalezena")
+            raise NotFound(f"{NAME} nenalezena")
         self.h = hid.device()
         self.h.open_path(path)
         self.h.set_nonblocking(True)
@@ -282,7 +301,7 @@ class Direct:
             self.zones = k.zones()
             self.ghub = k.onboard_mode() == MODE_HOST and k.sniff(0.5)
             if self.ghub:                          # G HUB ma pamet vypnutou a posila sve barvy
-                raise HidppError(GHUB_BUSY)
+                raise GhubBusy(GHUB_BUSY)
             self.k = k
             self._host()
         except Exception:
@@ -333,7 +352,7 @@ class Direct:
                 if time.monotonic() - self.checked > CHECK_S:
                     if self.k.foreign():
                         self.ghub = True
-                        raise HidppError(GHUB_BUSY)
+                        raise GhubBusy(GHUB_BUSY)
                     self._host()
                 if item is not None:
                     self._send(*item)

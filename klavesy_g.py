@@ -249,11 +249,7 @@ def overlay(lcfg, p):
 
 def _kb_text(snap):
     import klavesnice_efekty as kbfx
-    src = (snap.get("klavesnice") or {}).get("efekt", "vlastni")
-    if src == "vlastni":
-        txt = kbfx.info((snap.get("efekt_klavesnice") or {}).get("typ"))[0]
-    else:
-        txt = "jako F140" if src == "f140" else "jako deska"
+    txt = kbfx.info((snap.get("efekt_klavesnice") or {}).get("typ"))[0]   # "jako F140 / deska" zatim neni
     n = sum(1 for v in snap.get("vrstvy_klavesnice") or [] if isinstance(v, dict) and v.get("zapnuto", True))
     return txt + (f" + části: {n}" if n else "")
 

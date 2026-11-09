@@ -7,6 +7,7 @@ import os
 import shutil
 
 import hudba
+import klavesnice_efekty as kbfx
 import klavesy_g
 import led
 import program_ikona
@@ -156,6 +157,10 @@ def load():
     for k, v in DEFAULTS["hudba"].items():              # doplneni novych klicu obrazovky Prave hraje
         cfg["hudba"].setdefault(k, json.loads(json.dumps(v)))
     lc = cfg["led"]
+    if klavesy_g.migrate(lc):                           # klavesnice: jedno nastaveni + sady -> M1-M3
+        log.info("Klávesnice: nastavení převedeno na M1–M3 a pojmenované předvolby.")
+    if kbfx.migrate_reaction(lc):                       # reakce na stisk: u efektu -> nadrazena
+        log.info("Klávesnice: reakce na stisk převedena na společný efekt přes celou klávesnici.")
     for k, v in DEFAULTS["led"].items():               # doplneni novych klicu LED
         lc.setdefault(k, json.loads(json.dumps(v)))
     if "otoceni" not in lc["hudba"]:                   # otoceni svislych efektu: jako u beznych efektu
@@ -170,8 +175,6 @@ def load():
             lc[group].setdefault(ch, json.loads(json.dumps(v)))
     for k in led.EXTRAS:                                 # omylem zapsane natoceni klavesnice/grafiky
         lc["argb"].pop(k, None)
-    if klavesy_g.migrate(lc):                           # klavesnice: jedno nastaveni + sady -> M1-M3
-        log.info("Klávesnice: nastavení převedeno na M1–M3 a pojmenované předvolby.")
     for scr in cfg["obrazovky"]:                        # stare jednobarevne bary -> prechod od/do
         for n in ("1", "2"):
             if "barva" + n in scr:

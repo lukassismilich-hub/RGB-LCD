@@ -8,7 +8,10 @@
 #   barvy (+ pocet_barev), duha (misto barev plna duha), rychlost 1-10, smer (uhel ve stupnich,
 #   0 = doprava, 90 = dolu), sirka 1-10, opacne, pozadi, senzor / min / max, rada (ukazatel),
 #   barvy_hudba "obal" / "vlastni", klavesy {zona: barva} + zaklad (vlastni barvy klaves),
-#   reakce "" / "klavesa" / "vlnka" na stisk klaves, reakce_barva (hex nebo "duha"), reakce_doba (s).
+# Reakce na stisk klaves je nadrazeny efekt pro celou klavesnici (config["led"]["reakce_klavesnice"] =
+#   REACTION_DEFAULT: "zapnuto", "rezim" klavesa / vlnka, "barva" hex nebo "duha", "doba" s) - kresli ji
+#   led._kb_compose pres efekt, casti, predvolbu i hudbu (Engine.reaction); drive byla u kazdeho efektu
+#   ("reakce", "reakce_barva", "reakce_doba" - prevede migrate_reaction).
 # Stisky klaves (zona) dodava Engine.press() - ve vlakne LED z hooku Windows (klavesy_stisk.py),
 # v nahledu simulovane.
 
@@ -89,10 +92,57 @@ GROUPS = [("klidne", "Klidné"), ("pohyb", "Pohyb"), ("castice", "Částice"), (
           ("senzor", "Senzor")]
 STATIC = {"barva", "prechod", "vlastni"}               # bez animace (jen pri zmene / reakci na stisk)
 DEFAULT_EFFECT = {"typ": "vlna", "rychlost": 5, "smer": 0, "sirka": 6, "duha": True, "opacne": False,
-                  "barvy": DEFAULT_PALETTE[:3], "pozadi": "#000000", "reakce": "", "reakce_barva": "#ffffff",
-                  "reakce_doba": 1.0, "citlivost": 5, "citlivost_vlastni": False, "spicka": True}
+                  "barvy": DEFAULT_PALETTE[:3], "pozadi": "#000000", "citlivost": 5, "citlivost_vlastni": False,
+                  "spicka": True}
 DIRECTIONS = [(0, "→"), (45, "↘"), (90, "↓"), (135, "↙"), (180, "←"), (225, "↖"), (270, "↑"), (315, "↗")]
-REACTIONS = [("", "bez reakce"), ("klavesa", "rozsvítit klávesu"), ("vlnka", "vlnka od klávesy")]
+REACTIONS = [("klavesa", "rozsvítit klávesu"), ("vlnka", "vlnka od klávesy")]
+REACTION_DEFAULT = {"zapnuto": False, "rezim": "vlnka", "barva": "#ffffff", "doba": 1.0}
+OLD_REACTION_KEYS = ("reakce", "reakce_barva", "reakce_doba")
+
+
+def reaction_settings(lcfg):
+    """Nastaveni reakce na stisk s vychozimi hodnotami (cteni)."""
+    v = (lcfg or {}).get("reakce_klavesnice")
+    v = v if isinstance(v, dict) else {}
+    return {k: v.get(k, d) for k, d in REACTION_DEFAULT.items()}
+
+
+def migrate_reaction(lc):
+    """Stara reakce u efektu -> nadrazena (prvni efekt s reakci: zaklad M1 / stary zaklad, pak casti);
+    klice reakce z efektu smaze. Vrati True, kdyz neco prevedl."""
+    effs = []
+
+    def collect(src):
+        if not isinstance(src, dict):
+            return
+        effs.append(src.get("efekt_klavesnice"))
+        for lay in src.get("vrstvy_klavesnice") or []:
+            if isinstance(lay, dict):
+                effs.append(lay.get("efekt"))
+    collect(lc)
+    profs = lc.get("klavesnice_m")
+    for m in ("1", "2", "3"):
+        collect((profs or {}).get(m) if isinstance(profs, dict) else None)
+    for p in lc.get("predvolby") or []:
+        if isinstance(p, dict):
+            collect(p.get("nastaveni"))
+    effs = [e for e in effs if isinstance(e, dict)]
+    found = next((e for e in effs if e.get("reakce")), None)
+    changed = False
+    if "reakce_klavesnice" not in lc:
+        lc["reakce_klavesnice"] = dict(REACTION_DEFAULT)
+        if found is not None:
+            lc["reakce_klavesnice"].update(zapnuto=True, rezim=found.get("reakce") if found.get("reakce") in
+                                           ("klavesa", "vlnka") else "vlnka",
+                                           barva=found.get("reakce_barva", "#ffffff"),
+                                           doba=found.get("reakce_doba", 1.0))
+        changed = True
+    for e in effs:
+        for k in OLD_REACTION_KEYS:
+            if k in e:
+                del e[k]
+                changed = True
+    return changed
 ROWS = {"cisla": [27 + i for i in range(10)] + [42, 43],          # 1 ... 0, -, =
         "f": [55 + i for i in range(12)]}                           # F1 ... F12
 ROW_NAMES = [("cisla", "číselná řada"), ("f", "řada F1–F12")]
@@ -121,7 +171,7 @@ def get(eff, key):
 
 
 def is_animated(eff):
-    return eff.get("typ") not in STATIC or bool(eff.get("reakce"))
+    return eff.get("typ") not in STATIC
 
 
 def hex_rgb(h):
@@ -331,7 +381,8 @@ class Engine:
         self.g = geo(zones)                     # klavesy, pro ktere se efekt pocita (None = cela klavesnice)
         self.clock = 0.0
         self.state = {}
-        self.presses = []                       # [(index klavesy, cas stisku, barva duhy)]
+        self.presses = []                       # [(index klavesy, cas stisku rclock, barva duhy)]
+        self.rclock = 0.0                       # hodiny reakce na stisk (bezi i bez frame - jedna barva)
         self.source = None                      # funkce vracejici nove stisknute zony (hook Windows)
         self.parts = {}                         # enginy casti klavesnice (vrstvy) - vlastni stav efektu
         self._n_press = 0
@@ -340,9 +391,30 @@ class Engine:
         i = self.g.index.get(zone)
         if i is not None:
             self._n_press += 1
-            self.presses.append((i, self.clock, (self._n_press * 0.13) % 1.0))
-        for e in self.parts.values():            # stisk dostanou i casti klavesnice
-            e.press(zone)
+            self.presses.append((i, self.rclock, (self._n_press * 0.13) % 1.0))
+            del self.presses[:-64]
+
+    def reaction(self, rc, cols, dt=1 / FPS):
+        """Nadrazena reakce na stisk (rc = reaction_settings) pres barvy cols (poradi KEYS)."""
+        self.rclock += max(0.0, min(0.25, dt))
+        self.poll()
+        life = self._life(rc)
+        self.presses = [p for p in self.presses if self.rclock - p[1] < life]
+        if not self.presses:
+            return cols
+        return self._reaction({"reakce": rc.get("rezim"), "reakce_barva": rc.get("barva"),
+                               "reakce_doba": life}, cols)
+
+    def reacting(self, rc):
+        """Dohasina jeste nejaky stisk (vlakno LED pak kresli dalsi snimky)?"""
+        return bool(rc.get("zapnuto")) and any(self.rclock - p[1] < self._life(rc) for p in self.presses)
+
+    @staticmethod
+    def _life(rc):
+        try:
+            return max(0.2, min(5.0, float(rc.get("doba", 1.0))))
+        except (TypeError, ValueError):
+            return 1.0
 
     def poll(self):
         """Nove stisky z hooku Windows (ve frame() se vola samo)."""
@@ -383,10 +455,6 @@ class Engine:
         typ = eff.get("typ", "vlna")
         fn = getattr(self, "_" + typ, None) if typ in EFFECTS else None
         cols = fn(eff, self.clock, dt, data, music) if fn else [(0.0, 0.0, 0.0)] * self.g.n
-        if eff.get("reakce"):
-            cols = self._reaction(eff, cols)
-        keep = self.clock - 4.0
-        self.presses = [p for p in self.presses if p[1] > keep]
         return [(max(0.0, min(255.0, c[0])), max(0.0, min(255.0, c[1])), max(0.0, min(255.0, c[2])))
                 for c in cols]
 
@@ -872,7 +940,7 @@ class Engine:
         rc = eff.get("reakce_barva", "#ffffff")
         out = list(cols)
         for i, pt, hue in self.presses:
-            age = self.clock - pt
+            age = self.rclock - pt
             if age >= life:
                 continue
             col = _hsv(hue) if rc == "duha" else hex_rgb(rc)
@@ -925,10 +993,11 @@ if __name__ == "__main__":
     demo = {"bands": [0.5] * 16, "beats": [(0.05, 1.0, 3)], "beat_n": 3, "bass": 0.7, "paleta": ["#ff0000"],
             "citlivost": 5}
     for typ in EFFECTS:
-        e = dict(default_effect(typ), reakce="vlnka")
+        e = default_effect(typ)
         eng.press(1)
         t = time.perf_counter()
         for _ in range(30):
             c = eng.frame(e, 1 / 30, {"CPU (Tctl/Tdie)": {"value": 70}}, demo)
+        c = eng.reaction(dict(REACTION_DEFAULT, zapnuto=True), c)
         assert len(c) == len(KEYS)
         print(f"{typ:12s} {(time.perf_counter() - t) / 30 * 1000:5.2f} ms/snímek")

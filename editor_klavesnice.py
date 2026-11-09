@@ -3,7 +3,8 @@
 #     zivy nahled LED (LedEditor._animate -> preview()); stav rizeni z bezici aplikace. Klik na klavesu
 #     = vyber klaves (vlastni barvy klaves), jinak ukazkovy stisk (reakce na stisk).
 #   - Efekt: vlastni plosny efekt klavesnice (klavesnice_efekty, skupiny GROUPS) nebo jedna barva
-#     jako F140 / jako deska; parametry efektu, malovani klaves, reakce na stisk, jas
+#     jako F140 / jako deska; parametry efektu, malovani klaves, jas
+#   - Reakce na stisk (config["led"]["reakce_klavesnice"]): nadrazena pres celou klavesnici, M1-M3 spolecne
 #   - Casti klavesnice (vrstvy, config["led"]["vrstvy_klavesnice"]): vlastni efekt na vybranych klavesach
 #     pres zaklad; "Upravuji" prepina, ceho se tyka vyber efektu (self.target), klik na klavesu = do casti
 #   - Nastaveni M1-M3 (config["led"]["klavesnice_m"], klavesy_g.py): vyber nahore (self.m) - podsviceni
@@ -44,7 +45,7 @@ WIDTH_LABEL = {"vlna": "Délka vlny", "kruh": "Šířka kruhů", "toceni": "Zkro
                "dest": "Hustota", "trpyt": "Hustota", "ohnostroj": "Četnost", "plamen": "Výška plamene",
                "jiskry": "Množství", "dest_hudba": "Hustota"}
 OPP_LABEL = {"kruh": "Dovnitř", "hlasitost": "Od středu do stran"}      # popisek "opacne" podle efektu
-KEEP = ("reakce", "reakce_barva", "reakce_doba", "klavesy", "zaklad")   # pri zmene efektu zustava
+KEEP = ("klavesy", "zaklad")   # pri zmene efektu zustava
 
 
 def fx_style(styl):
@@ -91,6 +92,7 @@ class KeyboardEditor:
         self.vol_pick = False                     # klik na klavesu = do ukazatele hlasitosti / z nej
         self._vdemo = (None, False)
         self._vov = hlasitost.Overlay()
+        self._build_react()
         self._build_vol()
         self._build_g()
         self._build_presets()
@@ -190,16 +192,23 @@ class KeyboardEditor:
         return e
 
     def own(self):
-        return self.ekc.get("efekt", "deska") == "vlastni"
+        return led.kb_own(self.lcfg)
 
     def painting(self):
         return self.layer() is None and self.own() and self.eff.get("typ") == "vlastni"
 
+    @property
+    def rcfg(self):
+        """Reakce na stisk (spolecna, nadrazena)."""
+        v = self.lcfg.get("reakce_klavesnice")
+        if not isinstance(v, dict):
+            v = self.lcfg["reakce_klavesnice"] = {}
+        for k, d in kbfx.REACTION_DEFAULT.items():
+            v.setdefault(k, d)
+        return v
+
     def reacting(self):
-        """Ma nektery efekt klavesnice (zaklad nebo cast) reakci na stisk?"""
-        lc = self.view_cfg()
-        lc = dict(lc, klavesnice=dict(lc.get("klavesnice") or {}, zapnuto=True))
-        return any(e.get("reakce") for e in led.kb_effects(lc))
+        return bool(self.rcfg["zapnuto"])
 
     # ------------------------------------------------------------ nahled a stav
     def _build_top(self):
@@ -350,7 +359,7 @@ class KeyboardEditor:
         self.refresh()
 
     def _build_light(self):
-        for w in self.light.winfo_children() + self.react.winfo_children():
+        for w in self.light.winfo_children():
             w.destroy()
         self.sel_lbl = None
         f = self.light
@@ -368,7 +377,6 @@ class KeyboardEditor:
             self._show_mode()
         ttk.Checkbutton(f, text="Řídit podsvícení klávesnice z aplikace", variable=on,
                         command=on_toggle).grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 4))
-        self.react.grid_remove()
         if not kc.get("zapnuto"):
             ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left",
                       text="Klávesnice svítí podle profilu v integrované paměti. Po zapnutí aplikace paměť sama "
@@ -388,33 +396,15 @@ class KeyboardEditor:
             jl.config(text=f"{int(jv.get())} %")
         V.scale(f, variable=jv, from_=10, to=100, resolution=5, length=200, command=on_jas).grid(
             row=4, column=1, sticky="w", pady=4)
-        ttk.Label(f, text="Efekt", style="Muted.TLabel").grid(row=5, column=0, sticky="w", padx=(20, 10), pady=4)
-        src = tk.StringVar(value=ek.get("efekt", "vlastni"))
-
-        def on_src():
-            ek["efekt"] = src.get()
-            self._rebuild()
-        V.segmented(f, src, [("vlastni", "efekt klávesnice"), ("f140", "jako F140"), ("deska", "jako deska")],
-                    command=on_src).grid(row=5, column=1, columnspan=2, sticky="w", pady=4)
         self._parts_row(f, 6)
         lay = self.layer()
         if lay is not None:
             lf = ttk.Frame(f)
             lf.grid(row=7, column=0, columnspan=3, sticky="ew", padx=20, pady=(6, 0))
             self._layer_controls(lf, lay)
-        elif not self.own():
-            ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left",
-                      text="Celá klávesnice jednou barvou – efekt se počítá jako pro jeden ventilátor "
-                           f"({'F140' if ek.get('efekt') == 'f140' else 'ventilátory na desce'}, nastavení na "
-                           "stránce LED ventilátorů). Části klávesnice můžou mít i tak vlastní efekt.").grid(
-                row=7, column=0, columnspan=3, sticky="w", padx=20, pady=(4, 16))
-            self._refit()
-            return
         pf = ttk.Frame(f)
         pf.grid(row=8, column=0, columnspan=3, sticky="ew", padx=20, pady=(6, 16))
         self._effect_chooser(pf, exclude=("vlastni",) if lay is not None else ())
-        self.react.grid()
-        self._build_react()
         self._refit()
 
     # ------------------------------------------------------------ upravovana predvolba (pruh v karte)
@@ -804,60 +794,63 @@ class KeyboardEditor:
         except tk.TclError:
             pass
 
-    # ------------------------------------------------------------ reakce na stisk
+    # ------------------------------------------------------------ reakce na stisk (nadrazena)
     def _build_react(self):
         f = self.react
-        eff = self.eff
-        f.columnconfigure(1, weight=1)
-        V.card_title(f, "Reakce na stisk kláves").grid(row=0, column=0, columnspan=2, sticky="w", padx=20,
-                                                       pady=(14, 6))
-        rv = tk.StringVar(value=eff.get("reakce", ""))
-
-        def on_r():
-            eff["reakce"] = rv.get()
-            self._build_react_rest()
-            self.refresh()
-        V.segmented(f, rv, kbfx.REACTIONS, command=on_r).grid(row=1, column=0, columnspan=2, sticky="w", padx=20,
-                                                              pady=4)
-        self.react_rest = ttk.Frame(f)
-        self.react_rest.grid(row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=(4, 0))
-        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left",
-                  text="Funguje s každým efektem. Aplikace pozná jen to, která klávesa se stiskla – nic "
-                       "neukládá a sledování běží, jen když je reakce zapnutá. Logo, jas a G1–G5 se nehlásí.").grid(
-            row=3, column=0, columnspan=2, sticky="w", padx=20, pady=(6, 16))
-        self._build_react_rest()
-
-    def _build_react_rest(self):
-        f = self.react_rest
         for w in f.winfo_children():
             w.destroy()
-        eff = self.eff
-        if not eff.get("reakce"):
+        rc = self.rcfg
+        f.columnconfigure(1, weight=1)
+        V.card_title(f, "Reakce na stisk kláves").grid(row=0, column=0, columnspan=3, sticky="w", padx=20,
+                                                       pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Přes celou klávesnici a všechno ostatní – efekt, části, předvolbu i hudbu "
+            "(přednost má jen ukazatel hlasitosti). Platí ve všech M1–M3. Aplikace pozná jen to, která klávesa "
+            "se stiskla – nic neukládá a sledování běží, jen když je reakce zapnutá. Logo, jas a G1–G5 Windows "
+            "nehlásí.")).grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 6))
+        on = tk.BooleanVar(value=bool(rc["zapnuto"]))
+
+        def on_toggle():
+            rc["zapnuto"] = on.get()
+            self._build_react()
+            self.refresh()
+        ttk.Checkbutton(f, text="Reagovat na stisk kláves", variable=on, command=on_toggle).grid(
+            row=2, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 4))
+        if not rc["zapnuto"]:
+            ttk.Frame(f).grid(row=3, pady=(0, 10))
             self._refit()
             return
-        f.columnconfigure(1, weight=1)
-        self._label(f, 0, "Barva")
-        cf = ttk.Frame(f)
-        cf.grid(row=0, column=1, sticky="w", pady=4)
-        rainbow = tk.BooleanVar(value=eff.get("reakce_barva") == "duha")
-        col = eff.get("reakce_barva", "#ffffff")
-        state = {"col": col if col != "duha" else "#ffffff"}
+        b = ttk.Frame(f)
+        b.grid(row=3, column=0, columnspan=3, sticky="ew", padx=20, pady=(0, 16))
+        b.columnconfigure(1, weight=1)
+        self._label(b, 0, "Reakce")
+        mv = tk.StringVar(value=rc["rezim"] if rc["rezim"] in dict(kbfx.REACTIONS) else "vlnka")
+
+        def on_m():
+            rc["rezim"] = mv.get()
+        V.segmented(b, mv, kbfx.REACTIONS, command=on_m, style="SegSmall.Toolbutton").grid(
+            row=0, column=1, sticky="w", pady=4)
+        self._label(b, 1, "Barva")
+        cf = ttk.Frame(b)
+        cf.grid(row=1, column=1, sticky="w", pady=4)
+        rainbow = tk.BooleanVar(value=rc["barva"] == "duha")
+        state = {"col": rc["barva"] if rc["barva"] != "duha" else "#ffffff"}
 
         def pick():
             c = colorchooser.askcolor(color=state["col"], parent=self.react)[1]
             if c:
                 state["col"] = c
-                eff["reakce_barva"] = c
+                rc["barva"] = c
                 rainbow.set(False)
-                V.set_swatch(b, c)
-        b = V.swatch(cf, state["col"], pick)
-        b.pack(side="left")
+                V.set_swatch(sw, c)
+        sw = V.swatch(cf, state["col"], pick)
+        sw.pack(side="left")
 
         def on_rb():
-            eff["reakce_barva"] = "duha" if rainbow.get() else state["col"]
+            rc["barva"] = "duha" if rainbow.get() else state["col"]
         ttk.Checkbutton(cf, text="každý stisk jinou barvou duhy", variable=rainbow, command=on_rb).pack(
             side="left", padx=(12, 0))
-        self._slider(f, 1, "Doba dohasnutí", eff, "reakce_doba", 0.2, 3.0, 0.1, "{:.1f} s")
+        self._slider(b, 2, "Doba dohasnutí", rc, "doba", 0.2, 3.0, 0.1, "{:.1f} s")
         self._refit()
 
     def _refit(self):

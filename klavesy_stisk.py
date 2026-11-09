@@ -87,6 +87,7 @@ class Watcher(threading.Thread):
         self._q = collections.deque(maxlen=MAX_QUEUE)
         self._vq = collections.deque(maxlen=MAX_QUEUE)  # klavesy hlasitosti ("+", "-", "ztlumit")
         self.on_volume = None                           # funkce bez parametru pri klavese hlasitosti (probudit)
+        self.on_key = None                              # funkce bez parametru pri stisku klavesy (probudit)
         self._down = set()
         self._tid = None
         self._ready = threading.Event()
@@ -108,6 +109,8 @@ class Watcher(threading.Thread):
                             if z not in self._down:      # drzena klavesa (autorepeat) jen jednou
                                 self._down.add(z)
                                 self._q.append(z)
+                                if self.on_key is not None:
+                                    self.on_key()
                         elif wparam in (WM_KEYUP, WM_SYSKEYUP):
                             self._down.discard(z)
         except Exception:

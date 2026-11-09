@@ -14,7 +14,8 @@
 #     vlastni plosne efekty po klavesach (klavesnice_efekty.py, efekt "vlastni" = efekt_klavesnice),
 #     nebo cela klavesnice jednou barvou jako F140 / deska; reakce na stisk klaves (klavesy_stisk.py);
 #     casti klavesnice s vlastnim efektem pres zaklad (vrstvy_klavesnice, kb_layers); klavesy G1-G5
-#     prepinaji predvolby efektu a hudbu (klavesy_g.py), G-klavesy s akci sviti jako kontrolky.
+#     prepinaji predvolby efektu, hudbu, playlist a skladbu na LCD, M1-M3 vyvolaji sady nastaveni
+#     klavesnice, MR + M ulozi sadu (klavesy_g.py); osvetleni G-klaves podle nastaveni kazde klavesy.
 #     Integrovanou pamet klavesnice aplikace sama vypne a pri konci / vypnuti rizeni zase zapne.
 # Liquidctl sam D_LED neovladne, kdyz ma hlavicka vypnute vestavene efekty (tak ji nechava GCC).
 # LED desky jinak ridi Gigabyte Control Center (GCC) - pokud bezi, nastaveni prepise.
@@ -294,6 +295,24 @@ def wave_span(lcfg):
         return 0.0
     offs = wave_offsets(lcfg, [k for k, *_ in targets(lcfg) if k not in NO_WAVE])[0]
     return max(offs.values(), default=0.0)
+
+
+def playlist_shift(lcfg, t, step):
+    """Cas playlistu posunuty na zacatek dalsi (step 1) / predchozi (step -1) polozky."""
+    items = playlist_items(lcfg)
+    info = playlist_at(lcfg, t)
+    if not info:
+        return t
+    span = wave_span(lcfg)
+    durs = [item_duration(e, span) for e in items]
+    total = sum(durs)
+    if step > 0:
+        new = t + info["zbyva"] + 1e-3
+    else:
+        new = t - info["t"] - durs[(info["i"] - 1) % len(durs)] + 1e-3
+    while new < 0:
+        new += total
+    return new
 
 
 def item_duration(eff, span=0.0):
@@ -907,6 +926,7 @@ class LedWorker(threading.Thread):
         last_exc = None
         test_mode, test_t0 = None, 0.0           # bezici test natoceni (rezim) a jeho zacatek
         hook_on = False                          # sleduji se stisky klaves (reakce klavesnice)
+        base_ref, base_key = None, None          # nastaveni z okna - po zmene konci predvolba / sada (klavesy_g)
         last_wall, last_force, prev, last_retry = time.time(), 0.0, time.monotonic(), time.monotonic()
         while not self._quit.is_set():
             with self._lock:
@@ -945,13 +965,36 @@ class LedWorker(threading.Thread):
                 last_wall = time.time()
                 continue
             now_wall, now = time.time(), time.monotonic()
-            base_cfg = lcfg                              # nastaveni z okna (bez predvoleb G-klaves)
+            base_cfg = lcfg                              # nastaveni z okna (bez predvoleb a sad klaves G / M)
+            if base_cfg is not base_ref:                 # nove nastaveni z okna (po Ulozit)
+                k_base = json.dumps(base_cfg, sort_keys=True, default=str)
+                if base_key is not None and k_base != base_key:
+                    self.gkeys.reset_selection()
+                base_ref, base_key = base_cfg, k_base
             kbd = session.kbd if session is not None else None
             if kbd is not None:
-                kbd.want_g = bool(klavesy_g.actions(base_cfg))
-                kbd.on_gkey = self._wake.set             # stisk G-klavesy = hned novy snimek
-                for g in kbd.g_drain():
-                    self.gkeys.press(g, base_cfg, (self.state.get("hudba") or {}).get("styl"))
+                kbd.want_g = True
+                kbd.on_gkey = self._wake.set             # stisk G / M = hned novy snimek
+                for kind, n in kbd.g_drain():
+                    if kind == "G":
+                        cmd = self.gkeys.press(n, base_cfg, (self.state.get("hudba") or {}).get("styl"))
+                        if cmd and cmd[0] == "pl":
+                            cur = self.gkeys.apply(base_cfg)
+                            if playlist_items(cur):
+                                t0 = now - playlist_shift(cur, now - t0, cmd[1])
+                                info = playlist_at(cur, now - t0)
+                                log.info("G%d: playlist LED – %s (%d/%d).", n,
+                                         fx.EFFECTS.get(info["eff"].get("typ"), ("?",))[0], info["i"] + 1,
+                                         info["pocet"])
+                            else:
+                                log.info("G%d: playlist LED je vypnutý.", n)
+                        elif cmd and cmd[0] == "lcd" and self.music is not None:
+                            self.music.toggle_lcd()
+                    elif kind == "M":
+                        self.gkeys.press_m(n, base_cfg, self.gkeys.apply(base_cfg))
+                    elif kind == "MR":
+                        self.gkeys.press_mr()
+                kbd.m_want = self.gkeys.m_leds(now)
             lcfg = self.gkeys.apply(base_cfg)
             resumed = now_wall - last_wall > RESUME_GAP_S
             last_wall = now_wall
@@ -1028,7 +1071,8 @@ class LedWorker(threading.Thread):
                             kb_snap = self.music.kb_snapshot()
                         except Exception:
                             kb_snap = None
-                kb_over = self.gkeys.leds(base_cfg, now) if extra_on(lcfg, "klavesnice") else None
+                lcd_on = self.music is not None and self.music.lcd_active() is not None
+                kb_over = self.gkeys.leds(base_cfg, now, lcd_on) if extra_on(lcfg, "klavesnice") else None
                 frame = render(engine, lcfg, now - t0, data, min(dt, 0.2), music=snap, kb_music=kb_snap,
                                kb_over=kb_over)
                 force = now - last_force > REFRESH_S
@@ -1042,7 +1086,7 @@ class LedWorker(threading.Thread):
                 if pl:                                   # co prave hraje (okno nastaveni)
                     st["playlist"] = {"i": pl["i"], "pocet": pl["pocet"], "typ": pl["eff"].get("typ"),
                                       "zbyva": round(pl["zbyva"])}
-                if klavesy_g.actions(base_cfg):
+                if extra_on(lcfg, "klavesnice"):
                     st["klavesy_g"] = self.gkeys.status()
                 if snap is not None:
                     st["hudba"] = {"styl": fx.music_style(lcfg.get("hudba") or {}, snap), "mix": round(snap["mix"], 2)}
@@ -1068,7 +1112,7 @@ class LedWorker(threading.Thread):
                 continue
             if snap is not None:                         # hudba: plynulejsi (udery jsou kratke)
                 self._quit.wait(max(0.0, 1 / fx.MUSIC_FPS - (time.monotonic() - now)))
-            elif is_animated(lcfg) or self.gkeys.flashing():
+            elif is_animated(lcfg) or self.gkeys.busy():
                 self._quit.wait(max(0.0, 1 / fx.FPS - (time.monotonic() - now)))
             else:
                 self._wake.wait(1.0)

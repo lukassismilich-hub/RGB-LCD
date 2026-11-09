@@ -505,6 +505,22 @@ class Music:
         self._show(tr, time.monotonic(), req.get("doba_s"), test=True)
         log.info("Právě hraje – test: %s", tr["nazev"])
 
+    def toggle_lcd(self):
+        """Klavesa G: obrazovku Prave hraje ukazat na dobu z nastaveni (i kdyz je na zacatku skladby
+        vypnuta), kdyz uz je na LCD, schovat. Vrati True = ukazana."""
+        cur = self.lcd_active()
+        if cur is not None:
+            cur["until"] = 0
+            self.wake.set()
+            log.info("Právě hraje: schováno klávesou.")
+            return False
+        tr = self.player.track
+        if tr is None:
+            log.info("Právě hraje: Spotify zatím nic nehrálo.")
+            return False
+        self._show(tr, time.monotonic(), test=True)
+        return True
+
     def lcd_active(self):
         """Zobrazovana skladba (dict) nebo None. Doba bezi od prvniho odeslani na LCD (start_lcd)."""
         cur = self.current

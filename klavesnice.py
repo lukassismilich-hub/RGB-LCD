@@ -71,26 +71,35 @@ class G815:
     def __exit__(self, *exc):
         self.close()
 
-    def request(self, idx, func, params=(), timeout=1.0):
-        """Poslat prikaz a pockat na odpoved se stejnou funkci a nasim swid."""
+    def request(self, idx, func, params=(), timeout=0.3, tries=3):
+        """Poslat prikaz a pockat na odpoved se stejnou funkci a nasim swid (odpoved trva ~2,3 ms).
+        Klavesnice nesnese vic prikazu najednou (odpovedi se ztraceji) - vzdy jen jeden a cekat.
+        Obcas odpoved neprijde (videno pri animaci) - prikaz se posle znovu (nastaveni barev
+        a rezimu jde poslat dvakrat bez skody)."""
         fs = (func << 4) | self.swid
+        msg = [0x11, 0xFF, idx, fs] + list(params) + [0] * (16 - len(params))
         with _lock:
-            while True:                            # zahodit stare zpravy (i od G HUB)
-                r = self.h.read(64)
-                if not r:
-                    break
-                self._note(r)
-            self.h.write([0x11, 0xFF, idx, fs] + list(params) + [0] * (16 - len(params)))
-            end = time.time() + timeout
-            while time.time() < end:
-                r = self.h.read(64)
-                self._note(r)
-                if r and r[0] == 0x11:
-                    if r[2] == idx and r[3] == fs:
-                        return r[4:20]
-                    if r[2] == 0xFF and r[3] == idx and r[4] == fs:
-                        raise HidppError(f"klávesnice odmítla příkaz (chyba HID++ {r[5]})")
-                time.sleep(0.003)
+            for _ in range(tries):
+                while True:                        # zahodit stare zpravy (i od G HUB)
+                    r = self.h.read(64)
+                    if not r:
+                        break
+                    self._note(r)
+                self.h.write(msg)
+                end = time.monotonic() + timeout
+                while True:
+                    left = end - time.monotonic()
+                    if left <= 0:
+                        break
+                    r = self.h.read(64, max(1, int(left * 1000)))     # ceka nejvys do konce timeoutu
+                    if not r:
+                        continue
+                    self._note(r)
+                    if r[0] == 0x11:
+                        if r[2] == idx and r[3] == fs:
+                            return r[4:20]
+                        if r[2] == 0xFF and r[3] == idx and r[4] == fs:
+                            raise HidppError(f"klávesnice odmítla příkaz (chyba HID++ {r[5]})")
         raise HidppError("klávesnice neodpovídá")
 
     def _note(self, r):
@@ -204,6 +213,33 @@ def _ranges(ids):
     return [tuple(r) for r in out]
 
 
+def encode(cols, last=None):
+    """Prikazy 0x8081 pro barvy klaves {zona: (r, g, b)} - jen zmenene proti last, co nejmene prikazu
+    (kazdy stoji ~2,3 ms, vic najednou klavesnice nesnese). Kazda skupina klaves stejne barvy jde
+    nejlevneji z: useky zon (funkce 5, 3 useky v prikazu), vycet zon (6, az 13 zon), nebo jednotlive
+    (1, 4 klavesy v prikazu - spolecne pro vsechny zbyle). Vrati [(funkce, parametry)] bez frameEnd."""
+    groups = {}
+    for z, c in cols.items():
+        if last is None or last.get(z) != c:
+            groups.setdefault(c, []).append(z)
+    out, single = [], []
+    for c, zs in groups.items():
+        zs.sort()
+        rg = _ranges(zs)
+        by_range, by_list, by_one = -(-len(rg) // 3), -(-len(zs) // 13), len(zs) / 4
+        if min(by_range, by_list) >= by_one:
+            single += [(z, c) for z in zs]
+        elif by_range <= by_list:
+            for i in range(0, len(rg), 3):
+                out.append((5, [v for a, b in rg[i:i + 3] for v in (a, b) + c]))
+        else:
+            for i in range(0, len(zs), 13):
+                out.append((6, list(c) + zs[i:i + 13]))
+    for i in range(0, len(single), 4):
+        out.append((1, [v for z, c in single[i:i + 4] for v in (z,) + c]))
+    return out
+
+
 class Direct:
     """Barva cele klavesnice primo pres HID++ (0x8081) - bez G HUB a bez jeho SDK.
     start() vypne integrovanou pamet (rezim rizeni z pocitace), stop() ji zase zapne - klavesnice
@@ -213,8 +249,8 @@ class Direct:
     def __init__(self):
         self.k = None
         self.ok = False
-        self.last = None
-        self.ranges = []
+        self.last = None                           # posledni poslane barvy {zona: (r, g, b)}
+        self.zones = []
         self.checked = 0.0
         self.ghub = False                          # G HUB ridi podsviceni sam - pak rezim nemenit
 
@@ -224,7 +260,7 @@ class Direct:
         k = G815(SWID)
         try:
             k.feature(FEATURE_PERKEY)
-            self.ranges = _ranges(k.zones())
+            self.zones = k.zones()
             self.ghub = k.onboard_mode() == MODE_HOST and k.sniff(0.5)
             if self.ghub:                          # G HUB ma pamet vypnutou a posila sve barvy
                 raise HidppError(GHUB_BUSY)
@@ -246,6 +282,13 @@ class Direct:
         self.checked = time.monotonic()
 
     def color(self, rgb, force=False):
+        """Cela klavesnice jednou barvou."""
+        c = tuple(int(max(0, min(255, v))) for v in rgb)
+        self.keys({z: c for z in self.zones}, force)
+
+    def keys(self, cols, force=False):
+        """Barvy klaves {zona: (r, g, b)}; posle jen zmenene (force = vse). Zony, ktere v cols
+        nejsou, zustanou, jak byly."""
         if not self.ok:
             return
         if time.monotonic() - self.checked > CHECK_S:
@@ -253,13 +296,18 @@ class Direct:
                 self.ghub = True
                 raise HidppError(GHUB_BUSY)
             self._host()
-        rgb = tuple(int(max(0, min(255, v))) for v in rgb)
-        if force or rgb != self.last:
-            idx = self.k.feature(FEATURE_PERKEY)
-            for i in range(0, len(self.ranges), 3):            # setRangeRgbZones: 3 useky v prikazu
-                self.k.request(idx, 5, [v for a, b in self.ranges[i:i + 3] for v in (a, b) + rgb])
-            self.k.request(idx, 7, [0, 0, 0, 0])               # frameEnd = zobrazit
-            self.last = rgb
+        cols = {z: tuple(int(max(0, min(255, v))) for v in c) for z, c in cols.items()}
+        cmds = encode(cols, None if force else self.last)
+        if not cmds:
+            return
+        idx = self.k.feature(FEATURE_PERKEY)
+        for func, params in cmds:
+            self.k.request(idx, func, params)
+        self.k.request(idx, 7, [0, 0, 0, 0])               # frameEnd = zobrazit
+        if force or self.last is None:
+            self.last = dict(cols)
+        else:
+            self.last.update(cols)
 
     def stop(self):
         """Zapnout zpet integrovanou pamet (klavesnice sviti podle sveho profilu) a zavrit spojeni.

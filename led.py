@@ -86,7 +86,7 @@ TEST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "led_test.j
 TEST_TIMEOUT_S = 15
 TEST_TURN_S = 8.0                            # obihani: jedna otacka za 8 s (F140 1 LED/s, deska 2 LED/s)
 TEST_COLORS = {"f140_1": (255, 0, 0), "f140_2": (0, 255, 0), "D_LED1": (0, 80, 255), "D_LED2": (255, 200, 0)}
-TEST_MODES = {"dole": "svítí spodek", "obiha": "obíhá od spodku po směru hodin"}
+TEST_MODES = {"dole": "spodek", "obiha": "obíhá", "predek": "F140 předek"}
 
 
 def bottom_pos(n):
@@ -289,7 +289,8 @@ def case_points(lcfg, key, n, eff=None):
             continue
         a = fx._ring_angle(i, n, eff or {})
         if kind == "vodorovne":                    # spodek k desce (do hloubky), vpravo / vlevo kruhu = dozadu / dopredu
-            out.append((cx + rx * math.cos(a), cy))
+            sx = -1.0 if lcfg.get("f140_predek_obracene") else 1.0     # test "F140: strana k predku"
+            out.append((cx + sx * rx * math.cos(a), cy))
         else:
             out.append((cx + rx * math.cos(a), cy + ry * math.sin(a)))
     return out
@@ -559,6 +560,8 @@ def _test_orient(lcfg, test):
             if isinstance(o, dict):
                 merged[ch] = dict(merged.get(ch, {}), posun=o.get("posun", 0), obracene=bool(o.get("obracene")))
         out[grp] = merged
+    if "f140_predek_obracene" in (test or {}):
+        out["f140_predek_obracene"] = bool(test["f140_predek_obracene"])
     return out
 
 
@@ -572,6 +575,15 @@ def test_frame(lcfg, test, t, orient=True):
     out = {}
     for key, n, group, _c in targets(lc):
         cols = [[0, 0, 0] for _ in range(n)]
+        if mode == "predek":                       # jen F140: LED, kterou prostorove styly berou jako nejvic vpredu
+            if key.startswith("f140_"):
+                pts = case_points(lc, key, n, lc.get("hudba"))
+                pos = min(range(n), key=lambda i: pts[i][0])
+                cols[pos] = list(TEST_COLORS.get(key, (255, 255, 255)))
+                if orient:
+                    cols = _orient(cols, *orientation(lc, key))
+            out[key] = cols
+            continue
         if group not in EXTRAS:
             pos = bottom_pos(n)
             if mode == "obiha":
@@ -589,7 +601,8 @@ def request_test(lcfg, mode):
            "nzxt": {k: {"posun": v.get("posun", 0), "obracene": bool(v.get("obracene"))}
                     for k, v in lcfg.get("nzxt", {}).items() if isinstance(v, dict)},
            "argb": {k: {"posun": v.get("posun", 0), "obracene": bool(v.get("obracene"))}
-                    for k, v in lcfg.get("argb", {}).items() if isinstance(v, dict)}}
+                    for k, v in lcfg.get("argb", {}).items() if isinstance(v, dict)},
+           "f140_predek_obracene": bool(lcfg.get("f140_predek_obracene"))}
     tmp = TEST_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(req, f)

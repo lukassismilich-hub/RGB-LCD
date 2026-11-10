@@ -1207,7 +1207,7 @@ class LedEditor:
                                                       pady=(14, 0))
         ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left",
                   text="Test: na každém ventilátoru svítí jen jedna LED v jeho barvě (tečka u názvu). "
-                       "„Svítí spodek“ – LED, kde efekty mají spodek ventilátoru (tam začínají plameny, "
+                       "„Spodek“ – LED, kde efekty mají spodek ventilátoru (tam začínají plameny, "
                        "hladina…); posouvej LED, dokud nesvítí na každém ventilátoru dole. "
                        "„Obíhá“ – LED jde od spodku po směru hodin (dole → vlevo → nahoře → vpravo); "
                        "kde jde opačně, zaškrtni obrácený směr. Změny se v testu projeví do 3 s, "
@@ -1253,6 +1253,22 @@ class LedEditor:
                 self._test_send()
             ttk.Checkbutton(f, text="obrácený směr", variable=rv, command=on_rev).grid(
                 row=r, column=4, sticky="w", padx=(0, 16), pady=pad)
+        # F140 lezi na stropu: kterym smerem je u nich predek skrine (pro prostorove styly hudby)
+        r0 = 5 + len(fans)
+        ttk.Label(f, text="F140 – předek", style="Muted.TLabel").grid(row=r0, column=0, columnspan=2, sticky="w",
+                                                                    padx=16, pady=(8, 2))
+        pv = tk.BooleanVar(value=bool(self.lcfg.get("f140_predek_obracene")))
+
+        def on_front():
+            self.lcfg["f140_predek_obracene"] = pv.get()
+            self._test_send()
+        ttk.Checkbutton(f, text="na druhé straně", variable=pv, command=on_front).grid(
+            row=r0, column=2, columnspan=3, sticky="w", padx=(0, 16), pady=(8, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Pro prostorové styly hudby (F140 leží na stropu). Test „F140 předek“ rozsvítí na každém "
+            "F140 LED, kterou styly berou jako nejblíž předku skříně – když svítí směrem dozadu, zaškrtni "
+            "„na druhé straně“. Nejdřív srovnej spodek (k základní desce).")).grid(
+            row=r0 + 1, column=0, columnspan=5, sticky="w", padx=16, pady=(0, 14))
         self._test_show()
 
     # test natoceni: pozadavek pro bezici aplikaci (led_test.json), obnovuje se kazde 3 s,
@@ -1301,7 +1317,7 @@ class LedEditor:
             msg.config(text="Řízení LED je vypnuté – zapni ho a ulož, jinak se test na ventilátorech "
                             "neukáže.", foreground=V.WARN)
         else:
-            msg.config(text="Test běží na ventilátorech (efekty i hudba stojí). Po vypnutí testu "
+            msg.config(text="Test běží na ventilátorech (efekty i hudba na nich stojí, klávesnice svítí dál). Po vypnutí testu "
                             "nebo zavření okna se efekt vrátí.", foreground=V.OK)
 
     # -------------------------------------------------------------- zapojeni

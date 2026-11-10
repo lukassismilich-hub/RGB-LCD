@@ -41,6 +41,8 @@ TEST_FILE = os.path.join(BASE, "hudba_test.json")
 
 PLAYER_APP = "spotify"                 # relace Windows, jejiz AppUserModelId obsahuje tento text
 PLAYER_EXE = "Spotify.exe"
+COVER_RELOAD_S = (1.0, 3.0, 6.0, 10.0)   # obal nacist znovu tolik s po zmene skladby
+COVER_WAIT_S = 15.0                      # dokud obal neni, zkouset kazde kolo az tak dlouho
 POLL_S = 0.5
 RETRY_S = 30
 PLAYING = 4                            # GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing
@@ -128,15 +130,15 @@ def cover_palette(img, n=MAX_COVER_COLORS, sens=5, fill=True):
     small = img.convert("RGB").resize((64, 64), Image.BILINEAR)
     q = small.quantize(colors=int(8 + 2 * c), method=Image.Quantize.MEDIANCUT)
     pal = q.getpalette()
-    cand = []
-    for count, idx in q.getcolors() or []:
-        r, g, b = pal[idx * 3:idx * 3 + 3]
-        h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-        if v < min_v or s < min_s:                       # cerna, seda, bila
-            continue
-        if c < 7 and 0.02 <= h <= 0.12 and v < 0.6 and s < 0.85:   # hneda
-            continue
-        cand.append((count ** area * (0.25 + s) * (0.35 + v), h, s))
+    colors = [(count, colorsys.rgb_to_hsv(*(v / 255 for v in pal[idx * 3:idx * 3 + 3])))
+              for count, idx in q.getcolors() or []]
+    cand = [(count ** area * (0.25 + s) * (0.35 + v), h, s) for count, (h, s, v) in colors
+            if v >= min_v and s >= min_s                 # cerna, seda, bila ne
+            and not (c < 7 and 0.02 <= h <= 0.12 and v < 0.6 and s < 0.85)]   # hneda ne
+    if not cand:                                         # tmavy / sedy obal: aspon jeho jemny nadech barvy
+        total = sum(count for count, _ in colors) or 1   # (plocha aspon 2 %, jinak by to byl sum)
+        cand = [(count * (0.25 + s) * (0.35 + v), h, s) for count, (h, s, v) in colors
+                if v >= 0.08 and s >= 0.06 and count >= 0.02 * total]
     cand.sort(reverse=True)
     hues, out = [], []
     for _score, h, s in cand:
@@ -487,18 +489,30 @@ class Music:
             self._track_n += 1
             tr["n"] = self._track_n
             await self._load_cover(props, tr)
-            log.info("Hudba: %s – %s (barvy z obalu: %s)", artist, title, " ".join(tr["paleta"]) or "žádné")
+            log.info("Hudba: %s – %s (barvy z obalu: %s)", artist, title, self._palette_text(tr))
             if self.analyzer is not None:
                 self.analyzer.new_track()
             if not first and playing:
                 self._show(tr, now)
         elif playing and not was_playing and not first and self.lcd_cfg.get("po_pauze") and paused_for > PAUSE_SHOW_S:
             self._show(tr, now)
-        # Spotify nekdy posle nazev nove skladby driv nez jeji obal - obal nacist jeste 1 s a 3 s po zmene
-        for delay in (1.0, 3.0):
-            if now - tr["zacatek"] >= delay and delay not in tr["nacteno"]:
-                tr["nacteno"].append(delay)
-                await self._load_cover(props, tr)
+        # Spotify nekdy posle nazev nove skladby driv nez jeji obal (nebo jeste obal predchozi skladby):
+        # dokud obal neni, zkouset kazde kolo (0,5 s) az 15 s; jinak znovu po 1, 3, 6 a 10 s
+        age = now - tr["zacatek"]
+        due = [d for d in COVER_RELOAD_S if age >= d and d not in tr["nacteno"]]
+        if due or (tr.get("obal") is None and age < COVER_WAIT_S):
+            tr["nacteno"].extend(due)
+            old = (tr.get("obal_id"), list(tr["paleta"]))
+            await self._load_cover(props, tr)
+            if (tr.get("obal_id"), tr["paleta"]) != old:
+                log.info("Hudba: obal %s – %s načten po %.1f s (barvy z obalu: %s)", artist, title, age,
+                         self._palette_text(tr))
+
+    @staticmethod
+    def _palette_text(tr):
+        if tr.get("obal") is None:
+            return "obal zatím není"
+        return " ".join(tr["paleta"]) or "žádné – obal je černobílý / šedý"
 
     async def _load_cover(self, props, tr):
         try:

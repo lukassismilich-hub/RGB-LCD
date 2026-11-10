@@ -257,14 +257,15 @@ def wave_offsets(lcfg, keys):
 # skutecne rozmisteni ve skrini (z fotky z boku 10. 11. 2026; vlevo na fotce zadek s I/O deskou, vpravo
 # predek): x 0 = predek .. 1 = zadek, y 0 = nahore .. 1 = dole; (stred x, stred y, polomer x, polomer y, druh)
 # - "svisle" = kruh ve svisle rovine (LED dole je dole), "vodorovne" = F140 lezi na stropu (vsechny LED
-# ve stejne vysce, kruh se rozprostre dopredu / dozadu - kterym smerem jde "spodek" efektu, je odhad),
+# ve stejne vysce; "spodek" efektu = LED nejbliz zakladni desce, tj. do hloubky skrine - dopredu / dozadu
+# se rozprostre osa vpravo / vlevo kruhu; ktery smer je predek, je odhad), zaporny polomer x = zrcadlove,
 # "bod" = jedna LED. Dva ventilatory na D_LED1 jsou nad sebou na jednom kabelu (sviti vzdy stejne) -
 # beru je jako jediny ventilator ve stejne vysce jako ten vzadu (prani uzivatele 10. 11. 2026).
 CASE_LAYOUT = {
     "D_LED1": (0.08, 0.36, 0.01, 0.17, "svisle"),
     "f140_predni": (0.38, 0.10, 0.14, 0.0, "vodorovne"),
     "f140_zadni": (0.67, 0.10, 0.14, 0.0, "vodorovne"),
-    "D_LED2": (0.90, 0.36, 0.05, 0.17, "svisle"),
+    "D_LED2": (0.90, 0.36, -0.05, 0.17, "svisle"),
     "grafika": (0.58, 0.80, 0.0, 0.0, "bod"),
 }
 
@@ -287,8 +288,8 @@ def case_points(lcfg, key, n, eff=None):
             out.append((cx, cy))
             continue
         a = fx._ring_angle(i, n, eff or {})
-        if kind == "vodorovne":
-            out.append((cx + rx * math.sin(a), cy))
+        if kind == "vodorovne":                    # spodek k desce (do hloubky), vpravo / vlevo kruhu = dozadu / dopredu
+            out.append((cx + rx * math.cos(a), cy))
         else:
             out.append((cx + rx * math.cos(a), cy + ry * math.sin(a)))
     return out
@@ -565,7 +566,7 @@ def test_frame(lcfg, test, t, orient=True):
     """Snimek testu natoceni: na kazdem ventilatoru jedna LED v jeho barve (TEST_COLORS).
     "dole" = spodek ventilatoru (kde zacinaji plameny), "obiha" = LED obiha od spodku po smeru
     hodin (spodek -> vlevo -> nahore -> vpravo). orient=False (nahled) = jak to ma vypadat.
-    Grafika / klavesnice zhasnute."""
+    Grafika zhasnuta; klavesnici vlakno LED nechava svitit jejim efektem (test se tyka jen ventilatoru)."""
     lc = _test_orient(lcfg, test)
     mode = (test or {}).get("rezim", "dole")
     out = {}
@@ -1135,22 +1136,13 @@ class LedWorker(threading.Thread):
                     elif test["rezim"] != test_mode:
                         test_t0 = now
                     test_mode = test["rezim"]
-                    force = now - last_force > REFRESH_S
-                    session.send(test_frame(lcfg, test, now - test_t0), force)
-                    if force:
-                        last_force = now
-                    if not session.running:
-                        raise RuntimeError("; ".join(session.error_text()))
-                    st = {"stav": "běží", "test": test_mode}
-                    if session.errors:
-                        st["chyby"] = session.error_text()
-                    self._set_state(st)
-                    self._quit.wait(0.1)
-                    continue
-                if test_mode is not None:
-                    test_mode = None
-                    log.info("LED: test natočení skončil.")
-                if self.music is not None:
+                    test_fr = test_frame(lcfg, test, now - test_t0)   # ventilatory a grafika; klavesnice jede dal
+                else:
+                    test_fr = None
+                    if test_mode is not None:
+                        test_mode = None
+                        log.info("LED: test natočení skončil.")
+                if self.music is not None and test_fr is None:
                     try:
                         snap = self.music.led_snapshot(lcfg.get("hudba"))
                     except Exception as e:                # chyba hudby nesmi zastavit LED
@@ -1185,6 +1177,8 @@ class LedWorker(threading.Thread):
                 kb_over = self.gkeys.leds(base_cfg, now, lcd_on) if extra_on(lcfg, "klavesnice") else None
                 frame = render(engine, lcfg, now - t0, data, min(dt, 0.2), music=snap, kb_music=kb_snap,
                                kb_over=kb_over, kb_top=kb_top)
+                if test_fr is not None:                  # test natoceni: jen jedna LED na ventilatoru, grafika tma
+                    frame = {k: (v if k == "klavesnice" else test_fr.get(k, v)) for k, v in frame.items()}
                 force = now - last_force > REFRESH_S
                 session.send(frame, force)
                 if force:
@@ -1192,6 +1186,8 @@ class LedWorker(threading.Thread):
                 if not session.running:                  # oba radice selhaly za behu
                     raise RuntimeError("; ".join(session.error_text()))
                 st = {"stav": "běží", "chyby": session.error_text()} if session.errors else {"stav": "běží"}
+                if test_mode is not None:
+                    st["test"] = test_mode
                 pl = playlist_at(lcfg, now - t0)
                 if pl:                                   # co prave hraje (okno nastaveni)
                     st["playlist"] = {"i": pl["i"], "pocet": pl["pocet"], "typ": pl["eff"].get("typ"),
@@ -1220,7 +1216,9 @@ class LedWorker(threading.Thread):
                 self._quit.wait(RETRY_S)
                 last_wall = time.time()                  # cekani po chybe neni probuzeni PC
                 continue
-            if snap is not None:                         # hudba: plynulejsi (udery jsou kratke)
+            if test_mode is not None:                    # test natoceni (obiha) - 10x za sekundu staci
+                self._quit.wait(0.1 if not is_animated(lcfg) else max(0.0, 1 / fx.FPS - (time.monotonic() - now)))
+            elif snap is not None:                       # hudba: plynulejsi (udery jsou kratke)
                 self._quit.wait(max(0.0, 1 / fx.MUSIC_FPS - (time.monotonic() - now)))
             elif (is_animated(lcfg) or self.gkeys.busy() or self.vol.busy(hlasitost.settings(lcfg), time.monotonic())
                   or kbfx.engine_for(engine).reacting(kbfx.reaction_settings(lcfg))):

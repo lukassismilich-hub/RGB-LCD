@@ -1600,8 +1600,8 @@ class LedEditor:
             dot = 4 if n > 8 else 5
             for i, rgb in enumerate(cols):
                 a = fx._ring_angle(i, n, eff)
-                if kind == "vodorovne":                         # placka na stropu
-                    x, y = px - rx * w * math.sin(a), py + 5 * math.cos(a)
+                if kind == "vodorovne":                         # placka na stropu, spodek = k desce (dal od nas)
+                    x, y = px - rx * w * math.cos(a), py - 5 * math.sin(a)
                 else:                                           # kruh, spodek dole
                     x, y = px + 26 * math.cos(a), py + 26 * math.sin(a)
                 c.create_oval(x - dot, y - dot, x + dot, y + dot, fill=col(rgb), outline="")

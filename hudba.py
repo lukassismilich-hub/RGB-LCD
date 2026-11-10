@@ -210,6 +210,8 @@ class Analyzer:
     def reset(self):
         np = self.np
         self.buf = np.zeros(0, dtype=np.float32)
+        self.side = np.zeros(0, dtype=np.float32)        # (L - R) / 2 - stereo (do stran skrine)
+        self.bal = 0.0
         self.ref = {}                                     # spicka (dB) pro automaticke zesileni
         self.env = {}                                     # obalky 0..1
         self.bass_hist = collections.deque(maxlen=47)     # energie basu za ~1 s
@@ -256,8 +258,10 @@ class Analyzer:
         np = self.np
         if pcm:
             x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+            sd = (x[0::2] - x[1::2]) * (0.5 / 32768.0)
             x = (x[0::2] + x[1::2]) * (0.5 / 32768.0)
             self.buf = np.concatenate((self.buf, x))
+            self.side = np.concatenate((self.side, sd))
         dt = self.HOP / self.rate
         gamma = fx.music_gamma(sens)                      # citlivost: vyssi = vyraznejsi reakce na tichsi
         beat_c = fx.beat_ratio(sens)                      # prah uderu vuci prumeru basu
@@ -265,8 +269,15 @@ class Analyzer:
             left = len(self.buf) - self.N                 # vzorky za timto oknem (zachycene pozdeji)
             t = now - left / self.rate
             frame = self.buf[:self.N]
+            sframe = self.side[:self.N]
             self.buf = self.buf[self.HOP:]
+            self.side = self.side[self.HOP:]
             p = np.abs(np.fft.rfft(frame * self.win)) ** 2
+            if len(sframe) == len(frame):                 # stereo: -1 = jen levy kanal, +1 = jen pravy
+                pl = float(np.mean((frame + sframe) ** 2))
+                pr = float(np.mean((frame - sframe) ** 2))
+                b = (pr - pl) / (pl + pr + 1e-12)
+                self.bal += (b - self.bal) * min(1.0, dt / 0.08)
             db_all = self._db(p, self.r_all)
             snap = {}
             raw = {"level": round(db_all, 1)}                  # surove urovne v dB (efekty klavesnice si je
@@ -276,6 +287,7 @@ class Analyzer:
                 raw[name] = round(db, 1)
                 snap[name] = self._envelope(name, self._level(name, db, dt, gamma), dt, tau)
             snap["level"] = self._envelope("level", self._level("all", db_all, dt, gamma), dt, 0.3)
+            snap["stereo"] = round(self.bal, 3)
             bdb = [self._db(p, r) for r in self.r_bands]
             snap["bands"] = [round(self._envelope(f"b{i}", self._level(f"b{i}", db, dt, gamma), dt, 0.15), 3)
                              for i, db in enumerate(bdb)]

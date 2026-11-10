@@ -786,11 +786,16 @@ class Engine:
 
     # ------------------------------------------------------------- hudebni vizualizer (Spotify)
 
-    def music(self, eff, snap, key, n, pos=0.0, delay=0.0, dt=1 / FPS, slot=None):
+    def music(self, eff, snap, key, n, pos=0.0, delay=0.0, dt=1 / FPS, slot=None, pts=None):
         """Barvy n LED jednoho cile pro hudebni vizualizer. snap = snimek analyzy (hudba.Analyzer /
         music_demo), pos = poloha ve skrini 0 (predek) .. 1 (zadek) - spektrum, delay = 0..1 jak pozde
-        k cili dorazi uder pri vlne (MUSIC_WAVE_S), slot = (poradi ve skrini, pocet cilu) pro skakani."""
-        out = self._music(eff, snap, key, n, pos, delay, dt, slot)
+        k cili dorazi uder pri vlne (MUSIC_WAVE_S), slot = (poradi ve skrini, pocet cilu) pro skakani,
+        pts = poloha kazde LED ve skrini [(x 0 predek .. 1 zadek, y 0 nahore .. 1 dole)] - led.case_points
+        (prostorove styly SPATIAL; bez ni odhad z pos a polohy LED na kruhu)."""
+        if music_style(eff, snap) in SPATIAL and not snap.get("quiet"):
+            out = [_scale(c, self._jas(eff)) for c in self._space(eff, snap, key, n, pos, dt, pts)]
+        else:
+            out = self._music(eff, snap, key, n, pos, delay, dt, slot)
         if not eff.get("drop_zablesk", True):
             return out
         # duraz na drop: bily zablesk, ktery probehne skrini zepredu dozadu
@@ -1077,6 +1082,130 @@ class Engine:
                         out[i] = tuple(max(out[i][j], spark[j] * s[0]) for j in range(3))
         return [_scale(c, jas) for c in out]
 
+    # ------------------------------------------------- prostorove styly (poloha LED ve skrini)
+
+    def _space(self, eff, snap, key, n, pos, dt, pts):
+        """Prostorove styly hudby: kazda LED podle sve polohy ve skrini (pts z led.case_points).
+        Udalosti (fontana, vlny, ohnostroj, dest) se pocitaji jen z veku uderu ve snimku, bez stavu -
+        vsechny ventilatory tak vidi stejnou scenu a navazuji na sebe."""
+        if not pts or len(pts) != n:                      # bez rozmisteni: odhad z poradi a polohy na kruhu
+            pts = [(pos, 0.5 if n == 1 else 0.5 + 0.17 * _ring_y(i, n, eff)) for i in range(n)]
+        cols = [hex_rgb(c) for c in (snap.get("paleta") or [])] or [hex_rgb(c) for c in DEFAULT_PALETTE[:3]]
+        k = len(cols)
+        d = int(snap.get("drop_n", 0))
+        cols = cols[d % k:] + cols[:d % k]                # drop posune paletu
+        main, acc = cols[0], cols[1 % k]
+        white = (255.0, 255.0, 255.0)
+        styl = music_style(eff, snap)
+        e = bass_emphasis(eff)
+        bass = _contrast(float(snap.get("bass", 0.0)), e)
+        level = (1 - e) * float(snap.get("level", 0.0)) + e * bass
+        ph = float(snap.get("phase", 0.0))
+        bands = [_contrast(v, e) * (1 - 0.55 * e * i / 15) for i, v in enumerate(list(snap.get("bands") or [0.0] * 16))]
+        beats = [b for b in snap.get("beats", ()) if len(b) > 2]
+        fl = max([b[1] * math.exp(-b[0] / (0.14 + 0.06 * e)) for b in beats] + [0.0])
+        black = (0.0, 0.0, 0.0)
+        out = []
+
+        def add(c, col, kk):
+            return tuple(max(c[j], col[j] * kk) for j in range(3)) if kk > 0.003 else c
+
+        def dist(x1, y1, x2, y2):                        # vzdalenost ve skrini (je sirsi nez vyssi)
+            return math.hypot((x1 - x2) * CASE_ASPECT, y1 - y2)
+
+        if styl == "hladina_skrin":                       # hladina stoupa odspodu podle basu, spicka pada pomalu
+            lv = 0.1 + 0.85 * max(bass, 0.8 * level)
+            st = self.state.setdefault(("prostor_hladina", key), [0.0])
+            st[0] = max(lv, st[0] - dt * 0.35)
+            for x, y in pts:
+                h = 1 - y                                 # 0 = dole, 1 = nahore
+                surf = lv + 0.035 * math.sin(x * 9 + ph * 9)
+                lit = max(0.0, min(1.0, (surf - h) / 0.07 + 0.5))
+                c = _scale(_gradient(cols, h), 0.04 + 0.96 * lit)
+                pk = max(0.0, 1 - abs(h - st[0]) / 0.05) if st[0] > lv + 0.03 else 0.0
+                out.append(_mix(c, _mix(acc, white, 0.5), pk * 0.85))
+        elif styl == "fontana":                           # kazdy uder vyleti od grafiky nahoru ke stropu
+            gx, gy = CASE_SOURCE
+            for x, y in pts:
+                c = _scale(main, 0.03 + 0.25 * bass * max(0.0, y - 0.5) * 2)
+                for age, s, bid in beats:
+                    if age > 0.8:
+                        continue
+                    by = gy - age * 1.5
+                    r = 0.10 + age * 0.35
+                    dd = math.hypot((x - gx) * CASE_ASPECT / 3.0, y - by)   # siroky proud - zasahne i boky
+                    kk = s * max(0.0, 1 - age / 0.8) * math.exp(-(dd / r) ** 2 * 2)
+                    c = add(c, cols[bid % k], kk)
+                out.append(c)
+        elif styl == "razova_vlna":                       # kazdy uder = kruh, ktery se rozejde od grafiky
+            gx, gy = CASE_SOURCE
+            for x, y in pts:
+                c = _scale(main, 0.03 + 0.1 * bass)
+                dd = dist(x, y, gx, gy)
+                for age, s, bid in beats:
+                    if age > 0.9:
+                        continue
+                    kk = s * (1 - age / 0.9) * max(0.0, 1 - abs(dd - age * 2.0) / 0.14)
+                    c = add(c, cols[bid % k], kk)
+                out.append(c)
+        elif styl == "proudeni":                          # barvy tecou jako vzduch: predek dole -> zadek a strop
+            for x, y in pts:
+                s_ = 0.6 * x + 0.4 * (1 - y)
+                c = _scale(_cyclic(cols, s_ * 1.4 - ph * 1.5), 0.15 + 0.6 * bass)
+                for age, s, _bid in beats:
+                    kk = s * math.exp(-((s_ - age * 1.6) / 0.09) ** 2) * max(0.0, 1 - age / 0.9)
+                    c = add(c, _mix(acc, white, 0.4), kk)
+                out.append(c)
+        elif styl == "spektrum_vyska":                    # dole basy, nahore vysky - kazda LED sve pasmo
+            soft = [_contrast(v, e * 0.5) for v in list(snap.get("bands") or [0.0] * 16)]   # mirnejsi kontrast
+            for x, y in pts:
+                h = max(0.0, min(1.0, (0.88 - y) / 0.8))  # 0 = dole (grafika), 1 = strop
+                v = _band_at(soft, h * (len(soft) - 1))
+                out.append(_scale(_gradient(cols, h), 0.04 + 0.96 * v ** 1.2))
+        elif styl == "stereo":                            # levy kanal vzadu, pravy vpredu (jako na pohledu z boku)
+            bal = max(-1.0, min(1.0, float(snap.get("stereo", 0.0)) * 3.0))
+            lv = max(bass, level)
+            right, left = min(1.0, lv * (1 + bal)), min(1.0, lv * (1 - bal))
+            for x, y in pts:
+                amp = right * (1 - x) + left * x
+                c = _mix(cols[0], cols[1 % k], x)
+                out.append(_mix(_scale(c, 0.05 + 0.95 * amp), white, 0.25 * fl * fl))
+        elif styl == "dest":                              # cinely / virbl = kapky ze stropu, basy = louze dole
+            drops = [b for b in snap.get("beats_hi", ()) if len(b) > 2 and b[0] < 0.9]
+            for x, y in pts:
+                c = _scale(main, 0.02 + 0.35 * bass * max(0.0, (y - 0.55) / 0.45))
+                for age, s, bid in drops:
+                    dx = random.Random(bid * 7919 + 17).uniform(0.0, 1.0)
+                    dy = 0.03 + 2.4 * age * age
+                    tail = math.exp(-(dy - y) / 0.12) if y <= dy else math.exp(-(y - dy) / 0.03)
+                    kk = s * tail * math.exp(-((x - dx) * CASE_ASPECT / 0.2) ** 2)
+                    c = add(c, cols[1 + bid % max(1, k - 1)] if k > 1 else white, kk)
+                out.append(c)
+        elif styl == "ohnostroj_skrin":                   # kazdy uder = vybuch na nahodnem miste skrine
+            for x, y in pts:
+                c = _scale(main, 0.02 + 0.08 * bass)
+                for age, s, bid in beats:
+                    if age > 1.1:
+                        continue
+                    rr = random.Random(bid * 104729 + 3)
+                    bx, by = rr.uniform(0.15, 0.85), rr.uniform(0.15, 0.65)
+                    rad = 0.5 * (1 - math.exp(-age * 4))
+                    fade = s * (1 - age / 1.1) ** 2
+                    dd = dist(x, y, bx, by)
+                    kk = fade * max(0.0, 1 - abs(dd - rad) / 0.1)
+                    if age < 0.12:                        # zablesk v miste vybuchu
+                        kk = max(kk, s * (1 - age / 0.12) * math.exp(-(dd / 0.15) ** 2))
+                    c = add(c, cols[bid % k], kk)
+                out.append(c)
+        else:                                             # "plazma_skrin": plazma pres celou skrin, pulzuje s basy
+            kk = 0.2 + 0.8 * max(bass, fl)
+            for x, y in pts:
+                xa = x * CASE_ASPECT
+                v = (math.sin(xa * 5 + ph * 3) + math.sin(y * 6 - ph * 2.3) + math.sin((xa + y) * 4 + ph * 1.7)
+                     + math.sin(math.hypot(xa - 0.9, y - 0.5) * 7 - ph * 2.6))
+                out.append(_scale(_cyclic(cols, (v + 4) / 8 + ph * 0.1), kk))
+        return [c if c else black for c in out] if out else [black] * n
+
     def _new_beats(self, key, snap, lag, field="beats", tag="hudba_uder"):
         """Udery, ktere k cili prave dorazily (s vlnou o lag s pozdeji): [(poradi, sila)].
         field "beats_hi" = virbl / cinely (hudba.Analyzer), tag = vlastni pocitadlo (styl si udery bere sam)."""
@@ -1112,7 +1241,21 @@ MUSIC_STYLES = {
     "ton": "barva podle tónu",
     "michani": "míchání pásem",
     "bici": "kopák dole, činely nahoře",
+    # prostorove - podle polohy LED ve skrini (led.CASE_LAYOUT)
+    "hladina_skrin": "hladina ve skříni",
+    "fontana": "fontána z grafiky",
+    "razova_vlna": "rázová vlna",
+    "proudeni": "proudění vzduchu",
+    "spektrum_vyska": "spektrum na výšku",
+    "stereo": "stereo do stran",
+    "dest": "déšť z činelů",
+    "ohnostroj_skrin": "ohňostroj ve skříni",
+    "plazma_skrin": "plazma přes skříň",
 }
+SPATIAL = ("hladina_skrin", "fontana", "razova_vlna", "proudeni", "spektrum_vyska", "stereo", "dest",
+           "ohnostroj_skrin", "plazma_skrin")
+CASE_ASPECT = 1.7            # skrin je asi 1,7x sirsi (predek - zadek) nez vyssi - vzdalenosti v prostoru
+CASE_SOURCE = (0.58, 0.80)   # grafika (zdroj fontany a razove vlny) - jako led.CASE_LAYOUT["grafika"]
 MUSIC_WAVE_S = 0.25          # za jak dlouho uder probehne celou skrini (pri vlne)
 DROP_WAVE_S = 0.3            # duraz na drop: za jak dlouho bily zablesk probehne skrini
 FLOW_CASE_S, FLOW_RING_S = 0.55, 0.22       # prutok: za jak dlouho barva protece skrini / vystoupa po kruhu
@@ -1221,7 +1364,7 @@ def music_demo(t, paleta=None, track_n=0):
         bands.append(max(0.0, min(1.0, v * 0.9 + 0.08 * math.sin(t * 3 + b))))
     return {"bass": bass, "mid": mid, "high": high, "level": 0.6 + 0.2 * math.sin(t * 0.3), "bands": bands,
             "beats": beats, "beats_hi": hats, "beat_n": cur + 1, "drop_n": int(t // 16), "phase": t * 0.3,
-            "bpm": 120.0,
+            "bpm": 120.0, "stereo": 0.35 * math.sin(t * 0.9),
             "quiet": False, "paleta": list(paleta or DEFAULT_PALETTE[:3]), "track_n": track_n, "mix": 1.0}
 
 

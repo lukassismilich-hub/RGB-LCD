@@ -27,6 +27,7 @@
 
 import copy
 import json
+import math
 import logging
 import os
 import threading
@@ -251,6 +252,46 @@ def wave_offsets(lcfg, keys):
         n += 1
     back = lcfg.get("vlna_smer", "dozadu") == "dozadu"
     return {k: ((n - 1 - v) if back else v) / max(1, n) for k, v in pos.items()}, order
+
+
+# skutecne rozmisteni ve skrini (z fotky z boku 10. 11. 2026; vlevo na fotce zadek s I/O deskou, vpravo
+# predek): x 0 = predek .. 1 = zadek, y 0 = nahore .. 1 = dole; (stred x, stred y, polomer x, polomer y, druh)
+# - "svisle" = kruh ve svisle rovine (LED dole je dole), "vodorovne" = F140 lezi na stropu (vsechny LED
+# ve stejne vysce, kruh se rozprostre dopredu / dozadu - kterym smerem jde "spodek" efektu, je odhad),
+# "bod" = jedna LED. Dva ventilatory na D_LED1 jsou nad sebou na jednom kabelu (sviti vzdy stejne) -
+# beru je jako jediny ventilator ve stejne vysce jako ten vzadu (prani uzivatele 10. 11. 2026).
+CASE_LAYOUT = {
+    "D_LED1": (0.08, 0.36, 0.01, 0.17, "svisle"),
+    "f140_predni": (0.38, 0.10, 0.14, 0.0, "vodorovne"),
+    "f140_zadni": (0.67, 0.10, 0.14, 0.0, "vodorovne"),
+    "D_LED2": (0.90, 0.36, 0.05, 0.17, "svisle"),
+    "grafika": (0.58, 0.80, 0.0, 0.0, "bod"),
+}
+
+
+def case_points(lcfg, key, n, eff=None):
+    """Poloha kazde LED cile ve skrini [(x, y)] (x 0 predek .. 1 zadek, y 0 nahore .. 1 dole) v poradi LED
+    efektu (pred natocenim ventilatoru) - pro prostorove styly hudby. None = cil ve skrini neni."""
+    if key.startswith("f140_"):
+        front = "f140_1" if lcfg.get("f140_vpredu", "led1") == "led1" else "f140_2"
+        slot = "f140_predni" if key == front else "f140_zadni"
+    else:
+        slot = key
+    lay = CASE_LAYOUT.get(slot)
+    if lay is None:
+        return None
+    cx, cy, rx, ry, kind = lay
+    out = []
+    for i in range(n):
+        if kind == "bod" or n == 1:
+            out.append((cx, cy))
+            continue
+        a = fx._ring_angle(i, n, eff or {})
+        if kind == "vodorovne":
+            out.append((cx + rx * math.sin(a), cy))
+        else:
+            out.append((cx + rx * math.cos(a), cy + ry * math.sin(a)))
+    return out
 
 
 def case_order(lcfg, keys):
@@ -485,7 +526,8 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
             cols = one(effect_for(lcfg, group), t)
         if mix > 0:                                        # hudba: uder jde vlnou od ventilatoru, ktery je napred
             delay = (span - offsets.get(key, 0.0)) / span if wave and span > 0 else 0.0
-            mc = engine.music(meff, music, key, n, place.get(key, 0.0), delay, dt, slot=hop.get(key))
+            mc = engine.music(meff, music, key, n, place.get(key, 0.0), delay, dt, slot=hop.get(key),
+                              pts=case_points(lcfg, key, n, meff))
             if key in flip:
                 mc = fx.mirror(mc)
             if orient:

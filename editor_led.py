@@ -67,6 +67,7 @@ def _dur(s):
 
 class LedEditor:
     last_tab = "efekt"            # vybrana zalozka (zachova se pri "Vratit ulozene" - okno se postavi znovu)
+    case_view = False             # nahled jako bok skrine (prostorove styly hudby)
 
     def __init__(self, parent, app):
         self.app = app
@@ -217,6 +218,11 @@ class LedEditor:
         self._music_demo = tk.BooleanVar(value=False)       # nahled: simulovana hudba
         ttk.Checkbutton(pv, text="Simulovaná hudba (120 úderů za minutu) – když je zapnutý vizualizér",
                         variable=self._music_demo).pack(anchor="w", padx=16, pady=(6, 0))
+        self._case_view = tk.BooleanVar(value=LedEditor.case_view)     # nahled jako bok skrine
+        ttk.Checkbutton(pv, text="Jako ve skříni (pohled z boku: předek vpravo, zadek vlevo)",
+                        variable=self._case_view,
+                        command=lambda: setattr(LedEditor, "case_view", self._case_view.get())).pack(
+            anchor="w", padx=16, pady=(2, 0))
         ttk.Label(pv, style="Small.TLabel", text="Náhled počítá efekt stejně jako aplikace, včetně jasu, a ukazuje, "
                                                  "jak má vypadat na srovnaných ventilátorech (spodek dole). "
                                                  "Na ventilátorech se změna projeví po Uložit.",
@@ -927,13 +933,23 @@ class LedEditor:
         chips = ttk.Frame(sf)
         chips.grid(row=1, column=0, sticky="ew")
         tip = None
+        for i in range(3):
+            chips.columnconfigure(i, weight=1, uniform="chip")
+        # styly ve dvou skupinach: na kazdem ventilatoru zvlast / prostorove (podle rozmisteni ve skrini)
+        plain = [k for k in fx.MUSIC_STYLES if k not in fx.SPATIAL]
+        rows = -(-len(plain) // 3)
+        cells = {k: (i // 3, i % 3) for i, k in enumerate(plain)}
+        cells.update({k: (rows + 1 + i // 3, i % 3) for i, k in enumerate(fx.SPATIAL)})
+        ttk.Label(chips, style="Small.TLabel", text="Prostorové – podle rozmístění ve skříni (náhled „Jako ve "
+                                                    "skříni“):").grid(row=rows, column=0, columnspan=3, sticky="w",
+                                                                      padx=2, pady=(8, 2))
         if not alt.get():                                    # jeden styl: vyber jednoho
             sv = tk.StringVar(value=mc.get("styl", "pulz"))
-            for i, (key, name) in enumerate(fx.MUSIC_STYLES.items()):
-                chips.columnconfigure(i % 3, weight=1, uniform="chip")
+            for key, name in fx.MUSIC_STYLES.items():
+                r_, c_ = cells[key]
                 ttk.Radiobutton(chips, text=name, value=key, variable=sv, style="Chip.Toolbutton",
                                 command=lambda: mc.__setitem__("styl", sv.get())).grid(
-                    row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
+                    row=r_, column=c_, sticky="ew", padx=2, pady=2)
         else:                                                # nahodne: zaskrtnout, ze kterych stylu
             pool = mc.setdefault("styly_stridat", list(fx.MUSIC_STYLES))
             vars_ = {}
@@ -945,12 +961,12 @@ class LedEditor:
                     sel = [key]
                 mc["styly_stridat"] = sel
                 count.config(text=f"vybráno {len(sel)} z {len(fx.MUSIC_STYLES)}")
-            for i, (key, name) in enumerate(fx.MUSIC_STYLES.items()):
-                chips.columnconfigure(i % 3, weight=1, uniform="chip")
+            for key, name in fx.MUSIC_STYLES.items():
+                r_, c_ = cells[key]
                 vars_[key] = tk.BooleanVar(value=key in pool)
                 ttk.Checkbutton(chips, text=name, variable=vars_[key], style="Chip.Toolbutton",
                                 command=lambda k=key: on_pick(k)).grid(
-                    row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
+                    row=r_, column=c_, sticky="ew", padx=2, pady=2)
             bf = ttk.Frame(sf)
             bf.grid(row=2, column=0, sticky="w", pady=(4, 0))
 
@@ -1516,6 +1532,10 @@ class LedEditor:
             self._kb_preview(frame.pop("klavesnice", None))
             gpu = frame.pop("grafika", None)
             self._gpu_preview(gpu)
+            if self._case_view.get():
+                self._draw_case(c, lc, frame, gpu)
+                self.preview.after(PREVIEW_MS, self._animate)
+                return
             order = led.wave_offsets(lc, list(frame))[1]          # jako ve skrini: vlevo predek, vpravo zadek
             items = [(k, frame[k]) for k in order]
             n_items = len(items)
@@ -1549,6 +1569,46 @@ class LedEditor:
                                    fill=f"#{r:02x}{g:02x}{b:02x}")
                 c.create_text((x0 + x1) / 2, PREVIEW_H - 14, text="grafika", fill=V.MUTED, font=("Segoe UI", 8))
         self.preview.after(PREVIEW_MS, self._animate)
+
+    def _draw_case(self, c, lc, frame, gpu):
+        """Nahled jako bok skrine podle led.CASE_LAYOUT (jako na fotce: predek vpravo, zadek vlevo).
+        Svisle ventilatory se kresli jako kruh (zepredu), F140 na stropu jako placka."""
+        m, w, h = 18, PREVIEW_W - 36, PREVIEW_H - 40
+        c.create_rectangle(m - 8, 16, m + w + 8, 24 + h + 8, outline="#262b33", fill="#0c0e11")
+        c.create_text(m + w + 4, PREVIEW_H - 2, text="předek ▸", fill=V.DIM, anchor="se", font=("Segoe UI", 8))
+        c.create_text(m - 4, PREVIEW_H - 2, text="◂ zadek", fill=V.DIM, anchor="sw", font=("Segoe UI", 8))
+
+        def to_px(x, y):
+            return m + (1 - x) * w, 26 + y * h
+
+        def col(rgb):
+            r, g, b = (round(255 * (v / 255) ** 0.5) for v in rgb)
+            return f"#{r:02x}{g:02x}{b:02x}"
+        eff = lc.get("hudba") or {}
+        for key, cols in frame.items():
+            n = len(cols)
+            if key.startswith("f140_"):
+                front = "f140_1" if lc.get("f140_vpredu", "led1") == "led1" else "f140_2"
+                slot = "f140_predni" if key == front else "f140_zadni"
+            else:
+                slot = key
+            lay = led.CASE_LAYOUT.get(slot)
+            if lay is None:
+                continue
+            cx, cy, rx, _ry, kind = lay
+            px, py = to_px(cx, cy)
+            dot = 4 if n > 8 else 5
+            for i, rgb in enumerate(cols):
+                a = fx._ring_angle(i, n, eff)
+                if kind == "vodorovne":                         # placka na stropu
+                    x, y = px - rx * w * math.sin(a), py + 5 * math.cos(a)
+                else:                                           # kruh, spodek dole
+                    x, y = px + 26 * math.cos(a), py + 26 * math.sin(a)
+                c.create_oval(x - dot, y - dot, x + dot, y + dot, fill=col(rgb), outline="")
+        if gpu:
+            px, py = to_px(*led.CASE_LAYOUT["grafika"][:2])
+            c.create_rectangle(px - 60, py - 3, px + 60, py + 3, outline="#262b33", fill=col(gpu[0]))
+            c.create_text(px, py + 12, text="grafika", fill=V.DIM, font=("Segoe UI", 8))
 
     def _kb_preview(self, kb):
         """Barva klavesnice do nahledu na jeji strance (editor_klavesnice.py)."""

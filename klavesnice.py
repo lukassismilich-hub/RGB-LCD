@@ -262,11 +262,6 @@ def get_mode():
         return k.onboard_mode()
 
 
-def set_mode(mode):
-    with G815() as k:
-        k.set_onboard_mode(mode)
-    log.info("%s: %s.", NAME, MODES.get(mode, mode))
-
 
 def backup_memory(progress=None):
     """Precist celou integrovanou pamet (uzivatelske sektory + tovarni profily v ROM) do JSON.

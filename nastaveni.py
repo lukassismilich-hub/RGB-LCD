@@ -1400,12 +1400,6 @@ class App(tk.Tk):
             self._update_dirty()
         self.after(4000, done)
 
-    def reload_with(self, cfg):
-        """Okno postavit znovu s danym (neulozenym) nastavenim - napr. nactena predvolba G-klavesy."""
-        saved = self.saved
-        self.destroy()
-        App(cfg, saved).mainloop()
-
     def revert(self):
         self.cfg = copy.deepcopy(self.saved)
         self.destroy()

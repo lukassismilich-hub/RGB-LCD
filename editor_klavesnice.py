@@ -213,12 +213,6 @@ class KeyboardEditor:
             kc = self.src["klavesnice"] = {"efekt": "vlastni", "jas": 100}
         return kc
 
-    def view_cfg(self, lc=None):
-        """Nastaveni, ktere ukazuje nahled (upravovane M, pripadne s upravovanou predvolbou)."""
-        cfg = self.m_cfg(lc)
-        p = self.preset_cfg()
-        return cfg if p is None else klavesy_g.overlay(cfg, p)
-
     def preview_cfg(self, lc):
         """Pro zivy nahled LED (editor_led): nastaveni s upravovanym M; predvolba jen, kdyz je stranka
         Klavesnice videt. Vrati (nastaveni, cislo G-klavesy s predvolbou v tomto M nebo None)."""

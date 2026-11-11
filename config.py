@@ -58,7 +58,6 @@ DEFAULTS = {
     "auto_obrazovky": True,
     "skryte_senzory": [],
     "obrazovky": DEFAULT_SCREENS,
-    "dvojite_odesilani": False,
     # krivky: [teplota kapaliny °C, vykon %]; pumpa min. 20 %, nad 59 °C vzdy 100 %
     "chlazeni": {
         "zapnuto": True,
@@ -98,7 +97,7 @@ DEFAULTS = {
 def _migrate(old):
     """Prevod configu z prvni verze (klice hwinfo / rozsahy / poradi)."""
     cfg = json.loads(json.dumps(DEFAULTS))
-    for k in ("jas", "velikost_obsahu", "gama_grafiky", "rotace_s", "dvojite_odesilani"):
+    for k in ("jas", "velikost_obsahu", "gama_grafiky", "rotace_s"):
         if k in old:
             cfg[k] = old[k]
     hw = old.get("hwinfo", {})

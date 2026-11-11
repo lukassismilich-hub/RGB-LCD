@@ -31,6 +31,9 @@ from ukonceni import STOP, pause
 BASE = os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(BASE, "stav.json")      # aktualni data pro okno nastaveni
 STATE_EVERY_S = 1.0                          # okno nastaveni cte stav.json 1x za sekundu
+# Bod historie grafu nejvys 1x za sekundu: HWiNFO meni hodnoty nejvys 1x za s, pri obnove 0,25 s
+# se do grafu ukladala kazda hodnota 4x a grafy se zbytecne kreslily 4x za sekundu.
+HISTORY_STEP_S = 1.0
 
 log = logging.getLogger("rgb_lcd")
 
@@ -72,9 +75,22 @@ def collect(kraken):
 
 
 
+_last_poll = {"sig": None, "t": 0.0}
+
+
 def update_history(history, cfg, data):
-    """Historie hodnot pro obrazovky typu graf: {senzor: deque[(cas, hodnota)]}"""
+    """Historie hodnot pro obrazovky typu graf: {senzor: deque[(cas, hodnota)]}.
+    Novy bod vsech grafu jen v kole, kdy HWiNFO obnovilo hodnoty (zmenil se nektery senzor) - tedy
+    ve stejnem kole jako cisla na obrazovce, takze se obrazovka s grafem prekresli jednou, ne dvakrat.
+    Nejvys 1x za HISTORY_STEP_S; kdyz HWiNFO nic neposila, po 2x HISTORY_STEP_S i tak."""
     now = time.monotonic()
+    sig = hash(tuple(v.get("value") for k, v in data.items() if not k.startswith("@")))
+    polled = sig != _last_poll["sig"]
+    _last_poll["sig"] = sig
+    age = now - _last_poll["t"]
+    sample = age >= 2 * HISTORY_STEP_S or (polled and age >= 0.75 * HISTORY_STEP_S)
+    if sample:
+        _last_poll["t"] = now
     keep = screens.history_spans(cfg["obrazovky"])        # grafy na Krakenu
     for name, span in mono.graph_sensors(cfg.get("alphacool", {})).items():   # grafy na Alphacoolu
         keep[name] = max(keep.get(name, 0), span)
@@ -84,7 +100,7 @@ def update_history(history, cfg, data):
     for name, span in keep.items():
         dq = history.setdefault(name, deque())
         item = data.get(name)
-        if item is not None:
+        if item is not None and (sample or not dq):
             dq.append((now, item["value"]))
         while dq and now - dq[0][0] > span:
             dq.popleft()
@@ -245,7 +261,7 @@ def main():
     camservice.stop()
     cfg = config.load()
     cfg_time = config.mtime()
-    kraken = Kraken(cfg["jas"], cfg.get("dvojite_odesilani", False))
+    kraken = Kraken(cfg["jas"])
     cooling = Cooling()
     history = {}
     seen_max = {}

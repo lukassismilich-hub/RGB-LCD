@@ -48,9 +48,8 @@ def rgb565(img, rotation=0):
 
 
 class Kraken:
-    def __init__(self, brightness=100, double_send=False):
+    def __init__(self, brightness=100):
         self.brightness = brightness
-        self.double_send = double_send
         self.dev = None
         self._first = True
         self.rejected = 0                # pocet odmitnutych prenosu obrazku (pro log)
@@ -99,10 +98,6 @@ class Kraken:
                 out[m[0]] = {"value": float(value), "unit": m[1], "sensor": "Kraken"}
         return out
 
-    def liquid_temp(self):
-        item = self.status().get("@kapalina")
-        return item["value"] if item else None
-
     def set_fixed(self, channel, duty):
         """Pevny vykon (0-100 %). Pojistka ve firmwaru zustava: od 59 °C kapaliny 100 %."""
         if channel == "pump":
@@ -120,7 +115,7 @@ class Kraken:
     def show(self, img):
         """Poslat obrazek na LCD. True = Kraken ho prijal; False = odmitl i po SEND_TRIES pokusech
         (hlavni smycka ho posle znovu v dalsim kole)."""
-        if self._first or self.double_send:
+        if self._first:
             # prvni obrazek po inicializaci musi jit dvakrat - to dela set_screen
             buf = io.BytesIO()
             img.save(buf, "PNG")

@@ -71,10 +71,12 @@ Další:
 - Efekty počítá aplikace (~30 snímků/s) a posílá barvu každé LED zvlášť – stejně vypadají
   na ventilátorech NZXT, na ventilátorech připojených do desky Gigabyte i na pásku
   grafické karty.
-- 44 efektů: duha, dýchání, kometa, oheň, polární záře, plazma, vodopád, bouřka,
-  ohňostroj, štafeta přes celou skříň, skákající míčky, barva podle teploty, hladina
-  podle hodnoty senzoru… K libovolnému efektu jde přidat jiskření, sousední ventilátory
-  se mohou točit proti sobě a barvy jdou vybrat z hotových palet.
+- 57 efektů: duha, dýchání, kometa, oheň, polární záře, plazma, vodopád, bouřka,
+  ohňostroj, štafeta přes celou skříň, kolo štěstí, přesýpací hodiny, barva podle teploty,
+  hladina podle hodnoty senzoru… a **obraz přes celou skříň** podle rozmístění
+  ventilátorů (lávová lampa, obloha se dnem a nocí, plamen od grafiky ke stropu, déšť
+  a sníh, bubliny, reflektory). K libovolnému efektu jde přidat jiskření a pomalý posun
+  barev, sousední ventilátory se mohou točit proti sobě a barvy jdou vybrat z hotových palet.
 - **Vlna přes celou skříň** – efekt putuje podle skutečného rozmístění ventilátorů
   (předek → horní ventilátory → zadek → grafika), nebo všechny synchronně.
 - Vlastní barvy jednotlivých LED, natočení ventilátorů, vyrovnání jasu mezi značkami.
@@ -89,9 +91,10 @@ Další:
 - Aplikace zachytává **jen zvuk Spotify** (ne hry, Discord ani upozornění) a rozebírá ho
   ~47× za sekundu: basy, středy, výšky, 16 pásem, údery kopáku, virblu a hi-hatu, tempo
   a doby v taktu, stavba napětí a drop.
-- 27 stylů vizualizéru – pulzy, spektrum po skříni, komety, plameny z basů, metronom…
+- 33 stylů vizualizéru – pulzy, spektrum po skříni, komety, plameny z basů, metronom,
+  rytmický vzorec (kruh = takt, údery bicích na něm zůstávají), stoupání k dropu…
   a prostorové styly podle rozmístění ventilátorů (hladina stoupající skříní, fontána
-  z grafiky, rázová vlna, déšť z činelů, stereo do stran).
+  z grafiky, rázová vlna, déšť z činelů, stereo do stran, bicí po skříni, obal alba).
 - Barvy z obalu alba právě hrané skladby (nebo vlastní paleta), styl může být náhodný
   s každou skladbou, zpoždění světel kvůli Bluetooth sluchátkům.
 - Na LCD Krakenu se na začátku skladby ukáže obal, název a interpret.
@@ -100,12 +103,14 @@ Další:
 
 ![Klávesnice](docs/okno_klavesnice.png)
 
-- Barvy každé klávesy přímo přes HID++ (bez G HUB a jeho SDK), 39 efektů: vlna,
-  déšť Matrix, plazma, radar, had, hra života, ohňostroj, spektrum hudby, tetris z úderů…
+- Barvy každé klávesy přímo přes HID++ (bez G HUB a jeho SDK), 59 efektů: vlna,
+  déšť Matrix, plazma, lávová lampa, sněžení, radar, had, hra života, rozbíjení cihel,
+  tenis, spektrum hudby, bicí automat, hvězdný let, teplotní mapa psaní…
 - **Části klávesnice** s vlastním efektem (např. numerická = déšť, zbytek vlna).
 - Tři nastavení na klávesách **M1–M3**, klávesy **G1–G5** přepínají předvolby,
   vizualizér, styl hudby nebo playlist; kontrolky kláves svítí podle stavu.
-- Reakce na stisk kláves a ukazatel hlasitosti po pohybu posuvníkem.
+- Reakce na stisk kláves (8 druhů – vlnka, jiskry, plamínek, inkoust…), ukazatel
+  hlasitosti po pohybu posuvníkem, psaní pohání efekt a spořič po nečinnosti.
 - Integrovaná paměť klávesnice se přepíná sama (po ukončení aplikace svítí klávesnice
   podle svého profilu), záloha paměti.
 

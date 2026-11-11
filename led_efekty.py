@@ -61,16 +61,37 @@ EFFECTS = {
     "skladani": ("skládání", 3, True, True),
     "micky": ("skákající míčky", 3, True, False),
     "obeznice": ("oběžnice", 3, True, True),
+    "kolo_stesti": ("kolo štěstí", 4, True, True),
+    "odlesk": ("odlesk", 1, True, False),
+    "prskavka": ("prskavka", 2, True, True),
+    "hodiny_pisek": ("přesýpací hodiny", 2, True, False),
+    "kapani": ("kapání", 2, True, False),
+    # obraz pres celou skrin (SPACE_FX): kazda LED podle sve polohy ve skrini (led.case_points)
+    "lava": ("lávová lampa", 3, True, False),
+    "obloha": ("obloha – den a noc", 0, True, False),
+    "plamen_skrin": ("plamen přes skříň", 0, True, False),
+    "duha_skrin": ("duha přes skříň", 0, True, True),
+    "dest_snih": ("déšť a sníh", 2, True, False),
+    "bubliny": ("bubliny", 2, True, False),
+    "padajici_hvezdy": ("padající hvězdy", 2, True, False),
+    "reflektory": ("reflektory", 3, True, False),
     "vypnuto": ("vypnuto", 0, False, False),
 }
 ANIMATED = {k for k, v in EFFECTS.items() if v[2]} | {"teplota", "hladina"}
 SENSOR_EFFECTS = ("teplota", "hladina")          # barva / hladina podle senzoru (senzor, min, max)
+# obraz pres celou skrin: vlna a ozubena kola se nepouziji (poloha LED je dana rozmistenim ve skrini)
+SPACE_FX = ("lava", "obloha", "plamen_skrin", "duha_skrin", "dest_snih", "bubliny", "padajici_hvezdy", "reflektory")
+# duha / vlastni barvy ("barvy_rezim" "duha" / "barvy")
+RAINBOW_MODE = ("duha_prelevani", "duha_skrin")
+# duha pres skrin: smer ("smer_skrin")
+CASE_DIRS = [("dozadu", "zepředu dozadu"), ("nahoru", "zdola nahoru"), ("sikmo", "šikmo"), ("ven", "od grafiky ven")]
 
 # efekty s paletou: volitelny pocet barev "pocet_barev" (min, max); vychozi = pocet v EFFECTS
 PALETTE = {"duha_prelevani": (2, 8), "dychani": (1, 8), "paleta": (2, 8), "vysece": (2, 8), "stirani": (2, 8), "polarni_zare": (2, 8),
            "stridani": (2, 8), "staticky_prechod": (2, 8), "teplota": (2, 8), "vlneni": (2, 8),
            "dychajici_paleta": (2, 8), "kapky": (1, 8), "vodopad": (2, 8), "hladina": (1, 8),
-           "pracka": (2, 8), "rozpousteni": (2, 8), "skladani": (1, 8), "micky": (1, 4), "obeznice": (2, 6)}
+           "pracka": (2, 8), "rozpousteni": (2, 8), "skladani": (1, 8), "micky": (1, 4), "obeznice": (2, 6),
+           "kolo_stesti": (2, 8), "odlesk": (1, 4), "lava": (2, 6), "duha_skrin": (2, 8), "reflektory": (1, 4)}
 MAX_COLORS = 8
 # barvy pro dalsi pozice palety (kdyz uzivatel pocet barev zvysi)
 DEFAULT_PALETTE = ["#ff0000", "#0060ff", "#00ff40", "#ffb000", "#b000ff", "#00e5ff", "#ff0080", "#ffffff"]
@@ -104,7 +125,7 @@ def preset_colors(pid, lo=1, hi=MAX_COLORS):
 
 
 # efekty, ktere vyuzivaji polohu LED na kruhu (nahore / dole); "otoceni" = 0 / 90 / 180 / 270 stupnu
-VERTICAL = ("plamen", "vodopad", "hladina", "pretahovana", "micky")
+VERTICAL = ("plamen", "vodopad", "hladina", "pretahovana", "micky", "hodiny_pisek", "kapani")
 # duha - prelevani: "barvy_rezim" "duha" = plna duha (vychozi), "barvy" = vlastni paleta
 # "pauza" (s, 0-10): dychani = jak dlouho LED sviti naplno, nez zacne zhasinat a dalsi barva;
 # stridani / stirani / rozpousteni = jak dlouho vsechny ventilatory sviti stejnou barvou, nez zacne dalsi zmena
@@ -115,6 +136,10 @@ MAX_GLITTER = 10
 RELAY_K = 0.4                # stafeta: cela skrin (vsechny ventilatory) za 1 / (rate * RELAY_K) s
 STACK_HOLD_S, STACK_FADE_S = 0.6, 0.7       # skladani: plny kruh chvili sviti, pak zhasne
 BALL_E, BALL_BOUNCES = 0.75, 5              # micky: kolik rychlosti zbyde po odrazu, pocet odrazu
+WHEEL_HOLD_S = 2.0           # kolo stesti: jak dlouho po zastaveni blika vyherni vysec
+SAND_FLIP_S, SAND_HOLD_S = 0.7, 0.5         # presypaci hodiny: otoceni a chvile pred nim
+MAX_HUE_DRIFT = 10           # "posun_barev" 0-10: barvy efektu se pomalu posouvaji po barevnem kruhu
+HUE_DRIFT_S = 600.0          # ... posun 1 = cely kruh za 10 min, 10 = za 1 min
 
 DEFAULT_EFFECT = {"typ": "duha_toceni", "barvy": ["#ff0000", "#0060ff", "#00ff40"], "rychlost": 4,
                   "opacny_smer": False, "senzor": "CPU (Tctl/Tdie)", "min": 40, "max": 90}
@@ -150,7 +175,8 @@ def palette(eff):
 # playlist: efekty bez pravidelneho cyklu (nahodne nebo staticke) - jedno "opakovani" = NOMINAL_S sekund
 NOMINAL_S = 5.0
 NO_CYCLE = ("barva", "vlastni", "trpyt", "ohen", "duhovy_trpyt", "blesky", "ohnostroj", "konfety",
-            "staticky_prechod", "teplota", "kapky", "plamen", "hladina", "vypnuto")
+            "staticky_prechod", "teplota", "kapky", "plamen", "hladina", "vypnuto", "lava", "plamen_skrin",
+            "dest_snih", "bubliny", "padajici_hvezdy", "reflektory")
 
 
 def cycle_s(eff, span=0.0):
@@ -211,9 +237,81 @@ def cycle_s(eff, span=0.0):
         s = 1 / (rate * 0.5) + STACK_HOLD_S + STACK_FADE_S
     elif typ == "micky":
         s = _ball_times(speed)[2]
+    elif typ == "kolo_stesti":                   # roztoceni, dobeh a vyhra
+        s = _wheel_spin(speed) + WHEEL_HOLD_S
+    elif typ == "odlesk":
+        s = _glint_period(speed)
+    elif typ == "hodiny_pisek":
+        s = _sand_times(speed)[2]
+    elif typ == "kapani":
+        s = _drip_times(speed)[3]
+    elif typ == "obloha":                        # jeden den a noc
+        s = _sky_day(speed)
+    elif typ == "duha_skrin":
+        s = 1 / (rate * 0.5)
     else:                                        # otacive: duha, kometa, prechod, paleta, vysece, majak...
         s = 1 / rate
     return max(0.1, s)
+
+
+def _wheel_spin(speed):
+    return 2.0 + 16.0 / (speed + 2)              # rychlost 4 -> 4,7 s roztoceni a dobeh
+
+
+def _glint_period(speed):
+    return 1.2 + 12.0 / speed                    # rychlost 4 -> odlesk kazdych 4,2 s
+
+
+def _sand_times(speed):
+    """Presypaci hodiny: (presypani, otoceni, cely cyklus) v sekundach."""
+    drain = 24.0 / speed
+    return drain, SAND_FLIP_S, drain + SAND_HOLD_S + SAND_FLIP_S
+
+
+def _drip_times(speed):
+    """Kapani: (nabirani kapky, pad, rozstrik, cely cyklus) v sekundach."""
+    k = 4.0 / speed
+    form, fall, splash = 1.4 * k, 0.45 * k ** 0.5, 0.6 * k
+    return form, fall, splash, form + fall + splash + 0.3 * k
+
+
+def _sky_day(speed):
+    return 600.0 / speed                         # obloha: den a noc za 10 min (rychlost 1) .. 1 min (10)
+
+
+def hue_drift(eff):
+    """Pomaly posun barev 0..MAX_HUE_DRIFT (0 = vypnuto)."""
+    try:
+        return max(0, min(MAX_HUE_DRIFT, int(eff.get("posun_barev", 0))))
+    except (TypeError, ValueError):
+        return 0
+
+
+def hue_rotate(cols, turns):
+    """Otoceni odstinu vsech barev o turns otacky barevneho kruhu (rotace kolem osy sedi - seda zustane
+    seda, jas skoro stejny; rychle, bez prevodu do HSV)."""
+    a = 2 * math.pi * (turns % 1.0)
+    if abs(a) < 1e-4:
+        return cols
+    c, s = math.cos(a), math.sin(a)
+    k1, k2 = (1 - c) / 3, math.sqrt(1 / 3) * s
+    m0, m1, m2 = c + k1, k1 - k2, k1 + k2
+    out = []
+    for r, g, b in cols:
+        out.append((max(0.0, min(255.0, m0 * r + m1 * g + m2 * b)),
+                    max(0.0, min(255.0, m2 * r + m0 * g + m1 * b)),
+                    max(0.0, min(255.0, m1 * r + m2 * g + m0 * b))))
+    return out
+
+
+def _seed(*parts):
+    """Deterministicke nahodne cislo 0..1 z casti (stejne pro vsechny ventilatory a nahled)."""
+    return (zlib.crc32(repr(parts).encode()) & 0xFFFFFF) / float(0x1000000)
+
+
+def _smooth(x):
+    x = max(0.0, min(1.0, x))
+    return x * x * (3 - 2 * x)
 
 
 def glitter(eff):
@@ -227,7 +325,7 @@ def glitter(eff):
 def animated(eff):
     """Meni se efekt v case? (staticky s jiskrenim taky)"""
     typ = eff.get("typ")
-    return typ in ANIMATED or (typ in EFFECTS and typ != "vypnuto" and glitter(eff) > 0)
+    return typ in ANIMATED or (typ in EFFECTS and typ != "vypnuto" and (glitter(eff) > 0 or hue_drift(eff) > 0))
 
 
 def _ball_times(speed):
@@ -327,13 +425,20 @@ class Engine:
         self.state = {}
 
     def frame(self, eff, t, key, n, fan_idx=0, fan_count=1, wave=False, custom=None, data=None, dt=1 / FPS,
-              offset=None, span=None, slot=None):
+              offset=None, span=None, slot=None, pts=None):
         """Barvy (r, g, b) 0-255 jako float pro n LED jednoho ventilatoru v case t.
         offset = posun faze pri vlne (0..1); jinak fan_idx / fan_count, kdyz je wave.
         span = nejvetsi posun faze ze vsech ventilatoru (sirka vlny, pro pauzu u dychani).
         slot = (poradi ventilatoru ve skrini, pocet pozic) pro stafetu - i bez vlny (led.relay_slots).
-        "jiskreni" u efektu = bile jiskry pres hotovy snimek."""
-        out = self._frame(eff, t, key, n, fan_idx, fan_count, wave, custom, data, dt, offset, span, slot)
+        pts = poloha kazde LED ve skrini (led.case_points) pro obraz pres celou skrin (SPACE_FX).
+        "posun_barev" = odstin se pomalu posouva, "jiskreni" = bile jiskry pres hotovy snimek."""
+        if eff.get("typ") in SPACE_FX:
+            out = self._scene(eff, t, key, n, pts)
+        else:
+            out = self._frame(eff, t, key, n, fan_idx, fan_count, wave, custom, data, dt, offset, span, slot)
+        hd = hue_drift(eff)
+        if hd and eff.get("typ") not in ("vypnuto", "vlastni"):
+            out = hue_rotate(out, t * hd / HUE_DRIFT_S)
         g = glitter(eff)
         if g and n > 1 and eff.get("typ") != "vypnuto":
             st = self.state.setdefault(("jiskreni", key), [])
@@ -766,7 +871,301 @@ class Engine:
                 for i, cc in enumerate(_comet(head, n, tail, c, dirb)):
                     out[i] = tuple(min(255.0, out[i][j] + cc[j]) for j in range(3))
             return out
+        if typ == "kolo_stesti":                  # vysece se roztoci, zpomali a zastavi na nahodne barve
+            k = len(cols)
+            spin = _wheel_spin(speed)
+            total = spin + WHEEL_HOLD_S
+            x = t / total + offset
+            cyc = math.floor(x)
+            tt = (x - cyc) * total
+            turns = 2 + int(_seed("kolo", cyc) * 3) + _seed("kolo_cil", cyc)     # 2-4 otacky + nahodny dobeh
+            u = min(1.0, tt / spin)
+            rot = turns * (1 - (1 - u) ** 3) * direction          # rychle roztoceni, pomaly dobeh
+            win = int(((0.75 - rot) % 1.0) * k) % k               # vysec pod "ukazatelem" nahore
+            blink = 0.0
+            if tt >= spin:                                        # vyhra: vyherni vysec blika, ostatni ztmavnou
+                blink = 0.55 + 0.45 * math.cos((tt - spin) * 2 * math.pi * 3)
+            if n == 1:
+                return [_scale(cols[win], 1.0 if not blink else 0.4 + 0.6 * blink)]
+            out = []
+            for i in range(n):
+                p = (_ring_u(i, n) - rot) % 1.0
+                seg = int(p * k) % k
+                edge = min(p * k - math.floor(p * k), 1 - (p * k - math.floor(p * k)))
+                c = _scale(cols[seg], 0.55 + 0.45 * min(1.0, edge * 6))   # tmavsi okraje vyseci
+                if blink:
+                    c = _scale(c, 0.2) if seg != win else _mix(cols[seg], (255, 255, 255), 0.3 * blink)
+                out.append(c)
+            return out
+        if typ == "odlesk":                       # klidna barva / paleta, pres kterou obcas sikmo prejede lesk
+            base = [_cyclic(cols, _ring_u(i, n)) if len(cols) > 1 else cols[0] for i in range(n)]
+            period = _glint_period(speed)
+            x = ((t / period + offset) % 1.0) * period            # cas od zacatku odlesku
+            pos = -1.4 + x * 3.2                                  # odlesk prejede za ~0,9 s
+            out = []
+            for i in range(n):
+                a = 2 * math.pi * _ring_u(i, n)
+                p = math.cos(a + math.pi / 4) if n > 1 else 0.0  # poloha LED ve smeru odlesku (sikmo)
+                k = max(0.0, 1 - abs(p - pos) / 0.45) ** 2
+                out.append(_mix(_scale(base[i], 0.75), (255.0, 255.0, 255.0), k * 0.85))
+            return out
+        if typ == "prskavka":                     # jasny bod obiha, odletuji z nej jiskry, ktere padaji dolu
+            st = self.state.setdefault(("prskavka", key), [])
+            head_u = (t * rate * direction + offset) % 1.0
+            spark_c = cols[1] if len(cols) > 1 else cols[0]
+            rot = math.radians(float(eff.get("otoceni", 0) or 0))
+            for _ in range(int(dt * (10 + 4 * speed) + self.rng.random())):
+                st.append([head_u, self.rng.uniform(-0.6, 0.6), 0.0, self.rng.uniform(0.35, 0.7)])
+            for s_ in st:                         # [poloha 0..1, rychlost (otacky/s), vek, zivot]
+                th = 2 * math.pi * s_[0] + rot
+                s_[1] += 0.9 * math.cos(th) * dt   # "gravitace" po kruhu ke spodku
+                s_[0] = (s_[0] + s_[1] * dt) % 1.0
+                s_[2] += dt
+            st[:] = [s_ for s_ in st if s_[2] < s_[3]][-40:]
+            if n == 1:
+                return [_mix(spark_c, cols[0], 0.5 + 0.5 * self.rng.random())]
+            out = [black] * n
+            for p, _v, age, life in st:
+                kk = (1 - age / life) ** 1.5
+                for i in range(n):
+                    d = abs(((_ring_u(i, n) - p + 0.5) % 1.0) - 0.5) * n
+                    if d < 1:
+                        out[i] = tuple(max(out[i][j], spark_c[j] * kk * (1 - d)) for j in range(3))
+            for i in range(n):                    # hlava (bila, jasna)
+                d = abs(((_ring_u(i, n) - head_u + 0.5) % 1.0) - 0.5) * n
+                if d < 1.2:
+                    hc = _mix(cols[0], (255.0, 255.0, 255.0), 0.5)
+                    out[i] = tuple(max(out[i][j], hc[j] * (1 - d / 1.2)) for j in range(3))
+            return out
+        if typ == "hodiny_pisek":                 # pisek se presype z horni pulky kruhu do dolni, pak otoceni
+            sand, glass = cols[0], (_scale(cols[1], 0.08) if len(cols) > 1 else black)
+            drain, flip, total = _sand_times(speed)
+            x = t / total + offset
+            cyc = math.floor(x)
+            tt = (x - cyc) * total
+            turned = math.pi * (cyc + (_smooth((tt - drain - SAND_HOLD_S) / flip) if tt > drain + SAND_HOLD_S else 0))
+            f = min(1.0, tt / drain)
+            if n == 1:
+                return [_scale(sand, 0.3 + 0.7 * abs(math.cos(turned)))]
+            # vyska kazde LED v "hodinach" (pred otocenim): 1 = nahore
+            rot = math.radians(float(eff.get("otoceni", 0) or 0)) + turned - math.pi * cyc
+            hs = [(1 - math.sin(2 * math.pi * _ring_u(i, n) + rot)) / 2 for i in range(n)]
+            upper = sorted((i for i in range(n) if hs[i] > 0.52), key=lambda i: -hs[i])
+            lower = sorted((i for i in range(n) if hs[i] < 0.48), key=lambda i: hs[i])
+            m = min(len(upper), len(lower))
+            done = f * m                                          # kolik zrnek uz propadlo
+            lit = [0.0] * n
+            for j, i in enumerate(upper[:m]):                     # nahore ubyva shora
+                lit[i] = max(0.0, min(1.0, j + 1 - done))
+            for j, i in enumerate(lower[:m]):                     # dole pribyva odspodu
+                lit[i] = max(0.0, min(1.0, done - j))
+            return [_mix(glass, sand, lit[i]) for i in range(n)]
+        if typ == "kapani":                       # kapka se nabere nahore, spadne a dole se rozstrikne
+            drop, puddle = cols[0], (cols[1] if len(cols) > 1 else cols[0])
+            form, fall, splash, total = _drip_times(speed)
+            tt = ((t / total + offset) % 1.0) * total
+            out = []
+            for i in range(n):
+                h = 0.5 if n == 1 else 1 - (_ring_y(i, n, eff) + 1) / 2     # 0 = dole, 1 = nahore
+                c = _scale(puddle, 0.06 + 0.1 * max(0.0, 1 - h * 4))       # louze dole
+                if tt < form:                                     # kapka nabira nahore
+                    k = (tt / form) ** 2 * max(0.0, 1 - (1 - h) / 0.22)
+                elif tt < form + fall:                            # pad (zrychluje)
+                    y = 1 - ((tt - form) / fall) ** 2
+                    k = max(0.0, 1 - abs(h - y) / 0.2) * (1.0 if h <= y + 0.05 else 0.6)
+                elif tt < form + fall + splash:                   # rozstrik dole
+                    a = (tt - form - fall) / splash
+                    k = max(0.0, 1 - abs(h - 0.18 * a) / 0.15) * (1 - a)
+                    c = _mix(c, puddle, (1 - a) * max(0.0, 1 - h * 6))
+                else:
+                    k = 0.0
+                out.append(tuple(max(c[j], drop[j] * k) for j in range(3)))
+            return out
         return [black] * n
+
+    # ------------------------------------------------------------------ obraz pres celou skrin
+    def _scene(self, eff, t, key, n, pts):
+        """Obraz pres celou skrin (SPACE_FX): barva kazde LED jen podle jeji polohy ve skrini (pts z
+        led.case_points: x 0 predek .. 1 zadek, y 0 nahore .. 1 dole) a casu - bez stavu, vsechny
+        ventilatory i nahled tak kresli stejnou scenu a navazuji na sebe."""
+        if not pts or len(pts) != n:                      # cil mimo skrin / bez rozmisteni: kruh uprostred
+            pts = [(0.5, 0.5) if n == 1 else (0.5 + 0.12 * math.cos(2 * math.pi * _ring_u(i, n)),
+                                              0.5 + 0.2 * math.sin(2 * math.pi * _ring_u(i, n))) for i in range(n)]
+        typ = eff.get("typ")
+        src = palette(eff) if typ in PALETTE else eff.get("barvy", [])
+        cols = [hex_rgb(c) for c in src] or [(255, 255, 255)]
+        try:
+            speed = max(1, min(10, int(eff.get("rychlost", 4))))
+        except (TypeError, ValueError):
+            speed = 4
+        rate = 0.08 * speed
+        black, white = (0.0, 0.0, 0.0), (255.0, 255.0, 255.0)
+
+        def dist(x1, y1, x2, y2):
+            return math.hypot((x1 - x2) * CASE_ASPECT, y1 - y2)
+
+        out = []
+        if typ == "lava":                             # kapky stoupaji od grafiky ke stropu a slevaji se
+            blobs = []
+            for b in range(5):
+                per = (14.0 + 5 * _seed("lava_p", b)) / (0.4 + speed * 0.15)
+                ph = (t / per + _seed("lava_f", b)) % 1.0
+                y = 0.92 - 0.84 * (0.5 - 0.5 * math.cos(2 * math.pi * ph))             # nahoru a zpet dolu
+                x = 0.1 + 0.8 * (b + 0.5) / 5 + 0.08 * math.sin(t * 0.13 + b * 1.7)
+                blobs.append((x, y, 0.22 + 0.07 * _seed("lava_r", b), cols[b % len(cols)]))
+            bg = _scale(cols[0], 0.05)
+            for x, y in pts:
+                f, cw = 0.0, [0.0, 0.0, 0.0]
+                for bx, by, r, c in blobs:
+                    v = r * r / max(1e-4, dist(x, y, bx, by) ** 2)
+                    f += v
+                    for j in range(3):
+                        cw[j] += c[j] * v
+                k = _smooth((f - 0.55) / 0.9)
+                c = tuple(cw[j] / max(1e-6, f) for j in range(3))
+                out.append(_mix(bg, c, k))
+        elif typ == "obloha":                         # slunce prejde skrini zepredu dozadu, svitani, den, soumrak, noc
+            day = _sky_day(speed)
+            phase = (t / day) % 1.0
+            elev = math.sin(2 * math.pi * phase)                  # vyska slunce -1 (pulnoc) .. 1 (poledne)
+            sx, sy = phase * 2, 0.95 - 0.9 * math.sin(math.pi * min(1.0, phase * 2))
+            dayk = _smooth((elev + 0.05) / 0.4)
+            twil = math.exp(-(elev / 0.2) ** 2)                   # svitani / soumrak
+            for x, y in pts:
+                top, hor = _mix((2.0, 3.0, 14.0), (10.0, 80.0, 255.0), dayk), _mix((4.0, 6.0, 24.0), (90.0, 190.0, 255.0), dayk)
+                c = _mix(top, hor, y)                             # nahore tmavsi, u obzoru svetlejsi
+                warm = _mix((90.0, 20.0, 110.0), (255.0, 70.0, 10.0), y)     # soumrak: nahore fialova, dole oranzova
+                c = _mix(c, warm, twil * (0.35 + 0.6 * y))
+                if phase < 0.5:                                   # slunce (jen ve dne)
+                    d = dist(x, y, sx, sy)
+                    c = _mix(c, _mix((255.0, 120.0, 20.0), (255.0, 240.0, 200.0), dayk), max(0.0, 1 - d / 0.28) ** 1.5)
+                if elev < -0.15:                                  # v noci hvezdy
+                    s0 = _seed("hvezda", round(x, 3), round(y, 3))
+                    if s0 < 0.35:
+                        tw = 0.5 + 0.5 * math.sin(t * (0.8 + 2 * s0) + s0 * 40)
+                        c = _mix(c, (200.0, 210.0, 255.0), min(1.0, (-elev - 0.15) * 3) * 0.55 * tw)
+                out.append(c)
+        elif typ == "plamen_skrin":                   # ohen hori od grafiky, ke stropu sahaji jen spicky
+            for x, y in pts:
+                h = 1 - y                                         # 0 = dole, 1 = strop
+                xa = x * 9
+                wave_ = (math.sin(xa + t * 3.1 * (0.5 + speed * 0.15)) + 0.6 * math.sin(xa * 2.3 - t * 4.7)
+                         + 0.8 * math.sin(xa * 0.37 + t * 1.3)) / 2.4
+                top = 0.5 + 0.3 * wave_ + 0.25 * math.sin(t * 2.0 + x * 5) ** 2
+                k = max(0.0, 1 - h / max(0.05, top))
+                flick = 0.85 + 0.15 * math.sin(t * 13 + x * 31 + y * 17)
+                c = _mix((180.0, 0.0, 0.0), (255.0, 90.0, 0.0), min(1.0, k * 1.6))
+                c = _mix(c, (255.0, 210.0, 60.0), max(0.0, k - 0.55) * 2)
+                out.append(_scale(c, min(1.0, k * 1.8) * flick))
+        elif typ == "duha_skrin":                     # jedna souvisla duha projizdi skrini zvolenym smerem
+            sm = eff.get("smer_skrin", "dozadu")
+            gx, gy = CASE_SOURCE
+            sign = -1 if eff.get("opacny_smer") else 1
+            for x, y in pts:
+                if sm == "nahoru":
+                    p = 1 - y
+                elif sm == "sikmo":
+                    p = (x * CASE_ASPECT + (1 - y)) / (CASE_ASPECT + 1)
+                elif sm == "ven":
+                    p = dist(x, y, gx, gy) / 1.2
+                else:
+                    p = x
+                u = p - t * rate * 0.5 * sign
+                out.append(_cyclic(cols, u) if eff.get("barvy_rezim") == "barvy" else _hsv(u))
+        elif typ == "dest_snih":                      # kapky / vlocky padaji od stropu dolu
+            snow = eff.get("druh") == "snih"
+            drop, bg = cols[0], (_scale(cols[1], 0.06) if len(cols) > 1 else black)
+            vy = (0.18 + 0.02 * speed) if snow else (1.0 + 0.12 * speed)
+            spawn = (2.0 + speed * 0.6) if snow else (8.0 + speed * 2.5)
+            life = 1.15 / vy
+            j0, j1 = int(math.floor((t - life) * spawn)), int(math.floor(t * spawn))
+            items = []
+            for j in range(j0, j1 + 1):
+                age = t - j / spawn
+                if not 0 <= age < life:
+                    continue
+                dx = _seed("dest", j)
+                dy = -0.05 + age * vy
+                if snow:
+                    dx += 0.04 * math.sin(age * 2.2 + j)
+                items.append((dx, dy))
+            for x, y in pts:
+                c = bg
+                for dx, dy in items:
+                    if snow:
+                        kk = max(0.0, 1 - dist(x, y, dx, dy) / 0.12)
+                    else:                                         # kapka s ocaskem nahoru
+                        ex = abs(x - dx) * CASE_ASPECT
+                        tail = math.exp(-(dy - y) / 0.07) if y <= dy else math.exp(-(y - dy) / 0.02)
+                        kk = tail * max(0.0, 1 - ex / 0.14)
+                    if kk > 0.01:
+                        c = tuple(max(c[j], drop[j] * kk) for j in range(3))
+                out.append(c)
+        elif typ == "bubliny":                        # bubliny stoupaji odspodu, kolebaji se, nahore prasknou
+            bub, water = cols[0], (cols[1] if len(cols) > 1 else (0.0, 60.0, 120.0))
+            vy = 0.12 + 0.03 * speed
+            spawn = 1.2 + 0.4 * speed
+            life = 1.1 / vy
+            j0, j1 = int(math.floor((t - life) * spawn)), int(math.floor(t * spawn))
+            items = []
+            for j in range(j0, j1 + 1):
+                age = t - j / spawn
+                if not 0 <= age < life:
+                    continue
+                by = 1.02 - age * vy
+                bx = 0.1 + 0.8 * _seed("bub", j) + 0.03 * math.sin(age * 3 + j)
+                r = 0.05 + 0.04 * (1 - by)
+                pop = max(0.0, 1 - abs(by - 0.08) / 0.05) if by < 0.12 else 0.0
+                items.append((bx, by, r, pop))
+            for x, y in pts:
+                c = _scale(water, 0.06 + 0.06 * y)               # voda dole o neco svetlejsi
+                for bx, by, r, pop in items:
+                    d = dist(x, y, bx, by)
+                    kk = max(0.0, 1 - abs(d - r * 0.6) / (r * 0.8))     # bublina = svetly okraj
+                    kk = max(kk, pop * max(0.0, 1 - d / (r * 2.5)))
+                    if kk > 0.01:
+                        c = tuple(max(c[j], bub[j] * kk) for j in range(3))
+                out.append(c)
+        elif typ == "padajici_hvezdy":                # tlumene hvezdy, obcas skrini prolet meteor
+            met, star = cols[0], (cols[1] if len(cols) > 1 else (160.0, 180.0, 255.0))
+            every = 6.0 / speed
+            meteors = []
+            for j in (int(t / every) - 1, int(t / every)):
+                age = t - j * every - _seed("met_t", j) * every * 0.6
+                if 0 <= age < 0.9:
+                    x0, y0 = _seed("met_x", j) * 0.6, 0.05 + 0.25 * _seed("met_y", j)
+                    d = 1 if _seed("met_d", j) < 0.6 else -1
+                    if d < 0:
+                        x0 = 1 - x0
+                    meteors.append((x0 + d * age * 1.3, y0 + age * 0.55, d, 1 - age / 0.9))
+            for x, y in pts:
+                s0 = _seed("hv", round(x, 3), round(y, 3))
+                tw = 0.5 + 0.5 * math.sin(t * (0.5 + 1.5 * s0) + s0 * 50)
+                c = _scale(star, (0.04 + 0.12 * tw) if s0 < 0.5 else 0.02)
+                for mx, my, d, fade in meteors:
+                    vx, vy = d * 1.3 * CASE_ASPECT, 0.55                  # smer letu (ve skrini roztazeny)
+                    ln = math.hypot(vx, vy)
+                    rx, ry = (x - mx) * CASE_ASPECT, y - my
+                    along = -(rx * vx + ry * vy) / ln                    # jak daleko za hlavou po draze
+                    side = abs(rx * vy - ry * vx) / ln                   # jak daleko vedle drahy
+                    if -0.06 < along < 0.7 and side < 0.12:
+                        kk = fade * (1 - max(0.0, along) / 0.7) ** 1.5 * (1 - side / 0.12)
+                        c = tuple(max(c[j], _mix(met, white, 0.5)[j] * kk) for j in range(3))
+                out.append(c)
+        else:                                         # "reflektory": kuzely svetla prejizdeji skrini jako na podiu
+            spots = []
+            for b in range(3):
+                w = rate * (0.6 + 0.25 * b)
+                sx = 0.5 + 0.42 * math.sin(t * w * 2.1 + b * 2.1)
+                sy = 0.45 + 0.35 * math.sin(t * w * 1.3 + b * 1.3 + 0.7)
+                spots.append((sx, sy, cols[b % len(cols)]))
+            for x, y in pts:
+                c = _scale(cols[0], 0.02)
+                for sx, sy, sc in spots:
+                    kk = max(0.0, 1 - dist(x, y, sx, sy) / 0.32) ** 1.4
+                    c = tuple(min(255.0, c[j] + sc[j] * kk) for j in range(3))
+                out.append(c)
+        return out
 
     def _sensor_frac(self, eff, typ, key, data, dt):
         """Vyhlazena hodnota senzoru (~2 s, at barva neskace) jako podil min..max, None = bez dat."""
@@ -851,7 +1250,8 @@ class Engine:
         cols = [hex_rgb(c) for c in (snap.get("paleta") or [])] or [hex_rgb(c) for c in DEFAULT_PALETTE[:3]]
         acc = cols[(int(snap.get("drop_n", 0)) + 1) % len(cols)]
         flash = _scale(_mix(acc, (255.0, 255.0, 255.0), 0.4 + 0.5 * b), b * math.exp(-f / tau) * self._jas(eff))
-        k *= 1.0 - 0.55 * b
+        if styl != "stoupani":                                    # "stoupani" stavbu napeti kresli samo
+            k *= 1.0 - 0.55 * b
         return [tuple(max(c[j] * k, flash[j]) for j in range(3)) for c in out]
 
     def _music(self, eff, snap, key, n, pos, delay, dt, slot):
@@ -1111,6 +1511,98 @@ class Engine:
                     low = max(0.0, min(1.0, (0.5 - h) * 4 + 0.5))    # podil spodni pulky (mekka hranice)
                     out.append(tuple(max(bg[j], main[j] * st[0] * low, top[j] * (1 - low))
                                      for j in range(3)))
+        elif styl == "rytmus":                           # kruh = takt jako ciferník, udery nastroju na nem zustavaji
+            bpm, grid = float(snap.get("bpm") or 0.0), float(snap.get("grid", 0.0))
+            if bpm and grid >= 0.3:
+                period = 60.0 / bpm
+                bp = ((int(snap.get("bar", 0)) + float(snap.get("beat_ph", 0.0))) / 4.0) % 1.0
+            else:                                         # bez tempa: takt 2 s
+                period = 0.5
+                st0 = self.state.setdefault(("hudba_rytmus_t", key), [0.0])
+                st0[0] = (st0[0] + dt / (4 * period)) % 1.0
+                bp = st0[0]
+            marks = self.state.setdefault(("hudba_rytmus", key), [])      # [poloha 0..1, nastroj, sila, vek]
+            for inst, field in enumerate(("kicks", "snares", "hats")):
+                for age, s, _bid in self._fresh(key, snap, field, "rytmus_" + field):
+                    p = (bp - age / (4 * period)) % 1.0
+                    marks[:] = [m for m in marks if not (m[1] == inst and abs(((m[0] - p + 0.5) % 1.0) - 0.5) < 1 / 24)]
+                    marks.append([p, inst, s, 0.0])
+            life = 8 * period                             # znacka vydrzi dva takty
+            for m in marks:
+                m[3] += dt
+            marks[:] = [m for m in marks if m[3] < life][-48:]
+            inst_c = (main, acc, _mix(cols[(d + 2) % k], white, 0.45))
+            if n == 1:
+                c = _scale(main, 0.03)
+                for _p, inst, s, age in marks:
+                    c = tuple(max(c[j], inst_c[inst][j] * s * math.exp(-age / 0.15)) for j in range(3))
+                out = [c]
+            else:
+                out = []
+                for i in range(n):
+                    u = (_ring_u(i, n) - 0.75) % 1.0      # 0 = nahore, po smeru hodin
+                    c = _scale(main, 0.02)
+                    for p, inst, s, age in marks:
+                        dd = abs(((u - p + 0.5) % 1.0) - 0.5) * n
+                        if dd < 1:
+                            kk = s * (1 - dd) * (0.3 + 0.7 * math.exp(-age / 0.25)) * (1 - age / life)
+                            c = tuple(max(c[j], inst_c[inst][j] * kk) for j in range(3))
+                    dd = abs(((u - bp + 0.5) % 1.0) - 0.5) * n                # ručička taktu
+                    if dd < 1:
+                        c = tuple(max(c[j], 90.0 * (1 - dd)) for j in range(3))
+                    out.append(c)
+        elif styl == "stoupani":                         # pri stavbe napeti se kruh plni odspodu, v dropu vybuch
+            b = max(0.0, min(1.0, float(snap.get("build", 0.0))))
+            st = self.state.setdefault(("hudba_stoup", key), [d, 99.0])
+            if d != st[0]:
+                if d > st[0]:
+                    st[1] = 0.0
+                st[0] = d
+            st[1] += dt
+            if float(snap.get("grid", 0.0)) >= 0.3:
+                bp = ((int(snap.get("bar", 0)) + float(snap.get("beat_ph", 0.0))) / 4.0) % 1.0
+            else:
+                bp = (ph * 0.5) % 1.0
+            breath = 0.5 - 0.5 * math.cos(2 * math.pi * bp)          # klid: jeden nadech za takt
+            riser = _mix(acc, white, 0.6 * b)
+            out = []
+            for i in range(n):
+                h = 0.5 if n == 1 else 1 - (_ring_y(i, n, eff) + 1) / 2
+                c = _scale(_cyclic(cols, _ring_u(i, n) + ph * 0.3), 0.1 + 0.2 * breath + 0.2 * level)
+                if b > 0.02:
+                    fill = max(0.0, min(1.0, (b * 1.1 - h) / 0.12 + 0.5))
+                    c = _mix(c, _scale(riser, 0.35 + 0.65 * b), fill)
+                if st[1] < 1.6:                           # drop: vybuch barev palety, ktere se roztoci
+                    k2 = math.exp(-st[1] / 0.5)
+                    burst = _cyclic(cols, _ring_u(i, n) * 2 + st[1] * 1.5, hard=True)
+                    c = tuple(max(c[j], burst[j] * k2) for j in range(3))
+                out.append(c)
+        elif styl == "glitch":                           # porucha: na virbl / hi-hat / kopak se kruh "rozpadne"
+            st = self.state.setdefault(("hudba_glitch", key), [0.0, 0, 0.0])     # zbyva s, druh, sila
+            st[0] = max(0.0, st[0] - dt)
+            for field, w in (("snares", 1.0), ("kicks", 0.8), ("hats", 0.55)):
+                for _age, s, bid in self._fresh(key, snap, field, "glitch_" + field):
+                    if st[0] <= 0 or s * w >= st[2]:
+                        st[0], st[1], st[2] = 0.07 + 0.18 * s * w, bid * 7 + len(field), s * w
+            base = [_scale(_cyclic(cols, _ring_u(i, n) + ph * 0.4), 0.4 + 0.6 * max(bass, fl)) for i in range(n)]
+            if st[0] <= 0:
+                out = base
+            elif n == 1:
+                out = [_mix(base[0], white, 0.7) if int(st[0] * 50) % 2 else _scale(base[0], 0.1)]
+            else:
+                rr = random.Random(st[1] * 31 + int(st[0] * 40))       # porucha se meni i behem trvani
+                kind = st[1] % 4
+                black = (0.0, 0.0, 0.0)
+                if kind == 0:                             # posun kruhu
+                    sh = rr.randint(1, max(1, n // 2))
+                    out = [base[(i + sh) % n] for i in range(n)]
+                elif kind == 1:                           # barevne kanaly se rozjedou
+                    s_ = max(1, n // 6)
+                    out = [(base[(i + s_) % n][0], base[i][1], base[(i - s_) % n][2]) for i in range(n)]
+                elif kind == 2:                           # vypadky a sum
+                    out = [(white if rr.random() < 0.25 else black) if rr.random() < 0.5 else base[i] for i in range(n)]
+                else:                                     # negativ
+                    out = [tuple(255.0 - v for v in c) for c in base]
         else:                                             # "pulz": basy = jas, uder = zablesk vlnou, vysky = jiskry
             kk = min(1.0, 0.10 - 0.04 * e + (0.55 + 0.2 * e) * bass + (0.6 + 0.4 * e) * fl)
             out = []
@@ -1247,6 +1739,54 @@ class Engine:
                         kk = max(kk, s * (1 - age / 0.12) * math.exp(-(dd / 0.15) ** 2))
                     c = add(c, cols[bid % k], kk)
                 out.append(c)
+        elif styl == "bici_skrin":                        # kopak dole u grafiky, virbl po stranach, hi-hat u stropu
+            def env(field, tau):
+                return max([b[1] * math.exp(-b[0] / tau) for b in snap.get(field, ()) if len(b) > 2] + [0.0])
+            kick, snare, hat = env("kicks", 0.18), env("snares", 0.12), env("hats", 0.07)
+            hat_c = _mix(cols[2 % k], white, 0.5)
+            for x, y in pts:
+                low = _smooth((y - 0.45) / 0.4)           # dole (grafika)
+                top = _smooth((0.3 - y) / 0.25)           # strop (F140)
+                side = max(0.0, 1 - low - top) * max(_smooth((0.3 - x) / 0.2), _smooth((x - 0.7) / 0.2), 0.3)
+                c = _scale(main, 0.02)
+                c = add(c, main, kick * (0.2 + 0.8 * low))
+                c = add(c, acc, snare * side)
+                c = add(c, hat_c, hat * top)
+                out.append(c)
+        elif styl == "reflektory_rytmus":                 # kuzely svetla na kazdou dobu jinam
+            last = min(beats, key=lambda b: b[0]) if beats else None
+            bid, age = (last[2], last[0]) if last else (0, 9.0)
+            spots = []
+            for s_i in range(4):
+                x0, y0 = 0.1 + 0.8 * _seed("refl_x", bid - 1, s_i), 0.1 + 0.7 * _seed("refl_y", bid - 1, s_i)
+                x1, y1 = 0.1 + 0.8 * _seed("refl_x", bid, s_i), 0.1 + 0.7 * _seed("refl_y", bid, s_i)
+                u = _smooth(age / 0.18)                    # rychly presun na novy cil
+                spots.append((x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, cols[(s_i + bid // 4) % k],
+                              0.55 + 0.45 * math.exp(-age / 0.2)))
+            for x, y in pts:
+                c = _scale(main, 0.02)
+                for sx, sy, sc, si in spots:
+                    kk = si * max(0.0, 1 - dist(x, y, sx, sy) / 0.42) ** 1.3
+                    c = tuple(min(255.0, c[j] + sc[j] * kk) for j in range(3))
+                out.append(c)
+        elif styl == "obal_skrin":                        # barvy obalu rozlozene po skrini, plynou a pulzuji
+            grid = snap.get("obal") or [[_cyclic(cols, (r + c_) / 22.0 + 0.15 * math.sin(r * 0.9))
+                                         for c_ in range(12)] for r in range(12)]       # bez obalu: z palety
+            gn = len(grid)
+            ang, zoom = ph * 0.15, 0.85 + 0.12 * math.sin(ph * 0.4)
+            ca, sa = math.cos(ang), math.sin(ang)
+            kk = 0.35 + 0.65 * max(bass, fl)
+            for x, y in pts:
+                u0, v0 = (x - 0.5) * 0.9, (y - 0.5) * 0.9
+                cu = (u0 * ca - v0 * sa) * zoom + 0.5
+                cv = (u0 * sa + v0 * ca) * zoom + 0.5
+                cu, cv = 1 - abs((cu % 2) - 1), 1 - abs((cv % 2) - 1)       # za okrajem zrcadlove
+                fx_, fy_ = cu * (gn - 1), cv * (gn - 1)
+                c0, r0 = min(gn - 2, int(fx_)), min(gn - 2, int(fy_))
+                ax, ay = fx_ - c0, fy_ - r0
+                top_ = _mix(grid[r0][c0], grid[r0][c0 + 1], ax)
+                bot = _mix(grid[r0 + 1][c0], grid[r0 + 1][c0 + 1], ax)
+                out.append(_scale(_mix(top_, bot, ay), kk))
         else:                                             # "plazma_skrin": plazma pres celou skrin, pulzuje s basy
             kk = 0.2 + 0.8 * max(bass, fl)
             for x, y in pts:
@@ -1255,6 +1795,17 @@ class Engine:
                      + math.sin(math.hypot(xa - 0.9, y - 0.5) * 7 - ph * 2.6))
                 out.append(_scale(_cyclic(cols, (v + 4) / 8 + ph * 0.1), kk))
         return [c if c else black for c in out] if out else [black] * n
+
+    def _fresh(self, key, snap, field, tag):
+        """Nove udalosti (udery daneho nastroje) od minuleho snimku i s vekem: [(vek, sila, poradi)]."""
+        st = self.state.setdefault((tag, key), [0])
+        evs = [b for b in snap.get(field, ()) if len(b) > 2]
+        if evs and max(b[2] for b in evs) < st[0] - 5:    # analyza zacala znovu (nova skladba / restart)
+            st[0] = 0
+        out = [b for b in evs if b[2] > st[0]]
+        if out:
+            st[0] = max(b[2] for b in out)
+        return out
 
     def _new_beats(self, key, snap, lag, field="beats", tag="hudba_uder"):
         """Udery, ktere k cili prave dorazily (s vlnou o lag s pozdeji): [(poradi, sila)].
@@ -1301,9 +1852,15 @@ MUSIC_STYLES = {
     "dest": "déšť z činelů",
     "ohnostroj_skrin": "ohňostroj ve skříni",
     "plazma_skrin": "plazma přes skříň",
+    "rytmus": "rytmický vzorec",
+    "stoupani": "stoupání k dropu",
+    "glitch": "porucha (glitch)",
+    "bici_skrin": "bicí po skříni",
+    "reflektory_rytmus": "reflektory do rytmu",
+    "obal_skrin": "obal alba ve skříni",
 }
 SPATIAL = ("hladina_skrin", "fontana", "razova_vlna", "proudeni", "spektrum_vyska", "stereo", "dest",
-           "ohnostroj_skrin", "plazma_skrin")
+           "ohnostroj_skrin", "plazma_skrin", "bici_skrin", "reflektory_rytmus", "obal_skrin")
 CASE_ASPECT = 1.7            # skrin je asi 1,7x sirsi (predek - zadek) nez vyssi - vzdalenosti v prostoru
 CASE_SOURCE = (0.58, 0.80)   # grafika (zdroj fontany a razove vlny) - jako led.CASE_LAYOUT["grafika"]
 MUSIC_WAVE_S = 0.25          # za jak dlouho uder probehne celou skrini (pri vlne)

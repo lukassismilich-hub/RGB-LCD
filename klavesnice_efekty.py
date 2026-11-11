@@ -19,6 +19,7 @@ import collections
 import colorsys
 import math
 import random
+import time
 
 import klavesnice_rozlozeni as R
 import led_efekty as fx
@@ -41,6 +42,12 @@ EFFECTS = {
                {"barvy": ["#ff0080", "#7a00ff", "#00e5ff"], "sirka": 5, "duha": False}),
     "polarni_zare": ("polární záře", "klidne", ("barvy", "pozadi", "rychlost", "sirka"), (2, 8),
                      {"barvy": ["#00ff80", "#00e5ff", "#7a00ff"], "pozadi": "#000408", "sirka": 5}),
+    "lava": ("lávová lampa", "klidne", ("barvy", "pozadi", "rychlost", "sirka"), (2, 6),
+             {"barvy": ["#ff0040", "#ff8000", "#b000ff"], "pozadi": "#080008", "sirka": 5}),
+    "odlesk": ("odlesk", "klidne", ("barvy", "smer", "rychlost", "sirka"), (1, 4),
+               {"barvy": ["#0040ff", "#00a0ff"], "smer": 0, "sirka": 4}),
+    "konfety": ("konfety", "klidne", ("barvy", "duha", "rychlost"), (2, 8),
+                {"barvy": ["#ff0040", "#ffb000", "#00ff40", "#00a0ff", "#b000ff"], "duha": True}),
     "vlna": ("vlna", "pohyb", ("barvy", "duha", "smer", "tvar", "rychlost", "sirka", "opacne"), (2, 8),
              {"duha": True, "smer": 0, "sirka": 6, "tvar": "rovna"}),
     "kruh": ("kruhová vlna od středu", "pohyb", ("barvy", "duha", "stred", "rychlost", "sirka", "opacne"), (2, 8),
@@ -49,6 +56,10 @@ EFFECTS = {
                {"duha": True, "sirka": 3, "stred": ""}),
     "radar": ("radar", "pohyb", ("barvy", "pozadi", "stred", "rychlost", "sirka", "opacne"), (2, 2),
               {"barvy": ["#00ff40", "#ffffff"], "pozadi": "#000800", "sirka": 6, "stred": ""}),
+    "paprsky_kriz": ("křížící se paprsky", "pohyb", ("barvy", "pozadi", "rychlost", "sirka"), (2, 2),
+                     {"barvy": ["#ff0040", "#00a0ff"], "pozadi": "#000000", "sirka": 3}),
+    "pruhy": ("posuvné pruhy", "pohyb", ("barvy", "duha", "rychlost", "sirka"), (2, 8),
+              {"barvy": ["#ff0040", "#00a0ff", "#40ff00"], "sirka": 4}),
     "skener": ("skener tam a zpět", "pohyb", ("barvy", "pozadi", "smer", "rychlost", "sirka"), (1, 1),
                {"barvy": ["#ff0000"], "pozadi": "#100000", "smer": 0, "sirka": 3}),
     "stirani": ("stírání barev", "pohyb", ("barvy", "smer", "rychlost"), (2, 8),
@@ -67,6 +78,22 @@ EFFECTS = {
             {"barvy": ["#60ff00", "#006010", "#ff0040"], "pozadi": "#000400"}),
     "zivot": ("hra života", "hry", ("barvy", "pozadi", "rychlost"), (1, 4),
               {"barvy": ["#00ff80", "#00a0ff", "#7a00ff"], "pozadi": "#000008"}),
+    "cihly": ("rozbíjení cihel", "hry", ("barvy", "pozadi", "rychlost"), (3, 6),
+              {"barvy": ["#ffffff", "#ff0040", "#ffb000", "#00ff40", "#00a0ff"], "pozadi": "#000000"}),
+    "tenis": ("tenis", "hry", ("barvy", "pozadi", "rychlost"), (3, 3),
+              {"barvy": ["#ff0040", "#00a0ff", "#ffffff"], "pozadi": "#000000"}),
+    "hvezdy": ("hvězdná obloha", "castice", ("barvy", "pozadi", "rychlost", "sirka"), (1, 4),
+               {"barvy": ["#ffffff", "#80a0ff"], "pozadi": "#000004", "sirka": 5}),
+    "snezeni": ("sněžení", "castice", ("barvy", "pozadi", "rychlost", "sirka"), (1, 2),
+                {"barvy": ["#ffffff", "#a0d0ff"], "pozadi": "#000010", "sirka": 5}),
+    "kruhy_voda": ("kruhy na vodě", "castice", ("barvy", "pozadi", "rychlost", "sirka"), (1, 6),
+                   {"barvy": ["#00a0ff", "#00ffc0", "#ffffff"], "pozadi": "#000818", "sirka": 5}),
+    "svetlusky": ("světlušky", "castice", ("barvy", "pozadi", "rychlost", "sirka"), (1, 4),
+                  {"barvy": ["#c0ff00", "#ffd000"], "pozadi": "#000400", "sirka": 5}),
+    "prskavka": ("prskavka", "castice", ("barvy", "pozadi", "rychlost", "sirka"), (2, 2),
+                 {"barvy": ["#ffffff", "#ffb000"], "pozadi": "#000000", "sirka": 5}),
+    "meteory": ("meteorický roj", "castice", ("barvy", "pozadi", "rychlost", "sirka"), (1, 4),
+                {"barvy": ["#ffd080", "#ff6000"], "pozadi": "#000004", "sirka": 5}),
     "spektrum": ("spektrum hudby", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost", "spicka"), (2, 4),
                  {"barvy": ["#00ff40", "#ffd000", "#ff0000"], "barvy_hudba": "vlastni", "pozadi": "#000000"}),
     "spektrum_stred": ("spektrum od středu", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost", "spicka"),
@@ -105,9 +132,26 @@ EFFECTS = {
                (2, 4), {"barvy": ["#00e5ff", "#7a00ff", "#ff0080"], "barvy_hudba": "vlastni", "pozadi": "#000000"}),
     "plazma_hudba": ("plazma do hudby", "hudba", ("barvy", "barvy_hudba", "rychlost", "sirka", "citlivost"), (2, 8),
                      {"barvy": ["#ff0080", "#7a00ff", "#00e5ff"], "barvy_hudba": "obal", "sirka": 5}),
-    "tetris": ("tetris z úderů", "hudba", ("barvy", "barvy_hudba", "pozadi", "sirka", "citlivost"), (2, 8),
-               {"barvy": ["#ff0040", "#ffb000", "#00a0ff", "#40ff00", "#b000ff"], "barvy_hudba": "obal",
-                "pozadi": "#000000", "sirka": 5}),
+    "kostky": ("padající kostky do rytmu", "hudba", ("barvy", "barvy_hudba", "pozadi", "sirka", "citlivost"),
+               (2, 8), {"barvy": ["#ff0040", "#ffb000", "#00a0ff", "#40ff00", "#b000ff"], "barvy_hudba": "obal",
+                        "pozadi": "#000000", "sirka": 5}),
+    "bici_automat": ("bicí automat", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost"), (3, 3),
+                     {"barvy": ["#ff0040", "#ffb000", "#00e5ff"], "barvy_hudba": "vlastni", "pozadi": "#000000"}),
+    "hvezdny_let": ("hvězdný let", "hudba", ("barvy", "barvy_hudba", "pozadi", "sirka", "citlivost"), (1, 6),
+                    {"barvy": ["#ffffff", "#80c0ff"], "barvy_hudba": "vlastni", "pozadi": "#000000", "sirka": 5}),
+    "stoupani": ("stoupání k dropu", "hudba", ("barvy", "barvy_hudba", "pozadi", "citlivost"), (2, 8),
+                 {"barvy": ["#ff0080", "#7a00ff", "#00e5ff"], "barvy_hudba": "obal", "pozadi": "#000000"}),
+    "kruhove_spektrum": ("kruhové spektrum", "hudba", ("barvy", "barvy_hudba", "pozadi", "stred", "rychlost",
+                                                        "citlivost"), (2, 4),
+                         {"barvy": ["#00ff40", "#ffd000", "#ff0000"], "barvy_hudba": "vlastni", "pozadi": "#000000",
+                          "stred": ""}),
+    "glitch": ("porucha (glitch)", "hudba", ("barvy", "barvy_hudba", "rychlost", "citlivost"), (2, 8),
+               {"barvy": ["#ff0080", "#00e5ff", "#7a00ff"], "barvy_hudba": "obal"}),
+    "nalada": ("nálada skladby", "hudba", ("barvy", "barvy_hudba", "rychlost", "sirka", "citlivost"), (2, 8),
+               {"barvy": ["#0030ff", "#00e5ff", "#b000ff", "#ff0080", "#ff6000"], "barvy_hudba": "vlastni",
+                "sirka": 5}),
+    "teplotni_mapa": ("teplotní mapa psaní", "senzor", ("barvy", "pozadi", "rychlost", "sirka"), (2, 6),
+                      {"barvy": ["#0030ff", "#00ff40", "#ffd000", "#ff0000"], "pozadi": "#000008", "sirka": 3}),
     "teplota": ("barva podle senzoru", "senzor", ("barvy", "senzor"), (2, 8),
                 {"barvy": ["#0060ff", "#00ff40", "#ffb000", "#ff0000"], "senzor": "CPU (Tctl/Tdie)",
                  "min": 40, "max": 90}),
@@ -116,11 +160,13 @@ EFFECTS = {
                   "min": 40, "max": 90, "rada": "cisla"}),
 }
 GROUPS = [("klidne", "Klidné"), ("pohyb", "Pohyb"), ("castice", "Částice"), ("hry", "Hry"), ("hudba", "Hudba"),
-          ("senzor", "Senzor")]
+          ("senzor", "Senzor a psaní")]
 STATIC = {"barva", "prechod", "vlastni"}               # bez animace (jen pri zmene / reakci na stisk)
+KEY_EFFECTS = ("teplotni_mapa", "zivot")               # potrebuji stisky klaves (hook Windows)
+ALIASES = {"tetris": "kostky"}                         # prejmenovane efekty (starsi nastaveni)
 DEFAULT_EFFECT = {"typ": "vlna", "rychlost": 5, "smer": 0, "sirka": 6, "duha": True, "opacne": False,
                   "barvy": DEFAULT_PALETTE[:3], "pozadi": "#000000", "citlivost": 5, "citlivost_vlastni": False,
-                  "spicka": True, "tvar": "rovna", "stred": ""}
+                  "spicka": True, "tvar": "rovna", "stred": "", "posun_barev": 0}
 DIRECTIONS = [(0, "→"), (45, "↘"), (90, "↓"), (135, "↙"), (180, "←"), (225, "↖"), (270, "↑"), (315, "↗")]
 # tvar vlny ("tvar"): rovna cara / sipka (spicka ve smeru pohybu) / kosoctverec (od stredu, smer se nepouzije)
 SHAPES = [("rovna", "rovná"), ("sipka", "šipka"), ("kosoctverec", "kosočtverec")]
@@ -128,16 +174,36 @@ SHAPES = [("rovna", "rovná"), ("sipka", "šipka"), ("kosoctverec", "kosočtvere
 CENTERS = [("", "střed klávesnice"), ("19", "WASD"), ("41", "mezerník"), ("38", "Esc – levý horní roh"),
            ("78", "šipky"), ("90", "numerická klávesnice"), ("210", "logo")]
 REACTIONS = [("klavesa", "klávesa"), ("vlnka", "vlnka"), ("zare", "záře okolí"), ("kriz", "kříž"),
-             ("paprsky", "paprsky")]
+             ("paprsky", "paprsky"), ("jiskry", "jiskry"), ("plaminek", "plamínek"), ("inkoust", "inkoust")]
 REACTION_DEFAULT = {"zapnuto": False, "rezim": "vlnka", "barva": "#ffffff", "doba": 1.0}
 OLD_REACTION_KEYS = ("reakce", "reakce_barva", "reakce_doba")
+# psani pohani efekt (config["led"]["psani_klavesnice"]): cim rychleji se pise, tim rychlejsi a jasnejsi
+# efekt klavesnice; "sila" 1-10 = jak malo psani staci na plny jas
+TYPING_DEFAULT = {"zapnuto": False, "sila": 5}
+# sporic (config["led"]["sporic_klavesnice"]): po "minuty" bez vstupu (klavesnice i mys - GetLastInputInfo)
+# klavesnice ztmavne na "jas" %, vstup ji probudi vlnou od stisknute klavesy
+SAVER_DEFAULT = {"zapnuto": False, "minuty": 5, "jas": 10}
+SAVER_FADE_S = 3.0           # jak dlouho klavesnice usina
+WAKE_SPEED = 30.0            # vlna probuzeni (u za sekundu)
+
+
+def _settings(lcfg, key, default):
+    v = (lcfg or {}).get(key)
+    v = v if isinstance(v, dict) else {}
+    return {k: v.get(k, d) for k, d in default.items()}
 
 
 def reaction_settings(lcfg):
     """Nastaveni reakce na stisk s vychozimi hodnotami (cteni)."""
-    v = (lcfg or {}).get("reakce_klavesnice")
-    v = v if isinstance(v, dict) else {}
-    return {k: v.get(k, d) for k, d in REACTION_DEFAULT.items()}
+    return _settings(lcfg, "reakce_klavesnice", REACTION_DEFAULT)
+
+
+def typing_settings(lcfg):
+    return _settings(lcfg, "psani_klavesnice", TYPING_DEFAULT)
+
+
+def saver_settings(lcfg):
+    return _settings(lcfg, "sporic_klavesnice", SAVER_DEFAULT)
 
 
 def migrate_reaction(lc):
@@ -204,7 +270,12 @@ def get(eff, key):
 
 
 def is_animated(eff):
-    return eff.get("typ") not in STATIC
+    return eff.get("typ") not in STATIC or fx.hue_drift(eff) > 0
+
+
+def _smooth(x):
+    x = max(0.0, min(1.0, x))
+    return x * x * (3 - 2 * x)
 
 
 def hex_rgb(h):
@@ -374,7 +445,7 @@ class Geo:
         self.my = my
         self.kw = [k[4] for k in keys]                                # sirka / vyska klaves (u)
         self.kh = [k[5] for k in keys]
-        # sloupce, ktere klavesa zakryva (mezernik jich ma vic) - pro efekty v mrizce (tetris)
+        # sloupce, ktere klavesa zakryva (mezernik jich ma vic) - pro efekty v mrizce (padajici kostky)
         self.key_cols = [[c for c, x in enumerate(self.cols) if abs(x - cx) <= max(0.5, w / 2)] or [self.col_of[i]]
                          for i, (cx, w) in enumerate(zip(self.cx, self.kw))]
         self._proj = {}
@@ -479,13 +550,87 @@ class Engine:
         self.source = None                      # funkce vracejici nove stisknute zony (hook Windows)
         self.parts = {}                         # enginy casti klavesnice (vrstvy) - vlastni stav efektu
         self._n_press = 0
+        self.typed = collections.deque(maxlen=512)   # (poradi stisku, index klavesy, cas) - mapa, psani, sporic
 
     def press(self, zone):
+        for e in self.parts.values():           # casti klavesnice dostanou stisk taky (mapa, hra zivota)
+            e.press(zone)
         i = self.g.index.get(zone)
         if i is not None:
             self._n_press += 1
             self.presses.append((i, self.rclock, (self._n_press * 0.13) % 1.0))
             del self.presses[:-64]
+            self.typed.append((self._n_press, i, time.monotonic()))
+
+    def new_presses(self, key):
+        """Klavesy (indexy) stisknute od minuleho volani s timto klicem."""
+        last = self.state.get(key)
+        self.state[key] = self._n_press
+        if last is None:
+            return []
+        return [i for n, i, _t in self.typed if n > last]
+
+    def typing_rate(self, window=2.0):
+        """Stisku za sekundu za poslednich window sekund."""
+        now = time.monotonic()
+        return sum(1 for _n, _i, t in self.typed if now - t < window) / window
+
+    def drive(self, ts, dt):
+        """Psani pohani efekt: 0 (nepise se) .. 1 (pise se rychle), nabeh 0,3 s, dobeh 2 s."""
+        try:
+            full = max(1.0, 12.0 - float(ts.get("sila", 5)))       # stisku/s pro plny jas (sila 5 -> 7/s)
+        except (TypeError, ValueError):
+            full = 7.0
+        target = min(1.0, self.typing_rate() / full)
+        d = self.state.get("_drive", 0.0)
+        d += (target - d) * min(1.0, dt / (0.3 if target > d else 2.0))
+        self.state["_drive"] = d
+        return d
+
+    def saver(self, sv, cols, idle, dt):
+        """Sporic: po sv["minuty"] bez vstupu (idle s, None = nevi se / nahled) klavesnice ztmavne na sv["jas"] %,
+        prvni vstup ji probudi vlnou od stisknute klavesy (bez stisku od stredu)."""
+        st = self.state.setdefault("_saver", {"s": 0.0, "wake": None})
+        if idle is None:
+            st["s"], st["wake"] = 0.0, None
+            return cols
+        try:
+            limit = max(0.5, float(sv.get("minuty", 5))) * 60.0
+            floor = max(0.0, min(1.0, float(sv.get("jas", 10)) / 100.0))
+        except (TypeError, ValueError):
+            limit, floor = 300.0, 0.1
+        g = self.g
+        if idle >= limit:
+            st["wake"] = None
+            st["s"] = min(1.0, st["s"] + dt / SAVER_FADE_S)
+        elif st["s"] > 0 and st["wake"] is None:
+            now = time.monotonic()
+            last = self.typed[-1] if self.typed and now - self.typed[-1][2] < 1.5 else None
+            st["wake"] = [g.cx[last[1]], g.cy[last[1]], 0.0] if last else [g.mx, g.my, 0.0]
+        if st["wake"] is not None:
+            st["wake"][2] += dt * WAKE_SPEED
+            if st["wake"][2] > (g.x1 - g.x0) + 4:
+                st["s"], st["wake"] = 0.0, None
+        if st["s"] <= 0:
+            return cols
+        out = []
+        for i, c in enumerate(cols):
+            f = floor
+            if st["wake"] is not None:
+                wx, wy, r = st["wake"]
+                d = math.hypot(g.cx[i] - wx, (g.cy[i] - wy) * 1.3)
+                f = floor + (1 - floor) * max(0.0, min(1.0, (r - d) / 2.0))
+                if 0 < r - d < 1.5:                     # svetly okraj vlny
+                    c = _mix(c, (255.0, 255.0, 255.0), 0.5 * (1 - (r - d) / 1.5))
+            f = 1 - st["s"] * (1 - f)
+            out.append((c[0] * f, c[1] * f, c[2] * f))
+        return out
+
+    def saver_state(self):
+        """(usnula, prave usina / se probouzi)."""
+        st = self.state.get("_saver") or {}
+        s = st.get("s", 0.0)
+        return s >= 1.0 and st.get("wake") is None, (0.0 < s < 1.0) or st.get("wake") is not None
 
     def reaction(self, rc, cols, dt=1 / FPS):
         """Nadrazena reakce na stisk (rc = reaction_settings) pres barvy cols (poradi KEYS)."""
@@ -548,6 +693,9 @@ class Engine:
         typ = eff.get("typ", "vlna")
         fn = getattr(self, "_" + typ, None) if typ in EFFECTS else None
         cols = fn(eff, self.clock, dt, data, music) if fn else [(0.0, 0.0, 0.0)] * self.g.n
+        hd = fx.hue_drift(eff)
+        if hd and typ != "vlastni":                  # pomaly posun barev
+            cols = fx.hue_rotate(cols, self.clock * hd / fx.HUE_DRIFT_S)
         return [(max(0.0, min(255.0, c[0])), max(0.0, min(255.0, c[1])), max(0.0, min(255.0, c[2])))
                 for c in cols]
 
@@ -1326,15 +1474,15 @@ class Engine:
         return [_scale(_cyclic(pal, 0.5 + 0.6 * v + st["posun"]), k)
                 for v in self._plasma(st["ph"], 1.6 / self._width(eff))]
 
-    def _tetris(self, eff, t, dt, data, music):
+    def _kostky(self, eff, t, dt, data, music):
         """Kazdy uder shodi kostku do nahodneho sloupce; plna spodni rada blikne a zmizi, drop nebo
         plna klavesnice smaze vse."""
         pal, bg = self._music_pal(eff, music), self._bg(eff)
         g = self.g
         ncol, rows = len(g.cols), g.nrows
-        st = self.state.get("tetris")
+        st = self.state.get("kostky")
         if st is None or st["dim"] != (ncol, rows):
-            st = self.state["tetris"] = {"dim": (ncol, rows), "sloupce": [[] for _ in range(ncol)], "pad": [],
+            st = self.state["kostky"] = {"dim": (ncol, rows), "sloupce": [[] for _ in range(ncol)], "pad": [],
                                          "vse": -9.0, "rada": None, "drop": None}
         drop = int((music or {}).get("drop_n", 0))
         if st["drop"] is None:
@@ -1346,7 +1494,7 @@ class Engine:
                 st["vse"] = t
             st["sloupce"] = [[] for _ in range(ncol)]
             st["pad"], st["rada"] = [], None
-        hit = self._hit(eff, music, "tetris_n")
+        hit = self._hit(eff, music, "kostky_n")
         if hit:
             for _ in range(1 + int(hit * self._width(eff) / 3.5)):
                 free = [c for c in range(ncol)
@@ -1386,6 +1534,723 @@ class Engine:
                 if pc in g.key_cols[i]:
                     c = _mix(c, pcol, max(0.0, 1 - abs(ph - 1 - r)))     # kostka je mezi ph - 1 a ph
             out.append(_mix(c, (255, 255, 255), wipe))
+        return out
+
+    # -------------------------------------------------------------- dalsi klidne a pohyb (11. 11. 2026)
+    def _proj_deg(self, deg):
+        """Poloha klaves ve smeru deg (stupne) jako 0..1."""
+        cache = self.state.setdefault("_proj_deg", {})
+        d = int(deg) % 360
+        if d not in cache:
+            a = math.radians(d)
+            v = [x * math.cos(a) + y * math.sin(a) for x, y in zip(self.g.cx, self.g.cy)]
+            lo, hi = min(v, default=0.0), max(v, default=1.0)
+            cache[d] = [(p - lo) / (hi - lo or 1) for p in v]
+        return cache[d]
+
+    def _lava(self, eff, t, dt, data, music):
+        """Lavova lampa: velke barevne kapky pomalu plujou a slevaji se (metaballs)."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        w_, h_ = (g.x1 - g.x0), (g.y1 - g.y0)
+        sp = self._speed(eff, 0.35)
+        r2 = (1.0 + self._width(eff) * 0.25) ** 2
+        blobs = []
+        for b in range(5):
+            x = g.x0 + w_ * (0.5 + 0.46 * math.sin(t * sp * (0.31 + 0.07 * b) + b * 1.9))
+            y = g.y0 + h_ * (0.5 + 0.5 * math.sin(t * sp * (0.53 + 0.05 * b) + b * 2.7))
+            blobs.append((x, y, pal[b % len(pal)]))
+        out = []
+        for x, y in zip(g.cx, g.cy):
+            f, cw = 0.0, [0.0, 0.0, 0.0]
+            for bx, by, c in blobs:
+                v = r2 / max(0.05, (x - bx) ** 2 + ((y - by) * 1.3) ** 2)
+                f += v
+                cw[0] += c[0] * v
+                cw[1] += c[1] * v
+                cw[2] += c[2] * v
+            out.append(_mix(bg, (cw[0] / f, cw[1] / f, cw[2] / f), _smooth((f - 0.7) / 1.2)))
+        return out
+
+    def _odlesk(self, eff, t, dt, data, music):
+        """Klidna barva / prechod, pres ktery obcas sikmo prejede lesk jako po kovu."""
+        pal = self._pal(eff)
+        p = self.g.proj(eff)
+        base = [_gradient(pal, v) for v in p] if len(pal) > 1 else [pal[0]] * self.g.n
+        q = self._proj_deg(int(get(eff, "smer") or 0) + 35)
+        period = 1.0 + 4.0 / self._speed(eff)
+        pos = -0.3 + (t % period) * 1.6                       # lesk prejede za ~0,8 s, pak klid
+        w = 0.04 + self._width(eff) * 0.012
+        out = []
+        for c, v in zip(base, q):
+            k = max(0.0, 1 - abs(v - pos) / w) ** 2
+            out.append(_mix(_scale(c, 0.8), (255.0, 255.0, 255.0), 0.85 * k))
+        return out
+
+    def _konfety(self, eff, t, dt, data, music):
+        """Kazda klavesa pomalu prechazi na nahodnou barvu (palety nebo duhy)."""
+        pal = self._pal(eff)
+        rainbow = bool(get(eff, "duha"))
+
+        def pick():
+            return _hsv(self.rng.random()) if rainbow else self.rng.choice(pal)
+        st = self.state.get("konfety")
+        if st is None or len(st) != self.g.n:
+            st = self.state["konfety"] = [[pick(), pick()] for _ in range(self.g.n)]
+        sp = self._speed(eff)
+        a = min(1.0, dt * sp * 0.8)
+        for s in st:
+            s[0] = _mix(s[0], s[1], a)
+            if self.rng.random() < dt * sp * 0.2:
+                s[1] = pick()
+        return [s[0] for s in st]
+
+    def _paprsky_kriz(self, eff, t, dt, data, music):
+        """Vodorovny paprsek jezdi nahoru a dolu, svisly doleva a doprava, v prusecniku se barvy sectou."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        sp = self._speed(eff)
+        w = 0.4 + self._width(eff) * 0.25
+        hy = g.y0 + 0.4 + (g.y1 - g.y0 - 0.8) * (0.5 - 0.5 * math.cos(t * sp * 1.3))
+        vx = g.x0 + 0.5 + (g.x1 - g.x0 - 1.0) * (0.5 - 0.5 * math.cos(t * sp * 0.7))
+        c0, c1 = pal[0], pal[1 % len(pal)]
+        out = []
+        for x, y in zip(g.cx, g.cy):
+            kh = max(0.0, 1 - abs(y - hy) / w)
+            kv = max(0.0, 1 - abs(x - vx) / (w * 1.5))
+            out.append(_add(_add(bg, _scale(c0, kh)), _scale(c1, kv)))
+        return out
+
+    def _pruhy(self, eff, t, dt, data, music):
+        """Rady s barevnymi pruhy jezdi stridave doleva a doprava."""
+        pal = self._pal(eff)
+        g = self.g
+        seg = 1.5 + self._width(eff) * 0.6                    # delka pruhu (u)
+        sp = self._speed(eff) * 2.5                           # u za sekundu
+        rainbow = bool(get(eff, "duha"))
+        out = []
+        for i, x in enumerate(g.cx):
+            d = 1 if g.row_of[i] % 2 else -1
+            f = (x + d * t * sp) / seg
+            idx = math.floor(f)
+            fr = f - idx
+            c = _hsv(idx * 0.13) if rainbow else pal[idx % len(pal)]
+            edge = min(fr, 1 - fr)
+            out.append(_scale(c, 0.35 + 0.65 * _smooth(edge / 0.15)))
+        return out
+
+    # -------------------------------------------------------------- dalsi castice
+    def _star_rand(self):
+        """Pevne nahodne vlastnosti klaves pro hvezdy (faze, rychlost, barva)."""
+        st = self.state.get("_hv_rand")
+        if st is None or len(st) != self.g.n:
+            r = random.Random(11)
+            st = self.state["_hv_rand"] = [(r.random() * 6.28, 0.5 + r.random() * 1.6, r.random()) for _ in range(self.g.n)]
+        return st
+
+    def _streak(self, x, y, mx, my, vx, vy, length, width):
+        """Jas klavesy (x, y) od cary s hlavou (mx, my) letici smerem (vx, vy) s ocasem delky length."""
+        ln = math.hypot(vx, vy) or 1.0
+        rx, ry = x - mx, (y - my) * 1.2
+        along = -(rx * vx + ry * vy) / ln
+        side = abs(rx * vy - ry * vx) / ln
+        if -0.7 < along < length and side < width:
+            return (1 - max(0.0, along) / length) ** 1.5 * (1 - side / width)
+        return 0.0
+
+    def _hvezdy(self, eff, t, dt, data, music):
+        """Hvezdna obloha: klavesy tlumene mihotaji jako hvezdy, obcas preleti padajici hvezda."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        sp = self._speed(eff)
+        rnd = self._star_rand()
+        out = []
+        for i in range(g.n):
+            ph, fr, cr = rnd[i]
+            tw = 0.5 + 0.5 * math.sin(t * fr * sp + ph)
+            out.append(_mix(bg, pal[int(cr * len(pal)) % len(pal)], 0.06 + 0.5 * tw ** 3))
+        mets = self.state.setdefault("hvezdy_met", [])            # [x, y, vx, vy]
+        if self.rng.random() < self._width(eff) * 0.05 * sp * dt:
+            d = self.rng.choice((-1, 1))
+            mets.append([self.rng.uniform(g.x0 + 2, g.x1 - 2), g.y0 - 0.5, d * 16.0 * sp ** 0.7, 5.0 * sp ** 0.7])
+        for m in mets:
+            m[0] += m[2] * dt
+            m[1] += m[3] * dt
+        mets[:] = [m for m in mets if g.x0 - 6 < m[0] < g.x1 + 6 and m[1] < g.y1 + 3]
+        white = (255.0, 255.0, 255.0)
+        for m in mets:
+            for i, (x, y) in enumerate(zip(g.cx, g.cy)):
+                k = self._streak(x, y, m[0], m[1], m[2], m[3], 5.0, 0.9)
+                if k > 0:
+                    out[i] = _mix(out[i], white, k)
+        return out
+
+    def _snezeni(self, eff, t, dt, data, music):
+        """Vlocky padaji a kolebaji se, na spodnich radach se tvori zaveje, ktere pomalu taji."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        flake, pile_c = pal[0], pal[-1]
+        g = self.g
+        ncol = len(g.cols)
+        st = self.state.get("snezeni")
+        if st is None or len(st["zaveje"]) != ncol:
+            st = self.state["snezeni"] = {"vlocky": [], "zaveje": [0.0] * ncol}
+        sp = self._speed(eff)
+        if self.rng.random() < self._width(eff) * 0.7 * sp * dt * 2:
+            st["vlocky"].append([self.rng.uniform(g.x0, g.x1), g.y0 - 0.5, self.rng.uniform(1.2, 2.2) * sp,
+                                 self.rng.random() * 6.28])
+        alive = []
+        for f in st["vlocky"]:
+            f[1] += f[2] * dt
+            x = f[0] + 0.5 * math.sin(t * 1.5 + f[3])
+            col = min(range(ncol), key=lambda c: abs(g.cols[c] - x))
+            if f[1] >= g.y1 - 0.5 - st["zaveje"][col]:            # dopadla na zavej / dolni radu
+                st["zaveje"][col] = min(2.0, st["zaveje"][col] + 0.25)
+                for nb in (col - 1, col + 1):                      # trochu i do sousednich sloupcu
+                    if 0 <= nb < ncol:
+                        st["zaveje"][nb] = min(2.0, st["zaveje"][nb] + 0.08)
+            else:
+                alive.append(f)
+        st["vlocky"] = alive[-60:]
+        st["zaveje"] = [max(0.0, z - dt * 0.03) for z in st["zaveje"]]
+        out = []
+        for i, (x, y) in enumerate(zip(g.cx, g.cy)):
+            c = bg
+            z = max(st["zaveje"][cc] for cc in g.key_cols[i])
+            k = max(0.0, min(1.0, z - g.row_of[i]))
+            if k > 0:
+                c = _mix(c, _scale(pile_c, 0.75), k)
+            for f in st["vlocky"]:
+                fx_ = f[0] + 0.5 * math.sin(t * 1.5 + f[3])
+                kk = max(0.0, 1 - math.hypot(x - fx_, (y - f[1]) * 1.2) / 0.75)
+                if kk > 0:
+                    c = _mix(c, flake, kk)
+            out.append(c)
+        return out
+
+    def _kruhy_voda(self, eff, t, dt, data, music):
+        """Kapky dopadaji na nahodne klavesy a sireji se od nich kruhy, ktere se protinaji."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        drops = self.state.setdefault("kruhy_voda", [])          # [x, y, cas, barva]
+        sp = self._speed(eff)
+        if self.rng.random() < self._width(eff) * 0.16 * sp * dt * 3:
+            i = self.rng.randrange(g.n)
+            drops.append([g.cx[i], g.cy[i], t, self.rng.choice(pal)])
+        life = 2.2
+        drops[:] = [d for d in drops if t - d[2] < life][-12:]
+        out = []
+        for x, y in zip(g.cx, g.cy):
+            c = bg
+            for dx, dy, dt0, dc in drops:
+                age = t - dt0
+                d = math.hypot(x - dx, (y - dy) * 1.3)
+                r = age * 5.0 * sp ** 0.5
+                k = max(0.0, 1 - abs(d - r) / 0.9) + 0.5 * max(0.0, 1 - abs(d - r * 0.55) / 0.7)
+                k *= (1 - age / life) ** 1.5
+                if age < 0.15 and d < 0.7:
+                    k = max(k, 1 - age / 0.15)                   # dopad kapky
+                if k > 0.01:
+                    c = _add(c, _scale(dc, 0.8 * k))
+            out.append(c)
+        return out
+
+    def _svetlusky(self, eff, t, dt, data, music):
+        """Mekka svetylka bloudi po klavesnici a pomalu blikaji."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        n = 2 + int(self._width(eff))
+        st = self.state.get("svetlusky")
+        if st is None or len(st) != n:
+            st = self.state["svetlusky"] = [[self.rng.uniform(g.x0, g.x1), self.rng.uniform(g.y0, g.y1), 0.0, 0.0,
+                                             self.rng.random(), self.rng.uniform(2.0, 4.5), b % len(pal)]
+                                            for b in range(n)]
+        sp = self._speed(eff)
+        vmax = 2.0 * sp
+        for f in st:                                             # [x, y, vx, vy, faze, perioda, barva]
+            f[2] += self.rng.gauss(0, 6) * dt
+            f[3] += self.rng.gauss(0, 4) * dt
+            v = math.hypot(f[2], f[3])
+            if v > vmax:
+                f[2], f[3] = f[2] / v * vmax, f[3] / v * vmax
+            f[0] += f[2] * dt
+            f[1] += f[3] * dt
+            if not g.x0 < f[0] < g.x1:
+                f[2] = -f[2]
+                f[0] = max(g.x0, min(g.x1, f[0]))
+            if not g.y0 < f[1] < g.y1:
+                f[3] = -f[3]
+                f[1] = max(g.y0, min(g.y1, f[1]))
+        out = []
+        for x, y in zip(g.cx, g.cy):
+            c = bg
+            for fx_, fy_, _vx, _vy, ph, per, ci in st:
+                b = max(0.0, math.sin(2 * math.pi * (t / per + ph))) ** 2
+                k = max(0.0, 1 - math.hypot(x - fx_, (y - fy_) * 1.2) / 1.4) ** 2 * b
+                if k > 0.01:
+                    c = _add(c, _scale(pal[ci % len(pal)], k))
+            out.append(c)
+        return out
+
+    def _prskavka(self, eff, t, dt, data, music):
+        """Jasny bod jezdi po okraji klavesnice a sypou se z nej jiskry, ktere padaji dolu."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        head_c, spark_c = pal[0], pal[1 % len(pal)]
+        sp = self._speed(eff)
+        x0, x1, y0, y1 = g.x0 + 0.5, g.x1 - 0.5, g.y0 + 0.5, g.y1 - 0.5
+        w_, h_ = x1 - x0, y1 - y0
+        per = 2 * (w_ + h_)
+        s = (t * sp * 6.0) % per                                 # obvod po smeru hodin
+        if s < w_:
+            hx, hy = x0 + s, y0
+        elif s < w_ + h_:
+            hx, hy = x1, y0 + s - w_
+        elif s < 2 * w_ + h_:
+            hx, hy = x1 - (s - w_ - h_), y1
+        else:
+            hx, hy = x0, y1 - (s - 2 * w_ - h_)
+        sparks = self.state.setdefault("prskavka", [])           # [x, y, vx, vy, vek, zivot]
+        for _ in range(int(dt * self._width(eff) * 7 + self.rng.random())):
+            a = self.rng.random() * 2 * math.pi
+            v = self.rng.uniform(3.0, 7.0)
+            sparks.append([hx, hy, v * math.cos(a), v * math.sin(a) * 0.7, 0.0, self.rng.uniform(0.35, 0.7)])
+        for p in sparks:
+            p[3] += 9.0 * dt
+            p[0] += p[2] * dt
+            p[1] += p[3] * dt
+            p[4] += dt
+        sparks[:] = [p for p in sparks if p[4] < p[5]][-60:]
+        out = []
+        for x, y in zip(g.cx, g.cy):
+            c = bg
+            for px, py, _vx, _vy, age, life in sparks:
+                k = (1 - age / life) * max(0.0, 1 - math.hypot(x - px, (y - py) * 1.2) / 0.7)
+                if k > 0.01:
+                    c = _add(c, _scale(spark_c, k))
+            k = max(0.0, 1 - math.hypot(x - hx, (y - hy) * 1.2) / 1.1)
+            if k > 0:
+                c = _mix(c, _mix(head_c, (255.0, 255.0, 255.0), 0.4), k)
+            out.append(c)
+        return out
+
+    def _meteory(self, eff, t, dt, data, music):
+        """Meteory leti sikmo pres klavesnici a na spodni rade se rozstriknou."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        sp = self._speed(eff)
+        st = self.state.setdefault("meteory", {"m": [], "s": []})  # meteory [x, y, vx, vy, barva], dopady [x, y, cas, barva]
+        if self.rng.random() < self._width(eff) * 0.14 * sp * dt * 2:
+            d = self.rng.choice((-1, 1))
+            st["m"].append([self.rng.uniform(g.x0, g.x1), g.y0 - 1.0, d * self.rng.uniform(5.0, 9.0) * sp ** 0.7,
+                            self.rng.uniform(6.0, 9.0) * sp ** 0.7, self.rng.choice(pal)])
+        alive = []
+        for m in st["m"]:
+            m[0] += m[2] * dt
+            m[1] += m[3] * dt
+            if m[1] >= g.y1 - 0.5:
+                st["s"].append([m[0], g.y1 - 0.5, t, m[4]])
+            elif g.x0 - 4 < m[0] < g.x1 + 4:
+                alive.append(m)
+        st["m"] = alive[-10:]
+        st["s"] = [s for s in st["s"] if t - s[2] < 0.5][-10:]
+        out = []
+        for x, y in zip(g.cx, g.cy):
+            c = bg
+            for mx, my, vx, vy, mc in st["m"]:
+                k = self._streak(x, y, mx, my, vx, vy, 4.0, 0.9)
+                if k > 0:
+                    c = _add(c, _scale(_mix(mc, (255.0, 255.0, 255.0), 0.4 * k), k))
+            for sx, sy, st0, sc in st["s"]:
+                age = (t - st0) / 0.5
+                d = math.hypot(x - sx, (y - sy) * 1.5)
+                k = max(0.0, 1 - abs(d - age * 3.0) / 0.9) * (1 - age)
+                if k > 0:
+                    c = _add(c, _scale(sc, k))
+            out.append(c)
+        return out
+
+    # -------------------------------------------------------------- dalsi hry
+    def _ball_key(self, out, x, y, col, r=0.8):
+        g = self.g
+        for i, (kx, ky) in enumerate(zip(g.cx, g.cy)):
+            k = max(0.0, 1 - math.hypot(kx - x, (ky - y) * 1.1) / r)
+            if k > 0:
+                out[i] = _mix(out[i], col, k)
+
+    def _cihly(self, eff, t, dt, data, music):
+        """Rozbijeni cihel: palka na spodni rade odrazi micek, ktery bori cihly v hornich radach. Hraje sam.
+        Barvy: micek a palka, pak cihly po radach."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        top = g.nrows - 1
+        brick_rows = [r for r in (top - 1, top - 2) if r > 0] if g.nrows >= 5 else [top]
+        st = self.state.get("cihly")
+        if st is None or st["n"] != g.n:
+            st = self.state["cihly"] = {"n": g.n, "cihly": set(), "mic": None, "palka": g.mx, "konec": None,
+                                        "chyba": 0.0, "vyhra": None}
+        if not st["cihly"] and st["vyhra"] is None:
+            st["cihly"] = {i for i in range(g.n) if g.row_of[i] in brick_rows}
+        sp = self._speed(eff)
+        y_pad = max((g.cy[i] for i in range(g.n) if g.row_of[i] == 0), default=g.y1 - 0.5)
+        pw = 3.5
+        if st["mic"] is None and st["konec"] is None and st["vyhra"] is None:   # podani
+            a = self.rng.uniform(-0.9, 0.9)
+            v = 8.0 * sp
+            st["mic"] = [st["palka"], y_pad - 1.0, v * math.sin(a), -v * math.cos(a)]
+            st["chyba"] = self.rng.uniform(-1.0, 1.0) * (3.0 if self.rng.random() < 0.3 else 0.8)
+        m = st["mic"]
+        if m is not None:
+            # palka: sleduje micek s chybou (obcas netrefi)
+            target = m[0] + st["chyba"]
+            st["palka"] += max(-14.0 * sp * dt, min(14.0 * sp * dt, target - st["palka"]))
+            st["palka"] = max(g.x0 + pw / 2, min(g.x1 - pw / 2, st["palka"]))
+            steps = max(1, int(math.hypot(m[2], m[3]) * dt / 0.3) + 1)
+            for _ in range(steps):
+                m[0] += m[2] * dt / steps
+                m[1] += m[3] * dt / steps
+                if m[0] < g.x0 or m[0] > g.x1:
+                    m[2] = -m[2]
+                    m[0] = max(g.x0, min(g.x1, m[0]))
+                if m[1] < g.y0:
+                    m[3] = abs(m[3])
+                hit = next((i for i in st["cihly"] if abs(g.cx[i] - m[0]) <= g.kw[i] / 2 and abs(g.cy[i] - m[1]) <= 0.5),
+                           None)
+                if hit is not None:
+                    st["cihly"].discard(hit)
+                    m[3] = -m[3]
+                    m[2] += self.rng.uniform(-1.0, 1.0)
+                if m[3] > 0 and m[1] >= y_pad - 0.6:
+                    if abs(m[0] - st["palka"]) <= pw / 2 + 0.4:     # odraz od palky (kraj = sikmeji)
+                        v = math.hypot(m[2], m[3])
+                        a = max(-1.1, min(1.1, (m[0] - st["palka"]) / (pw / 2) * 1.0))
+                        m[2], m[3] = v * math.sin(a), -v * math.cos(a)
+                        st["chyba"] = self.rng.uniform(-1.0, 1.0) * (3.0 if self.rng.random() < 0.3 else 0.8)
+                    elif m[1] > y_pad + 0.5:
+                        st["mic"], st["konec"] = None, t
+                        break
+            if not st["cihly"]:
+                st["mic"], st["vyhra"] = None, t
+        if st["konec"] is not None and t - st["konec"] > 0.9:
+            st["konec"] = None
+        if st["vyhra"] is not None and t - st["vyhra"] > 1.5:
+            st["vyhra"] = None
+        out = [bg] * g.n
+        brick_pal = pal[1:] or pal
+        for i in range(g.n):
+            if i in st["cihly"]:
+                out[i] = brick_pal[brick_rows.index(g.row_of[i]) % len(brick_pal)] if g.row_of[i] in brick_rows else bg
+            elif st["vyhra"] is not None and g.row_of[i] in brick_rows:
+                out[i] = _hsv(g.cx[i] / 20 + t) if int((t - st["vyhra"]) * 6) % 2 == 0 else bg
+            if g.row_of[i] == 0 and abs(g.cx[i] - st["palka"]) <= pw / 2:
+                out[i] = pal[0]
+        if st["konec"] is not None and int((t - st["konec"]) * 8) % 2 == 0:   # micek ztracen
+            out = [_mix(c, (255.0, 0.0, 0.0), 0.35) if g.row_of[i] == 0 else c for i, c in enumerate(out)]
+        if m is not None and st["mic"] is not None:
+            self._ball_key(out, m[0], m[1], _mix(pal[0], (255.0, 255.0, 255.0), 0.5))
+        return out
+
+    def _tenis(self, eff, t, dt, data, music):
+        """Tenis: palky na levem a pravem kraji, micek se odrazi mezi nimi. Hraje sam.
+        Barvy: leva palka, prava palka, micek."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        lx, rx = g.x0 + 0.5, g.x1 - 0.5
+        ph = 2.6                                                   # vyska palky (u)
+        sp = self._speed(eff)
+        st = self.state.get("tenis")
+        if st is None:
+            st = self.state["tenis"] = {"mic": None, "p": [g.my, g.my], "chyba": [0.0, 0.0], "bod": None, "kdo": 0}
+        if st["mic"] is None and (st["bod"] is None or t - st["bod"] > 1.0):
+            st["bod"] = None
+            d = 1 if st["kdo"] == 0 else -1
+            v = 9.0 * sp
+            a = self.rng.uniform(-0.6, 0.6)
+            st["mic"] = [g.mx, g.my, d * v * math.cos(a), v * math.sin(a) * 0.6]
+            st["chyba"] = [self.rng.uniform(-1, 1) * (1.6 if self.rng.random() < 0.3 else 0.3) for _ in range(2)]
+        m = st["mic"]
+        if m is not None:
+            for side, px in ((0, lx), (1, rx)):
+                coming = (m[2] < 0) if side == 0 else (m[2] > 0)
+                target = (m[1] + st["chyba"][side]) if coming else g.my
+                st["p"][side] += max(-8.0 * sp * dt, min(8.0 * sp * dt, target - st["p"][side]))
+                st["p"][side] = max(g.y0 + ph / 2, min(g.y1 - ph / 2, st["p"][side]))
+            m[0] += m[2] * dt
+            m[1] += m[3] * dt
+            if m[1] < g.y0 + 0.3 or m[1] > g.y1 - 0.3:
+                m[3] = -m[3]
+                m[1] = max(g.y0 + 0.3, min(g.y1 - 0.3, m[1]))
+            for side, px in ((0, lx + 0.8), (1, rx - 0.8)):
+                if (side == 0 and m[2] < 0 and m[0] <= px) or (side == 1 and m[2] > 0 and m[0] >= px):
+                    if abs(m[1] - st["p"][side]) <= ph / 2 + 0.3:
+                        v = math.hypot(m[2], m[3]) * 1.03
+                        a = (m[1] - st["p"][side]) / (ph / 2) * 0.8
+                        m[2] = (1 if side == 0 else -1) * v * math.cos(a)
+                        m[3] = v * math.sin(a) * 0.6
+                        st["chyba"][1 - side] = self.rng.uniform(-1, 1) * (1.6 if self.rng.random() < 0.3 else 0.3)
+                    elif (side == 0 and m[0] < g.x0) or (side == 1 and m[0] > g.x1):
+                        st["mic"], st["bod"], st["kdo"] = None, t, side    # bod pro druhou stranu, podava porazeny
+                        break
+        out = []
+        for i, (x, y) in enumerate(zip(g.cx, g.cy)):
+            c = bg
+            if abs(x - g.mx) < 0.5 and g.row_of[i] % 2 == 0:
+                c = _add(c, _scale(pal[2 % len(pal)], 0.12))       # sit
+            for side, px in ((0, lx), (1, rx)):
+                if abs(x - px) < 1.2 and abs(y - st["p"][side]) <= ph / 2:
+                    c = pal[side % len(pal)]
+            if st["bod"] is not None and int((t - st["bod"]) * 6) % 2 == 0:
+                win = 1 - st["kdo"]                                    # bliká strana, ktera bod ziskala
+                if (win == 0 and x < g.mx) or (win == 1 and x > g.mx):
+                    c = _mix(c, pal[win % len(pal)], 0.3)
+            out.append(c)
+        if st["mic"] is not None:
+            self._ball_key(out, st["mic"][0], st["mic"][1], pal[2 % len(pal)])
+        return out
+
+    # -------------------------------------------------------------- dalsi hudba
+    def _need(self, eff, music):
+        """Nejmensi sila uderu pro efekt s vlastni nizsi citlivosti (jinak 0) - jako _hit."""
+        if not get(eff, "citlivost_vlastni") or not music:
+            return 0.0
+        c = fx.beat_ratio(music.get("citlivost", 5))
+        b = fx.beat_ratio(self._sens(eff, music))
+        return (b - c) / c + 0.5 if b > c else 0.0
+
+    def _events(self, eff, music, field, key):
+        """Nove udery daneho nastroje ("kicks" / "snares" / "hats" / "beats") od minuleho snimku: [(vek, sila, poradi)]."""
+        if not music:
+            return []
+        last = self.state.get(key, 0)
+        evs = [e for e in music.get(field, ()) if len(e) > 2]
+        if evs and max(e[2] for e in evs) < last - 5:            # analyza zacala znovu
+            last = 0
+        new = [e for e in evs if e[2] > last]
+        if evs:
+            self.state[key] = max([last] + [e[2] for e in evs])
+        need = self._need(eff, music)
+        return [e for e in new if e[1] >= need]
+
+    def _bar_pos(self, music, key, dt):
+        """(poloha v taktu 0..1, delka doby s) z rytmicke mrizky, bez ni takt 2 s."""
+        bpm = float((music or {}).get("bpm") or 0.0)
+        if music and bpm and float(music.get("grid", 0.0)) >= 0.3:
+            return ((int(music.get("bar", 0)) + float(music.get("beat_ph", 0.0))) / 4.0) % 1.0, 60.0 / bpm
+        st = self.state.setdefault(key, [0.0])
+        st[0] = (st[0] + dt / 2.0) % 1.0
+        return st[0], 0.5
+
+    def _drop_age(self, music, key, dt):
+        """Kolik s uplynulo od posledniho dropu (99 = davno / zadny)."""
+        d = int((music or {}).get("drop_n", 0))
+        st = self.state.setdefault(key, [d, 99.0])
+        if d != st[0]:
+            if d > st[0]:
+                st[1] = 0.0
+            st[0] = d
+        st[1] += dt
+        return st[1]
+
+    def _bici_automat(self, eff, t, dt, data, music):
+        """Bici automat: sloupce = takt (16 kroku zleva doprava), rady = kopak (dole), virbl, hi-hat (nahore).
+        Udery zustanou svitit na svem miste v taktu - je videt rytmicky vzorec skladby."""
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        g = self.g
+        bp, period = self._bar_pos(music, "ba_takt", dt)
+        marks = self.state.setdefault("bici_automat", [])         # [krok 0-15, nastroj, sila, vek]
+        for inst, field in enumerate(("kicks", "snares", "hats")):
+            for age, s, _n in self._events(eff, music, field, "ba_" + field):
+                step = int(((bp - age / (4 * period)) % 1.0) * 16) % 16
+                marks[:] = [m for m in marks if not (m[0] == step and m[1] == inst)]
+                marks.append([step, inst, s, 0.0])
+        life = 8 * period                                         # dva takty
+        for m in marks:
+            m[3] += dt
+        marks[:] = [m for m in marks if m[3] < life]
+        cur = int(bp * 16) % 16
+        top = g.nrows - 1 if g.nrows >= 5 else None              # horni pruh (logo, media) = doby taktu
+        rows = g.nrows - (1 if top is not None else 0)
+        light = {(m[0], m[1]): m for m in marks}
+        out = []
+        for i in range(g.n):
+            step = min(15, int((g.cx[i] - g.x0) / ((g.x1 - g.x0) or 1) * 16))
+            r = g.row_of[i]
+            if r == top:
+                on = step // 4 == cur // 4
+                c = _mix(bg, (255.0, 255.0, 255.0), 0.45 if on else 0.05)
+            else:
+                inst = min(2, r * 3 // max(1, rows))
+                c = bg
+                m = light.get((step, inst))
+                if m is not None:
+                    c = _mix(bg, pal[inst % len(pal)], m[2] * (0.35 + 0.65 * math.exp(-m[3] / 0.25)) * (1 - m[3] / life))
+                elif step % 4 == 0:
+                    c = _add(c, _scale(pal[inst % len(pal)], 0.05))      # doby taktu tlumene
+            if step == cur:
+                c = _mix(c, (255.0, 255.0, 255.0), 0.2)            # prehravani
+            out.append(c)
+        return out
+
+    def _hvezdny_let(self, eff, t, dt, data, music):
+        """Hvezdy leti od stredu ke krajum, rychlost podle energie skladby, kopak = zrychleni, drop = skok."""
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        g = self.g
+        st = self.state.setdefault("hvezdny_let", {"h": [], "boost": 0.0})
+        energy = float((music or {}).get("energy", 0.5)) if music else 0.3
+        if self._events(eff, music, "kicks", "hl_kick"):
+            st["boost"] = 1.0
+        st["boost"] *= math.exp(-dt / 0.3)
+        warp = max(0.0, 1 - self._drop_age(music, "hl_drop", dt) / 1.2)
+        v = (0.35 + 1.6 * energy + 1.4 * st["boost"] + 3.0 * warp)
+        rmax = max(g.dist, default=10.0) + 1.0
+        if self.rng.random() < self._width(eff) * 0.9 * dt * 4:
+            st["h"].append([self.rng.random() * 2 * math.pi, 0.3, self.rng.choice(pal)])
+        for s in st["h"]:
+            s[1] += (s[1] * 0.9 + 0.6) * v * dt
+        st["h"] = [s for s in st["h"] if s[1] < rmax][-40:]
+        out = [bg] * g.n
+        for a, r, c in st["h"]:
+            ca, sa = math.cos(a), math.sin(a) * 0.55
+            hx, hy = g.mx + r * ca, g.my + r * sa
+            tail = 0.4 + r * 0.12 * v
+            bright = min(1.0, 0.25 + r / rmax)
+            col = _mix(c, (255.0, 255.0, 255.0), warp * 0.7)
+            for i, (x, y) in enumerate(zip(g.cx, g.cy)):
+                k = self._streak(x, y, hx, hy, ca, sa, tail, 0.8)
+                if k > 0:
+                    out[i] = _add(out[i], _scale(col, k * bright))
+        return out
+
+    def _stoupani(self, eff, t, dt, data, music):
+        """Stoupani k dropu: v klidu dychani do taktu, pri stavbe napeti se klavesnice plni zleva a blika
+        rychleji, v dropu vybuch barev od stredu."""
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        g = self.g
+        b = max(0.0, min(1.0, float((music or {}).get("build", 0.0))))
+        bp, _period = self._bar_pos(music, "st_takt", dt)
+        a = self._drop_age(music, "st_drop", dt)
+        lv = self._lv(eff, music, dt)
+        level = lv["level"] if lv else 0.0
+        breath = 0.5 - 0.5 * math.cos(2 * math.pi * bp)
+        acc = pal[1 % len(pal)]
+        riser = _mix(acc, (255.0, 255.0, 255.0), 0.6 * b)
+        flash = 0.0
+        if b > 0.05:
+            sub = (1, 2, 4, 8)[min(3, int(b * 4))]
+            flash = b * math.exp(-((float((music or {}).get("beat_ph", 0.0)) * sub) % 1.0) / 0.35)
+        rmax = max(g.dist, default=10.0)
+        out = []
+        for i, (x, y) in enumerate(zip(g.cx, g.cy)):
+            p = g.xlo[i]
+            c = _scale(_gradient(pal, p), 0.12 + 0.2 * breath + 0.25 * level)
+            if b > 0.02:
+                fill = max(0.0, min(1.0, (b * 1.05 - p) / 0.06 + 0.5))
+                c = _mix(c, _add(_scale(riser, 0.35 + 0.65 * b), _scale((255.0, 255.0, 255.0), 0.5 * flash)), fill)
+            if a < 1.5:                                           # drop: kruh barev od stredu a zablesk
+                d = g.dist[i]
+                ring = max(0.0, 1 - abs(d - a * 16.0) / 2.5) * (1 - a / 1.5)
+                burst = _cyclic(pal, g.ang[i] + a)
+                c = _add(_scale(c, 1 - min(1.0, ring)), _scale(burst, ring))
+                if a < 0.15:
+                    c = _mix(c, (255.0, 255.0, 255.0), 1 - a / 0.15)
+            out.append(c)
+        return out
+
+    def _kruhove_spektrum(self, eff, t, dt, data, music):
+        """16 paprsku ze stredu, delka podle sily pasma (basy doleva a doprava, vysky nahoru a dolu - klavesnice
+        je siroka), pomalu se toci."""
+        pal, bg = self._music_pal(eff, music), self._bg(eff)
+        lv = self._lv(eff, music, dt)
+        v, _pk = self._meter("kruhove_spektrum", (lv["bands"] if lv else [0.0] * 16), dt)
+        dist, ang = self.g.polar(eff)
+        rmax = max(dist, default=1.0) or 1.0
+        rot = t * self._speed(eff, 0.05)
+        out = []
+        for d, a in zip(dist, ang):
+            m = abs(math.sin(2 * math.pi * (a + rot)))            # 0 vodorovne (basy) .. 1 svisle (vysky)
+            b = min(15, int(m * 16))
+            ln = 0.6 + v[b] * rmax
+            k = max(0.0, min(1.0, ln - d))
+            out.append(_mix(bg, _gradient(pal, min(1.0, d / rmax)), k))
+        return out
+
+    def _glitch(self, eff, t, dt, data, music):
+        """Porucha: na virbl, kopak a hi-hat se rady posunou, barvy rozdeli nebo vypadnou."""
+        pal = self._music_pal(eff, music)
+        g = self.g
+        st = self.state.setdefault("glitch", [0.0, 0, 0.0])          # zbyva s, druh, sila
+        st[0] = max(0.0, st[0] - dt)
+        for field, w in (("snares", 1.0), ("kicks", 0.8), ("hats", 0.55)):
+            for _age, s, n in self._events(eff, music, field, "gl_" + field):
+                if st[0] <= 0 or s * w >= st[2]:
+                    st[0], st[1], st[2] = 0.07 + 0.18 * s * w, n * 7 + len(field), s * w
+        lv = self._lv(eff, music, dt)
+        dim = 0.4 + 0.6 * (lv["bass"] if lv else 0.3)
+        w_ = (g.x1 - g.x0) or 1.0
+        drift = t * self._speed(eff, 0.05)
+
+        def base(x):
+            return _scale(_cyclic(pal, (x - g.x0) / w_ * 0.8 + drift), dim)
+        if st[0] <= 0:
+            return [base(x) for x in g.cx]
+        rr = random.Random(st[1] * 31 + int(st[0] * 40))
+        kind = st[1] % 4
+        out = []
+        if kind == 0:                                            # rady se posunou
+            shift = [rr.uniform(-4.0, 4.0) for _ in range(g.nrows)]
+            out = [base(x + shift[g.row_of[i]]) for i, x in enumerate(g.cx)]
+        elif kind == 1:                                          # barevne kanaly se rozjedou
+            out = [(base(x - 2.5)[0], base(x)[1], base(x + 2.5)[2]) for x in g.cx]
+        elif kind == 2:                                          # vypadek rad a sum
+            off = {r for r in range(g.nrows) if rr.random() < 0.5}
+            for i, x in enumerate(g.cx):
+                c = (0.0, 0.0, 0.0) if g.row_of[i] in off else base(x)
+                out.append((255.0, 255.0, 255.0) if rr.random() < 0.06 else c)
+        else:                                                    # negativ
+            out = [tuple(255.0 - v for v in base(x)) for x in g.cx]
+        return out
+
+    def _nalada(self, eff, t, dt, data, music):
+        """Nalada skladby: tiche pasaze klidne a v prvnich barvach, refren rychleji a v poslednich (paleta od
+        klidne k energicke); jeden nadech za takt."""
+        pal = self._music_pal(eff, music)
+        st = self.state.setdefault("nalada", {"e": 0.3, "ph": 0.0})
+        e = float(music.get("energy", 0.5)) if music else 0.2
+        lv = self._lv(eff, music, dt)
+        if lv:
+            e = 0.75 * e + 0.25 * lv["level"]
+        st["e"] += (e - st["e"]) * min(1.0, dt / 2.0)
+        en = st["e"]
+        st["ph"] += dt * self._speed(eff, 0.25 + 1.2 * en)
+        bp, _per = self._bar_pos(music, "na_takt", dt)
+        br = 0.5 - 0.5 * math.cos(2 * math.pi * bp)
+        k = (0.3 + 0.55 * en) * (0.8 + 0.2 * br)
+        return [_scale(_gradient(pal, max(0.0, min(1.0, 0.1 + 0.75 * en + 0.18 * v))), k)
+                for v in self._plasma(st["ph"], 1.6 / self._width(eff))]
+
+    # -------------------------------------------------------------- psani
+    def _teplotni_mapa(self, eff, t, dt, data, music):
+        """Teplotni mapa psani: klavesy se pouzivanim ohrivaji a pomalu chladnou (jen v pameti, nic se neuklada)."""
+        pal, bg = self._pal(eff), self._bg(eff)
+        g = self.g
+        heat = self.state.get("teplotni_mapa")
+        if heat is None or len(heat) != g.n:
+            heat = self.state["teplotni_mapa"] = [0.0] * g.n
+        nb = g.neighbors()
+        spread = self._width(eff) * 0.06
+        for i in self.new_presses("tm_n"):
+            heat[i] += 1.0
+            for j in nb[i]:
+                heat[j] += spread
+        try:
+            half = 600.0 / max(1.0, float(get(eff, "rychlost") or 5)) ** 1.6     # 1: 10 min ... 10: 15 s
+        except (TypeError, ValueError):
+            half = 46.0
+        dec = 0.5 ** (dt / half)
+        out = []
+        for i in range(g.n):
+            heat[i] *= dec
+            v = 1 - math.exp(-heat[i] / 3.0)
+            out.append(_mix(bg, _gradient(pal, v), min(1.0, v * 3)))
         return out
 
     # -------------------------------------------------------------- senzor
@@ -1461,6 +2326,34 @@ class Engine:
                         k = max(max(0.0, 1 - abs(d - r) / 1.6) * fade ** 0.5, fade if j == i else 0.0)
                     if k > 0:
                         out[j] = _mix(out[j], col, k)
+            elif mode == "jiskry":                           # z klavesy vyletnou jiskry, ktere padaji
+                rr = random.Random(int(pt * 1000) * 131 + i)
+                parts = []
+                for s_ in range(8):
+                    a = 2 * math.pi * s_ / 8 + rr.uniform(-0.3, 0.3)
+                    v = rr.uniform(5.0, 9.0)
+                    parts.append((px + v * math.cos(a) * age, py + v * math.sin(a) * 0.7 * age + 6.0 * age * age))
+                out[i] = _mix(out[i], col, fade)
+                for j, (x, y) in enumerate(zip(self.g.cx, self.g.cy)):
+                    k = max((1 - math.hypot(x - sx, (y - sy) * 1.2) / 0.8 for sx, sy in parts), default=0.0)
+                    if k > 0:
+                        out[j] = _mix(out[j], _mix(col, (255.0, 255.0, 255.0), 0.3), k * fade)
+            elif mode == "plaminek":                         # z klavesy vyslehne plaminek nahoru
+                hmax = 3.5 * fade ** 0.5
+                for j, (x, y) in enumerate(zip(self.g.cx, self.g.cy)):
+                    dy = py - y
+                    if -0.4 < dy < hmax and abs(x - px) < 0.6 + abs(self.g.kw[j] - 1) / 2 + max(0.0, 0.5 - dy * 0.3):
+                        h = max(0.0, dy) / max(0.3, hmax)
+                        flick = 0.8 + 0.2 * math.sin(self.rclock * 23 + j * 1.7)
+                        c = _mix((255.0, 240.0, 160.0), col, min(1.0, h * 1.6))     # dole bila / zluta, nahore barva
+                        out[j] = _mix(out[j], c, max(0.0, 1 - h) * fade ** 0.6 * flick)
+            elif mode == "inkoust":                          # barva se z klavesy pomalu rozpiji do okoli
+                r = 0.4 + 2.8 * (1 - math.exp(-3.0 * age / life))
+                for j, (x, y) in enumerate(zip(self.g.cx, self.g.cy)):
+                    d = math.hypot(x - px, (y - py) * 1.3)
+                    k = max(0.0, 1 - d / r) ** 0.7 * fade ** 0.6
+                    if k > 0:
+                        out[j] = _mix(out[j], col, k)
             else:                                            # vlnka od klavesy
                 r = age * 9.0
                 for j, (x, y) in enumerate(zip(self.g.cx, self.g.cy)):
@@ -1486,6 +2379,8 @@ def default_effect(typ):
 
 def valid(eff):
     """Efekt klavesnice z nastaveni - neznamy typ (napr. starsi efekt ventilatoru) = vychozi vlna."""
+    if isinstance(eff, dict) and eff.get("typ") in ALIASES:
+        eff["typ"] = ALIASES[eff["typ"]]
     if not isinstance(eff, dict) or eff.get("typ") not in EFFECTS:
         return dict(DEFAULT_EFFECT)
     return eff

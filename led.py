@@ -26,6 +26,7 @@
 # Chyba u LED nesmi zdrzet chlazeni - bezi mimo hlavni smycku.
 
 import copy
+import ctypes
 import json
 import math
 import logging
@@ -151,6 +152,9 @@ def default_config():
         "predvolby": [],
         # reakce na stisk klaves - nadrazeny efekt pres celou klavesnici (klavesnice_efekty.Engine.reaction)
         "reakce_klavesnice": dict(kbfx.REACTION_DEFAULT),
+        # psani pohani efekt klavesnice a sporic po necinnosti (klavesnice_efekty.TYPING_DEFAULT / SAVER_DEFAULT)
+        "psani_klavesnice": dict(kbfx.TYPING_DEFAULT),
+        "sporic_klavesnice": dict(kbfx.SAVER_DEFAULT),
         # ukazatel hlasitosti na vybranych klavesach po pohybu posuvnikem (hlasitost.py), pro M1-M3 spolecne
         "hlasitost_klavesnice": dict(hlasitost.DEFAULT),
         # playlist efektu: polozky = efekty (jako "efekt") + "opakovani"; strida se dokola v poradi,
@@ -334,6 +338,8 @@ def effect_for(lcfg, group):
 def is_animated(lcfg):
     if any(kbfx.is_animated(e) for e in kb_effects(lcfg)):
         return True
+    if kbfx.typing_settings(lcfg)["zapnuto"] and extra_on(lcfg, "klavesnice"):   # jas podle psani se meni
+        return True
     groups = {g for _k, _n, g, _c in targets(lcfg)}
     items = playlist_items(lcfg)
     if len(items) > 1:                                     # playlist strida efekty
@@ -451,26 +457,60 @@ def _orient(cols, shift, reverse):
     return [cols[(shift + sign * k) % n] for k in range(n)]
 
 
-def _kb_compose(engine, lcfg, base, dt, data, kb_music, kb_over, kb_top=None):
+def kb_wants_keys(lcfg):
+    """Potrebuje klavesnice stisky klaves (hook Windows) - efekt, ktery z nich kresli, nebo psani pohani efekt?
+    (reakci a ukazatel hlasitosti hlida vlakno zvlast)"""
+    if not extra_on(lcfg, "klavesnice"):
+        return False
+    return (kbfx.typing_settings(lcfg)["zapnuto"]
+            or any(e.get("typ") in kbfx.KEY_EFFECTS for e in kb_effects(lcfg)))
+
+
+class _LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+
+def idle_seconds():
+    """Kolik sekund nikdo nesahl na klavesnici ani mys (GetLastInputInfo), None = nejde zjistit."""
+    try:
+        li = _LASTINPUTINFO()
+        li.cbSize = ctypes.sizeof(li)
+        if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(li)):
+            return None
+        return ((ctypes.windll.kernel32.GetTickCount() - li.dwTime) & 0xFFFFFFFF) / 1000.0
+    except (AttributeError, OSError):
+        return None
+
+
+def _kb_compose(engine, lcfg, base, dt, data, kb_music, kb_over, kb_top=None, kb_idle=None):
     """Barvy kazde klavesy (poradi kbfx.KEYS, pred jasem): zaklad = vlastni efekt klavesnice (base None)
     nebo jedna barva jako F140 / deska, pres nej casti klavesnice, kontrolky G-klaves (kb_over), reakce
     na stisk (reaction_settings, pres vse) a nakonec ukazatel hlasitosti (kb_top z hlasitost.Overlay.frame
     - ma prednost pred vsim)."""
     kbe = kbfx.engine_for(engine)
+    ts = kbfx.typing_settings(lcfg)
+    drive = kbe.drive(ts, dt) if ts["zapnuto"] else None    # psani pohani efekt: rychlost a jas podle psani
+    fdt = dt if drive is None else dt * (0.4 + 1.6 * drive)
     if base is None:
-        cols = kbe.frame(kb_effect(lcfg), dt, data, kb_music)
+        cols = kbe.frame(kb_effect(lcfg), fdt, data, kb_music)
     else:
         kbe.poll()
         cols = [tuple(base)] * len(kbfx.KEYS)
     layers = kb_layers(lcfg)
     if layers or kbe.parts:
-        cols = kbe.layers(layers, cols, dt, data, kb_music)
+        cols = kbe.layers(layers, cols, fdt, data, kb_music)
+    if drive is not None:
+        k = 0.35 + 0.65 * drive
+        cols = [(c[0] * k, c[1] * k, c[2] * k) for c in cols]
     if kb_over:
         cols = list(cols)
         for z, c in kb_over.items():
             i = kbfx.INDEX.get(z)
             if i is not None:
                 cols[i] = c
+    sv = kbfx.saver_settings(lcfg)
+    if sv["zapnuto"]:                                       # sporic: po necinnosti ztmavne, vstup ji probudi
+        cols = kbe.saver(sv, cols, kb_idle, dt)
     rc = kbfx.reaction_settings(lcfg)
     if rc["zapnuto"]:
         cols = kbe.reaction(rc, cols, dt)
@@ -480,7 +520,7 @@ def _kb_compose(engine, lcfg, base, dt, data, kb_music, kb_over, kb_top=None):
 
 
 def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, kb_music=None, kb_over=None,
-           kb_top=None):
+           kb_top=None, kb_idle=None):
     """{klic: [[r, g, b] x pocet LED]} s jasem - pro vlakno i nahled v nastaveni.
     orient=False (nahled): bez natoceni ventilatoru, tj. tak, jak ma efekt vypadat.
     music = snimek hudby ze Spotify (hudba.Music.led_snapshot / fx.music_demo): hudebni vizualizer
@@ -506,16 +546,17 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
     out = {}
     for idx, (key, n, group, custom) in enumerate(tg):
         if key == "klavesnice" and kb_own(lcfg):
-            cols = _kb_compose(engine, lcfg, None, dt, data, kb_music, kb_over, kb_top)
+            cols = _kb_compose(engine, lcfg, None, dt, data, kb_music, kb_over, kb_top, kb_idle)
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(group, EXTRA_DEFAULT).get("jas", 100)) / 100.0
             out[key] = fx.apply_brightness(cols, k)
             continue
 
         def one(eff, tt):
+            space = eff.get("typ") in fx.SPACE_FX                         # obraz pres celou skrin
             c = engine.frame(eff, tt, key, n, idx, len(tg), wave, custom, data, dt, offset=offsets.get(key, 0.0),
-                             span=span, slot=slots.get(key))
+                             span=span, slot=slots.get(key), pts=case_points(lcfg, key, n, eff) if space else None)
             if eff.get("typ") not in ("vlastni", "vypnuto"):              # vlastni barvy jsou uz po LED
-                if key in flip:
+                if key in flip and not space:                            # poloha LED je dana skrini
                     c = fx.mirror(c)
                 if orient:
                     c = _orient(c, *orientation(lcfg, key))
@@ -533,14 +574,15 @@ def render(engine, lcfg, t, data=None, dt=1 / fx.FPS, orient=True, music=None, k
             delay = (span - offsets.get(key, 0.0)) / span if wave and span > 0 else 0.0
             mc = engine.music(meff, music, key, n, place.get(key, 0.0), delay, dt, slot=hop.get(key),
                               pts=case_points(lcfg, key, n, meff))
-            if key in flip:
+            if key in flip and fx.music_style(meff, music) not in fx.SPATIAL:   # prostorove: poloha dana skrini
                 mc = fx.mirror(mc)
             if orient:
                 mc = _orient(mc, *orientation(lcfg, key))
             cols = mc if cols is None else [fx._mix(a, b, mix) for a, b in zip(cols, mc)]
-        if key == "klavesnice" and (kb_over or kb_top or kb_layers(lcfg)
-                                    or kbfx.reaction_settings(lcfg)["zapnuto"]):
-            cols = _kb_compose(engine, lcfg, cols[0], dt, data, kb_music, kb_over, kb_top)
+        if key == "klavesnice" and (kb_over or kb_top or kb_layers(lcfg) or kbfx.reaction_settings(lcfg)["zapnuto"]
+                                    or kbfx.typing_settings(lcfg)["zapnuto"]
+                                    or kbfx.saver_settings(lcfg)["zapnuto"]):
+            cols = _kb_compose(engine, lcfg, cols[0], dt, data, kb_music, kb_over, kb_top, kb_idle)
         if group in EXTRAS:
             k = float(lcfg.get("jas", 80)) * float(lcfg.get(group, EXTRA_DEFAULT).get("jas", 100)) / 100.0
         else:
@@ -1169,7 +1211,9 @@ class LedWorker(threading.Thread):
                 vcfg = hlasitost.settings(lcfg)
                 vol_on = bool(vcfg["zapnuto"]) and extra_on(lcfg, "klavesnice")
                 react_on = kbfx.reaction_settings(lcfg)["zapnuto"] and extra_on(lcfg, "klavesnice")
-                hook_on = self._keyboard_hook(engine, react_on or vol_on, hook_on)
+                hook_on = self._keyboard_hook(engine, react_on or vol_on or kb_wants_keys(lcfg), hook_on)
+                kb_idle = (idle_seconds() if kbfx.saver_settings(lcfg)["zapnuto"] and extra_on(lcfg, "klavesnice")
+                           else None)
                 kb_top = None
                 if vol_on:
                     import klavesy_stisk
@@ -1192,7 +1236,7 @@ class LedWorker(threading.Thread):
                 lcd_on = self.music is not None and self.music.lcd_active() is not None
                 kb_over = self.gkeys.leds(base_cfg, now, lcd_on) if extra_on(lcfg, "klavesnice") else None
                 frame = render(engine, lcfg, now - t0, data, min(dt, 0.2), music=snap, kb_music=kb_snap,
-                               kb_over=kb_over, kb_top=kb_top)
+                               kb_over=kb_over, kb_top=kb_top, kb_idle=kb_idle)
                 if test_fr is not None:                  # test natoceni: jen jedna LED na ventilatoru, grafika tma
                     frame = {k: (v if k == "klavesnice" else test_fr.get(k, v)) for k, v in frame.items()}
                 force = now - last_force > REFRESH_S
@@ -1237,10 +1281,12 @@ class LedWorker(threading.Thread):
             elif snap is not None:                       # hudba: plynulejsi (udery jsou kratke)
                 self._quit.wait(max(0.0, 1 / fx.MUSIC_FPS - (time.monotonic() - now)))
             elif (is_animated(lcfg) or self.gkeys.busy() or self.vol.busy(hlasitost.settings(lcfg), time.monotonic())
-                  or kbfx.engine_for(engine).reacting(kbfx.reaction_settings(lcfg))):
+                  or kbfx.engine_for(engine).reacting(kbfx.reaction_settings(lcfg))
+                  or kbfx.engine_for(engine).saver_state()[1]):
                 self._quit.wait(max(0.0, 1 / fx.FPS - (time.monotonic() - now)))
             else:
-                self._wake.wait(1.0)
+                # usnula klavesnice (sporic): pohyb mysi nehlasi nic - zjistovat 10x za s, at se hned probudi
+                self._wake.wait(0.1 if kbfx.engine_for(engine).saver_state()[0] else 1.0)
                 self._wake.clear()
         self._keyboard_hook(engine, False, hook_on)
         # konec aplikace: klidny staticky stav (vlastni barvy LED s nastavenym jasem);

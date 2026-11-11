@@ -52,9 +52,14 @@ WIDTH_LABEL = {"vlna": "Délka vlny", "kruh": "Šířka kruhů", "toceni": "Zkro
                "dest": "Hustota", "trpyt": "Hustota", "ohnostroj": "Četnost", "plamen": "Výška plamene",
                "jiskry": "Množství", "dest_hudba": "Hustota", "plazma": "Velikost vzoru",
                "polarni_zare": "Šířka závěsů", "radar": "Délka stopy", "bourka": "Hustota deště",
-               "ohnostroj_hudba": "Množství", "plazma_hudba": "Velikost vzoru", "tetris": "Množství kostek"}
+               "ohnostroj_hudba": "Množství", "plazma_hudba": "Velikost vzoru", "kostky": "Množství kostek",
+               "lava": "Velikost kapek", "odlesk": "Šířka lesku", "pruhy": "Délka pruhů", "paprsky_kriz": "Šířka",
+               "hvezdy": "Padající hvězdy", "snezeni": "Hustota", "kruhy_voda": "Četnost kapek",
+               "svetlusky": "Počet", "prskavka": "Jiskry", "meteory": "Četnost", "hvezdny_let": "Hustota",
+               "nalada": "Velikost vzoru", "teplotni_mapa": "Rozptyl tepla"}
 SPEED_LABEL = {"bourka": "Četnost blesků", "spektrogram": "Rychlost posunu", "dj": "Rychlost toku",
-               "zaznam": "Rychlost posunu"}
+               "zaznam": "Rychlost posunu", "teplotni_mapa": "Chladnutí", "odlesk": "Jak často",
+               "kruhove_spektrum": "Otáčení", "glitch": "Posun barev"}
 OPP_LABEL = {"kruh": "Dovnitř", "hlasitost": "Od středu do stran", "vlna": "Opačně (kosočtverec dovnitř)",
              "radar": "Proti směru hodin", "dj": "Od krajů ke středu",
              "zaznam": "Zleva doprava"}      # popisek "opacne" podle efektu
@@ -67,7 +72,31 @@ COLOR_NOTE = {"radar": "Barvy: paprsek, cíle.", "bourka": "Barvy: blesk, déš�
               "spektrogram": "Barvy od slabého zvuku po silný. Spodní řada = spektrum teď (vlevo basy, vpravo "
                              "výšky), řady se posouvají nahoru.",
               "zaznam": "Barvy od prostřední řady k okrajům.",
-              "tetris": "Každý úder shodí kostku; plná spodní řada blikne a zmizí, drop smaže vše."}
+              "kostky": "Každý úder shodí kostku; plná spodní řada blikne a zmizí, drop smaže vše.",
+              "lava": "Barvy kapek; kde se kapky potkají, barvy se slijí.",
+              "odlesk": "Barvy podkladu (přechod ve zvoleném směru); lesk je bílý.",
+              "paprsky_kriz": "Barvy: vodorovný paprsek, svislý paprsek.",
+              "hvezdy": "Barvy hvězd; padající hvězda je bílá.",
+              "snezeni": "Barvy: vločky, závěje (s jednou barvou stejné). Závěje dole pomalu tají.",
+              "prskavka": "Barvy: hlava, jiskry. Bod obíhá po okraji klávesnice.",
+              "meteory": "Barvy meteorů; dole se rozstříknou.",
+              "cihly": "Barvy: míček a pálka, pak cihly po řadách. Hraje sám, občas netrefí; po zboření všech "
+                       "cihel začne znovu.",
+              "tenis": "Barvy: levá pálka, pravá pálka, míček. Hraje sám, kdo netrefí, prohraje bod.",
+              "bici_automat": "Barvy: kopák (spodní řady), virbl (prostřední), hi-hat (horní). Sloupce zleva doprava "
+                              "jsou jeden takt, světlý sloupec je právě hraná doba; údery vydrží dva takty. "
+                              "Horní pruh ukazuje dobu taktu.",
+              "hvezdny_let": "Barvy hvězd. Rychlost podle energie skladby, kopák zrychlí, drop = skok s bílými "
+                             "pruhy.",
+              "stoupani": "Při stavbě napětí před dropem se klávesnice plní zleva a bliká čím dál rychleji, "
+                          "v dropu vybuchne od středu.",
+              "kruhove_spektrum": "Barvy od středu ke krajům. Basy a výšky jsou proti sobě, paprsky se točí.",
+              "glitch": "Na údery virblu, kopáku a hi-hatu se řady posunou, barvy rozjedou, vypadnou nebo "
+                        "obrátí.",
+              "nalada": "Barvy od klidné (tiché pasáže) po energickou (refrén); jeden nádech za takt.",
+              "teplotni_mapa": "Barvy od studené po horkou. Klávesy se psaním ohřívají a pomalu chladnou; "
+                               "aplikace ví jen, která klávesa se stiskla, nic neukládá (po restartu je mapa "
+                               "prázdná)."}
 KEEP = ("klavesy", "zaklad")   # pri zmene efektu zustava
 # zalozky stranky (nahled a vyber M1-M3 jsou pevne nad nimi)
 TABS = [("podsviceni", "Podsvícení"), ("g", "Klávesy G1–G5"), ("predvolby", "Předvolby"),
@@ -158,6 +187,8 @@ class KeyboardEditor:
         self.react.grid(row=0, column=0, sticky="ew")
         self.vcard = V.card(t)
         self.vcard.grid(row=1, column=0, sticky="ew", pady=(16, 0))
+        self.tcard = V.card(t)                    # psani pohani efekt a sporic
+        self.tcard.grid(row=2, column=0, sticky="ew", pady=(16, 0))
         # Pamet
         self.mem = V.card(self.tabs["pamet"])
         self.mem.grid(row=0, column=0, sticky="ew")
@@ -165,6 +196,7 @@ class KeyboardEditor:
         self._build_light()
         self._build_react()
         self._build_vol()
+        self._build_typing()
         self._build_g()
         self._build_presets()
         self._build_mem()
@@ -273,7 +305,18 @@ class KeyboardEditor:
         return v
 
     def reacting(self):
-        return bool(self.rcfg["zapnuto"])
+        """Ukazovat v nahledu ukazkove stisky? (reakce, psani pohani efekt, efekt kreslici ze stisku)"""
+        return bool(self.rcfg["zapnuto"] or self.cfg_part("psani_klavesnice", kbfx.TYPING_DEFAULT)["zapnuto"]
+                    or any(e.get("typ") in kbfx.KEY_EFFECTS for e in led.kb_effects(self.preview_cfg(self.lcfg)[0])))
+
+    def cfg_part(self, key, default):
+        """Spolecne nastaveni klavesnice (psani, sporic) - doplnene o vychozi hodnoty."""
+        v = self.lcfg.get(key)
+        if not isinstance(v, dict):
+            v = self.lcfg[key] = {}
+        for k, d in default.items():
+            v.setdefault(k, d)
+        return v
 
     # ------------------------------------------------------------ nahled a stav (pevne nad zalozkami)
     def _build_top(self):
@@ -927,6 +970,11 @@ class KeyboardEditor:
             row += 1
         if "klavesy" in names:
             row = self._paint(f, eff, row)
+        if typ != "vlastni":                                 # barvy se pomalu posouvaji po barevnem kruhu
+            self._slider(f, row, "Posun barev", eff, "posun_barev", 0, 10)
+            ttk.Label(f, style="Small.TLabel", text="0 = bez posunu, 1 = celý barevný kruh za 10 min, 10 = za 1 min").grid(
+                row=row + 1, column=1, sticky="w")
+            row += 2
         if typ in COLOR_NOTE:
             ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 40, justify="left", text=COLOR_NOTE[typ]).grid(
                 row=row, column=0, columnspan=2, sticky="w", pady=(6, 0))
@@ -1005,8 +1053,9 @@ class KeyboardEditor:
         ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
             "Přes celou klávesnici a všechno ostatní – efekt, části, předvolbu i hudbu "
             "(přednost má jen ukazatel hlasitosti). Platí ve všech M1–M3. Aplikace pozná jen to, která klávesa "
-            "se stiskla – nic neukládá a sledování běží, jen když je reakce zapnutá. Logo, jas a G1–G5 Windows "
-            "nehlásí.")).grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 6))
+            "se stiskla – nic neukládá a sledování běží, jen když ho něco potřebuje (reakce, ukazatel hlasitosti, "
+            "psaní pohání efekt, teplotní mapa, hra života). Logo, jas a G1–G5 Windows nehlásí.")).grid(
+            row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 6))
         on = tk.BooleanVar(value=bool(rc["zapnuto"]))
 
         def on_toggle():
@@ -1027,8 +1076,11 @@ class KeyboardEditor:
 
         def on_m():
             rc["rezim"] = mv.get()
-        V.segmented(b, mv, kbfx.REACTIONS, command=on_m, style="SegSmall.Toolbutton").grid(
-            row=0, column=1, sticky="w", pady=4)
+        chips = ttk.Frame(b)                                 # 8 reakci - mrizka po ctyrech
+        chips.grid(row=0, column=1, sticky="w", pady=4)
+        for i, (key, name) in enumerate(kbfx.REACTIONS):
+            ttk.Radiobutton(chips, text=name, value=key, variable=mv, command=on_m, style="Chip.Toolbutton",
+                            width=11).grid(row=i // 4, column=i % 4, sticky="ew", padx=2, pady=2)
         self._label(b, 1, "Barva")
         cf = ttk.Frame(b)
         cf.grid(row=1, column=1, sticky="w", pady=4)
@@ -1050,6 +1102,56 @@ class KeyboardEditor:
         ttk.Checkbutton(cf, text="každý stisk jinou barvou duhy", variable=rainbow, command=on_rb).pack(
             side="left", padx=(12, 0))
         self._slider(b, 2, "Doba dohasnutí", rc, "doba", 0.2, 3.0, 0.1, "{:.1f} s")
+        self._refit()
+
+    # ------------------------------------------------------------ psani pohani efekt a sporic (spolecne)
+    def _build_typing(self):
+        f = self.tcard
+        for w in f.winfo_children():
+            w.destroy()
+        ts = self.cfg_part("psani_klavesnice", kbfx.TYPING_DEFAULT)
+        sv = self.cfg_part("sporic_klavesnice", kbfx.SAVER_DEFAULT)
+        f.columnconfigure(1, weight=1)
+        V.card_title(f, "Psaní a spořič").grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(14, 2))
+        ttk.Label(f, style="Small.TLabel", wraplength=WRAP, justify="left", text=(
+            "Platí ve všech M1–M3 pro efekt i části klávesnice.")).grid(
+            row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 6))
+        tv = tk.BooleanVar(value=bool(ts["zapnuto"]))
+
+        def on_t():
+            ts["zapnuto"] = tv.get()
+            self._build_typing()
+            self.refresh()
+        ttk.Checkbutton(f, text="Psaní pohání efekt – čím rychleji píšeš, tím rychlejší a jasnější efekt",
+                        variable=tv, command=on_t).grid(row=2, column=0, columnspan=3, sticky="w", padx=20, pady=2)
+        b = ttk.Frame(f)
+        b.grid(row=3, column=0, columnspan=3, sticky="ew", padx=20)
+        b.columnconfigure(1, weight=1)
+        row = 0
+        if ts["zapnuto"]:
+            self._slider(b, row, "Citlivost", ts, "sila", 1, 10)
+            ttk.Label(b, style="Small.TLabel", wraplength=WRAP - 40, justify="left", text=(
+                "Bez psaní svítí efekt na 35 % a běží pomaleji. Vyšší citlivost = plný jas už při pomalém "
+                "psaní (5 ≈ 7 kláves za sekundu).")).grid(row=row + 1, column=0, columnspan=2, sticky="w",
+                                                           pady=(0, 6))
+            row += 2
+        svv = tk.BooleanVar(value=bool(sv["zapnuto"]))
+
+        def on_s():
+            sv["zapnuto"] = svv.get()
+            self._build_typing()
+        ttk.Checkbutton(f, text="Spořič – po nečinnosti klávesnici ztlumit", variable=svv, command=on_s).grid(
+            row=4, column=0, columnspan=3, sticky="w", padx=20, pady=(8, 2))
+        c = ttk.Frame(f)
+        c.grid(row=5, column=0, columnspan=3, sticky="ew", padx=20, pady=(0, 16))
+        c.columnconfigure(1, weight=1)
+        if sv["zapnuto"]:
+            self._slider(c, 0, "Po nečinnosti", sv, "minuty", 1, 30, 1, "{:g} min")
+            self._slider(c, 1, "Jas ve spánku", sv, "jas", 0, 50, 5, "{:g} %")
+            ttk.Label(c, style="Small.TLabel", wraplength=WRAP - 40, justify="left", text=(
+                "Nečinnost = nikdo nesáhl na klávesnici ani myš (herní ovladač Windows nepočítají). Klávesnice "
+                "za 3 s ztmavne, první stisk nebo pohyb myší ji probudí vlnou od stisknuté klávesy. "
+                "V náhledu se spořič neukazuje.")).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
         self._refit()
 
     def _refit(self):

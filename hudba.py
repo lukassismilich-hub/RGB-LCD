@@ -108,6 +108,7 @@ def _vivid(h, s, floor=0.75):
 
 
 MAX_COVER_COLORS = 6
+COVER_GRID = 12              # obal pro styl "obal alba ve skrini": 12 x 12 barev
 # kontrast barev: kazde dve barvy palety se lisi aspon o tolik stupnu odstinu (HSV). Uzivatel vidi
 # jako podobne i 23-25 stupnu (svetle modra / tyrkysova, modra 200 / 225) a stejny odstin bledy
 # a plny (na LED bledy = belavy) - proto pevne 40 stupnu, bez bledych tonu.
@@ -117,6 +118,25 @@ LED_SATURATION = 0.85        # sytost barev na LED aspon tolik - mene syte na LE
 
 def _hue_gap(h, hues):
     return min((min(abs(h - x), 1 - abs(h - x)) for x in hues), default=1.0)
+
+
+def cover_grid(img, n=COVER_GRID):
+    """Obal zmenseny na n x n barev pro styl "obal alba ve skrini" ([radek][sloupec] = (r, g, b) 0-255).
+    Barvy jsou sytejsi a svetlejsi nez na obrazku - mene syte a tmave vypadaji na LED bile / zhasnute."""
+    from PIL import Image
+    small = img.convert("RGB").resize((n, n), Image.BOX)
+    px = list(small.getdata())
+    out = []
+    for r in range(n):
+        row = []
+        for c in range(n):
+            h, s, v = colorsys.rgb_to_hsv(*(x / 255.0 for x in px[r * n + c]))
+            if s > 0.12:                                  # barevna mista vytahnout, sede nechat sede
+                s = min(1.0, s * 1.6 + 0.1)
+            v = 0.12 + 0.88 * v ** 0.8
+            row.append(tuple(round(x * 255.0, 1) for x in colorsys.hsv_to_rgb(h, s, v)))
+        out.append(row)
+    return out
 
 
 def cover_palette(img, n=MAX_COVER_COLORS, sens=5, fill=True):
@@ -1147,6 +1167,10 @@ class Music:
         snap["paleta"] = music_palette(c, tr)
         snap["track_n"] = tr["n"] if tr else 0
         snap["mix"] = self._mix
+        if tr and tr.get("obal") is not None:            # styl "obal alba ve skrini": zmenseny obal
+            if tr.get("obal_mini_id") != tr.get("obal_id"):
+                tr["obal_mini"], tr["obal_mini_id"] = cover_grid(tr["obal"]), tr.get("obal_id")
+            snap["obal"] = tr["obal_mini"]
         return snap
 
     def kb_snapshot(self):

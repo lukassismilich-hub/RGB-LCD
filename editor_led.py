@@ -34,13 +34,15 @@ TABS = [("efekt", "Efekt"), ("hudba", "Hudba"), ("synchro", "Synchronizace"),
 # skupiny efektu v okne (jen vzhled stranky; efekt, ktery v zadne skupine neni, pujde do "Ostatni")
 FX_GROUPS = [
     ("Klidné", ("vypnuto", "barva", "vlastni", "staticky_prechod", "prechod", "dychani", "duhove_dychani",
-                "dychajici_paleta", "stridani", "rozpousteni", "tep")),
-    ("Duha a palety", ("duha_toceni", "duha_prelevani", "plazma", "paleta", "vysece", "pracka", "vlneni",
-                       "polarni_zare", "stirani")),
-    ("Pohyb", ("kometa", "dvojita_kometa", "stafeta", "obeznice", "skladani", "divadlo", "odraz", "majak",
-               "policie", "pretahovana")),
+                "dychajici_paleta", "stridani", "rozpousteni", "odlesk", "tep")),
+    ("Duha a palety", ("duha_toceni", "duha_prelevani", "plazma", "paleta", "vysece", "pracka", "kolo_stesti",
+                       "vlneni", "polarni_zare", "stirani")),
+    ("Pohyb", ("kometa", "dvojita_kometa", "stafeta", "obeznice", "skladani", "prskavka", "divadlo", "odraz",
+               "majak", "policie", "pretahovana")),
     ("Částice", ("trpyt", "duhovy_trpyt", "konfety", "ohnostroj", "blesky", "blikani", "stroboskop", "kapky")),
-    ("Zespodu", ("ohen", "plamen", "vodopad", "micky")),
+    ("Zespodu", ("ohen", "plamen", "vodopad", "micky", "hodiny_pisek", "kapani")),
+    ("Přes skříň", ("lava", "obloha", "plamen_skrin", "duha_skrin", "dest_snih", "bubliny", "padajici_hvezdy",
+                    "reflektory")),
     ("Senzor", ("teplota", "hladina")),
 ]
 FAN_NAMES = {"f140_1": "F140 (1)", "f140_2": "F140 (2)", "D_LED1": "Deska – D_LED1", "D_LED2": "Deska – D_LED2",
@@ -598,6 +600,21 @@ class LedEditor:
             gl.pack(side="left", padx=(8, 0))
             show_glitter()
             row += 1
+        if typ in fx.EFFECTS and typ not in ("vypnuto", "vlastni"):     # barvy se pomalu posouvaji po kruhu
+            row = self._hue_slider(f, eff, row)
+        if typ == "dest_snih":                              # dest / snih
+            ttk.Label(f, text="Padá", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+            kv = tk.StringVar(value=eff.get("druh", "dest"))
+            V.segmented(f, kv, [("dest", "déšť"), ("snih", "sníh")],
+                        command=lambda: eff.__setitem__("druh", kv.get())).grid(row=row, column=1, sticky="w",
+                                                                               padx=8, pady=4)
+            row += 1
+        if typ == "duha_skrin":                             # smer duhy ve skrini
+            ttk.Label(f, text="Směr", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+            dv2 = tk.StringVar(value=eff.get("smer_skrin", "dozadu"))
+            V.segmented(f, dv2, fx.CASE_DIRS, command=lambda: eff.__setitem__("smer_skrin", dv2.get()),
+                        style="SegSmall.Toolbutton").grid(row=row, column=1, sticky="w", padx=8, pady=4)
+            row += 1
         if typ in fx.PAUSE_EFFECTS:                         # pauza naplno / se stejnou barvou
             ttk.Label(f, text="Pauza naplno" if typ == "dychani" else "Pauza", style="Muted.TLabel").grid(
                 row=row, column=0, sticky="w", pady=4)
@@ -618,7 +635,7 @@ class LedEditor:
             pl.pack(side="left", padx=(8, 0))
             show_pause()
             row += 1
-        if typ == "duha_prelevani":                         # plna duha, nebo vlastni barvy (az 8)
+        if typ in fx.RAINBOW_MODE:                          # plna duha, nebo vlastni barvy (az 8)
             ttk.Label(f, text="Režim barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
             mv = tk.StringVar(value="barvy" if eff.get("barvy_rezim") == "barvy" else "duha")
 
@@ -628,7 +645,7 @@ class LedEditor:
             V.segmented(f, mv, [("duha", "plná duha"), ("barvy", "vlastní barvy")], command=on_mode).grid(
                 row=row, column=1, sticky="w", padx=8, pady=4)
             row += 1
-        if typ in fx.PALETTE and not (typ == "duha_prelevani" and eff.get("barvy_rezim") != "barvy"):
+        if typ in fx.PALETTE and not (typ in fx.RAINBOW_MODE and eff.get("barvy_rezim") != "barvy"):
             row = self._palette_editor(f, eff, typ, row, rebuild=rebuild)   # paleta s volitelnym poctem barev
         elif ncolors:
             labels = {"kometa": ["kometa", "pozadí"], "trpyt": ["záblesky", "pozadí"],
@@ -636,7 +653,10 @@ class LedEditor:
                       "dvojita_kometa": ["kometa 1", "kometa 2"], "policie": ["první", "druhá"],
                       "tep": ["barva"], "stroboskop": ["barva"], "divadlo": ["světla", "pozadí"],
                       "odraz": ["světlo", "pozadí"], "blesky": ["blesk", "pozadí"],
-                      "stafeta": ["kometa", "pozadí"]}.get(
+                      "stafeta": ["kometa", "pozadí"], "prskavka": ["hlava", "jiskry"],
+                      "hodiny_pisek": ["písek", "sklo"], "kapani": ["kapka", "louže"],
+                      "dest_snih": ["kapky", "pozadí"], "bubliny": ["bubliny", "voda"],
+                      "padajici_hvezdy": ["meteor", "hvězdy"]}.get(
                 typ, [f"barva {i + 1}" for i in range(ncolors)])
             cols = eff.setdefault("barvy", list(fx.DEFAULT_EFFECT["barvy"]))
             while len(cols) < ncolors:
@@ -648,6 +668,12 @@ class LedEditor:
                 b = V.swatch(bf, cols[i], None, text=labels[i], width=8)
                 b.config(command=lambda i=i, b=b: self._pick_list(cols, i, b))
                 b.pack(side="left", padx=(0, 6), ipady=4)
+            row += 1
+        if typ in fx.SPACE_FX:
+            ttk.Label(f, style="Small.TLabel", wraplength=WRAP - 40, justify="left", text=(
+                "Jeden obraz přes celou skříň podle rozmístění ventilátorů (záložka Zapojení) – v náhledu zapni "
+                "„Jako ve skříni“. Vlna a ozubená kola se u něj nepoužijí.")).grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=4)
             row += 1
         if typ in fx.VERTICAL and int(eff.get("otoceni", 0)) % 360:   # otoceni se nastavuje v Zapojeni
             ttk.Label(f, style="Small.TLabel", text=f"Otočení {int(eff['otoceni']) % 360}° (záložka Zapojení)").grid(
@@ -740,6 +766,28 @@ class LedEditor:
             self._preset_box(f, preset).grid(row=row, column=1, sticky="w", padx=8, pady=(0, 4))
             row += 1
         return row
+
+    @staticmethod
+    def _hue_slider(f, eff, row):
+        """Posuvnik "Posun barev" 0-10 (barvy efektu se pomalu posouvaji po barevnem kruhu)."""
+        ttk.Label(f, text="Posun barev", style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=4)
+        hf = ttk.Frame(f)
+        hf.grid(row=row, column=1, sticky="ew", padx=8)
+        hv = tk.IntVar(value=fx.hue_drift(eff))
+        hl = ttk.Label(hf, style="Muted.TLabel", width=12)
+
+        def show():
+            x = hv.get()
+            hl.config(text="bez posunu" if x <= 0 else f"kruh za {fx.HUE_DRIFT_S / x / 60:.0f} min".replace(".", ","))
+
+        def on(_e=None):
+            eff["posun_barev"] = int(hv.get())
+            show()
+        V.scale(hf, variable=hv, from_=0, to=fx.MAX_HUE_DRIFT, length=150, command=on).pack(
+            side="left", fill="x", expand=True)
+        hl.pack(side="left", padx=(8, 0))
+        show()
+        return row + 1
 
     @staticmethod
     def _preset_box(parent, apply):
@@ -948,7 +996,7 @@ class LedEditor:
             for key, name in fx.MUSIC_STYLES.items():
                 r_, c_ = cells[key]
                 ttk.Radiobutton(chips, text=name, value=key, variable=sv, style="Chip.Toolbutton",
-                                command=lambda: mc.__setitem__("styl", sv.get())).grid(
+                                command=lambda: (mc.__setitem__("styl", sv.get()), self._build_music())).grid(
                     row=r_, column=c_, sticky="ew", padx=2, pady=2)
         else:                                                # nahodne: zaskrtnout, ze kterych stylu
             pool = mc.setdefault("styly_stridat", list(fx.MUSIC_STYLES))
@@ -981,6 +1029,13 @@ class LedEditor:
             on_pick(next((k for k in fx.MUSIC_STYLES if k in pool), "pulz"))
             tip = ("S každou novou skladbou se náhodně vybere jeden ze zaškrtnutých stylů (dvakrát po sobě "
                    "stejný ne). V náhledu se styl mění každých 8 s.")
+        if not alt.get() and mc.get("styl") == "obal_skrin":
+            tip = (tip + " " if tip else "") + ("Obal alba ve skříni bere obrázek obalu právě hrající skladby; "
+                                                "simulovaná hudba v náhledu ho nahrazuje barvami palety.")
+        if not alt.get() and mc.get("styl") in ("rytmus", "bici_skrin"):
+            tip = (tip + " " if tip else "") + ("Kopák = hlavní barva, virbl = doplňková, hi-hat = třetí barva "
+                                                "(světlejší). Rytmický vzorec: kruh je jeden takt, ručička ukazuje "
+                                                "dobu, údery na kruhu vydrží dva takty.")
         rot = int(mc.get("otoceni", 0)) % 360
         if rot:
             tip = (tip + " " if tip else "") + f"Otočení svislých stylů {rot}° (záložka Zapojení)."

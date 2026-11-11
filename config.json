@@ -1986,27 +1986,29 @@
     "stejne_pro_vse": true,
     "vlna": true,
     "efekt": {
-      "typ": "vodopad",
+      "typ": "plamen_skrin",
       "barvy": [
-        "#ff0080",
-        "#7a00ff",
-        "#00e5ff",
-        "#ffe600",
+        "#ff0000",
+        "#80ff00",
+        "#00ffff",
+        "#8000ff",
         "#0000ff",
         "#ff00ff",
         "#0000d9",
         "#7400e8"
       ],
-      "rychlost": 4,
+      "rychlost": 5,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
       "max": 90,
-      "pocet_barev": 4,
+      "pocet_barev": 8,
       "otoceni": 0,
       "pauza": 0.5,
       "barvy_rezim": "barvy",
-      "jiskreni": 0
+      "jiskreni": 0,
+      "posun_barev": 0,
+      "druh": "snih"
     },
     "efekt_f140": {
       "typ": "stridani",
@@ -2063,7 +2065,7 @@
       "max": 90
     },
     "playlist": {
-      "zapnuto": true,
+      "zapnuto": false,
       "polozky": [
         {
           "typ": "stirani",
@@ -3321,7 +3323,16 @@
       "doba": 1.0
     },
     "protismerne": false,
-    "f140_predek_obracene": true
+    "f140_predek_obracene": true,
+    "psani_klavesnice": {
+      "zapnuto": false,
+      "sila": 5
+    },
+    "sporic_klavesnice": {
+      "zapnuto": false,
+      "minuty": 5,
+      "jas": 10
+    }
   },
   "ikona_programu": {
     "zapnuto": true,

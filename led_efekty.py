@@ -792,10 +792,13 @@ class Engine:
         k cili dorazi uder pri vlne (MUSIC_WAVE_S), slot = (poradi ve skrini, pocet cilu) pro skakani,
         pts = poloha kazde LED ve skrini [(x 0 predek .. 1 zadek, y 0 nahore .. 1 dole)] - led.case_points
         (prostorove styly SPATIAL; bez ni odhad z pos a polohy LED na kruhu)."""
-        if music_style(eff, snap) in SPATIAL and not snap.get("quiet"):
+        styl = music_style(eff, snap)
+        if styl in SPATIAL and not snap.get("quiet"):
             out = [_scale(c, self._jas(eff)) for c in self._space(eff, snap, key, n, pos, dt, pts)]
         else:
             out = self._music(eff, snap, key, n, pos, delay, dt, slot)
+        if not snap.get("quiet"):
+            out = self._dynamics(eff, snap, key, styl, delay, dt, out)
         if not eff.get("drop_zablesk", True):
             return out
         # duraz na drop: bily zablesk, ktery probehne skrini zepredu dozadu
@@ -818,6 +821,38 @@ class Engine:
             return max(0.0, min(1.0, float(eff.get("jas", 100)) / 100.0)) ** 2
         except (TypeError, ValueError):
             return 1.0
+
+    def _dynamics(self, eff, snap, key, styl, delay, dt, out):
+        """Co plati pro vsechny styly podle casti skladby (hudba.Analyzer): dynamika - ticha sloka sviti
+        min nez refren ("energy"); nadech - tesne pred uderem svetla ztmavnou, at uder vynikne
+        ("next_in": uder uz zachyceny diky zpozdeni svetel, jinak podle rytmicke mrizky); stavba napeti
+        pred dropem ("build") - pozadi tmavne a zrychluje se zablesk do rytmu (1, 2, 4, 8 za dobu)."""
+        k = 1.0
+        dyn = _num01(eff.get("dynamika", 5), 0.5)
+        if dyn > 0:
+            k *= 1.0 - DYNAMICS_DEPTH * dyn * (1.0 - max(0.0, min(1.0, float(snap.get("energy", 1.0)))))
+        nxt = snap.get("next_in")
+        if eff.get("predjimani", True) and nxt is not None and styl in ANTICIPATE:
+            a = float(nxt) + delay * MUSIC_WAVE_S                 # k cili uder dorazi s vlnou pozdeji
+            if 0.0 <= a < ANTICIPATE_S:
+                k *= 1.0 - ANTICIPATE_DEPTH * (1.0 - a / ANTICIPATE_S) ** 2
+        b = max(0.0, min(1.0, float(snap.get("build", 0.0)))) if eff.get("stavba", True) else 0.0
+        if b <= 0.05:
+            return out if k >= 0.999 else [_scale(c, k) for c in out]
+        sub = (1, 2, 4, 8)[min(3, int(b * 4))]
+        bpm = float(snap.get("bpm") or 0.0)
+        if bpm and float(snap.get("grid", 0.0)) > 0:              # do rytmu: deleni doby podle mrizky
+            f = (float(snap.get("beat_ph", 0.0)) * sub) % 1.0
+            tau = 0.35
+        else:                                                     # bez tempa: volne zrychlovani 2 -> 12 Hz
+            st = self.state.setdefault(("hudba_stavba", key), [0.0])
+            st[0] = (st[0] + dt * (2.0 + 10.0 * b)) % 1.0
+            f, tau = st[0], 0.35
+        cols = [hex_rgb(c) for c in (snap.get("paleta") or [])] or [hex_rgb(c) for c in DEFAULT_PALETTE[:3]]
+        acc = cols[(int(snap.get("drop_n", 0)) + 1) % len(cols)]
+        flash = _scale(_mix(acc, (255.0, 255.0, 255.0), 0.4 + 0.5 * b), b * math.exp(-f / tau) * self._jas(eff))
+        k *= 1.0 - 0.55 * b
+        return [tuple(max(c[j] * k, flash[j]) for j in range(3)) for c in out]
 
     def _music(self, eff, snap, key, n, pos, delay, dt, slot):
         cols = [hex_rgb(c) for c in (snap.get("paleta") or [])] or [hex_rgb(c) for c in DEFAULT_PALETTE[:3]]
@@ -1015,10 +1050,17 @@ class Engine:
         elif styl == "metronom":                          # svetlo obehne kruh za jednu dobu, na uder je dole
             bpm = float(snap.get("bpm") or 0.0) or 120.0
             period = 60.0 / max(50.0, min(220.0, bpm))
-            st = self.state.setdefault(("hudba_metro", key), [0.0, 0])
-            st[0] += dt / period
-            for _bid, _strength in new:                   # uder: faze na cele cislo (svetlo presne dole)
-                st[0], st[1] = float(round(st[0])), st[1] + 1
+            st = self.state.setdefault(("hudba_metro", key), [0.0, 0, 0.0])
+            if float(snap.get("grid", 0.0)) >= 0.5:       # rytmicka mrizka: faze doby primo z analyzy
+                f = (float(snap.get("beat_ph", 0.0)) - lag / period) % 1.0
+                if f < st[2] - 0.5:                       # nova doba
+                    st[1] += 1
+                st[0], st[2] = f, f
+            else:                                         # bez mrizky: vlastni faze, uder ji srovna
+                st[0] += dt / period
+                for _bid, _strength in new:               # uder: faze na cele cislo (svetlo presne dole)
+                    st[0], st[1] = float(round(st[0])), st[1] + 1
+                st[2] = st[0] % 1.0
             f = st[0] % 1.0
             c = cols[st[1] % k]
             tick = math.exp(-f * period / 0.12)           # zablesk na uder
@@ -1043,23 +1085,31 @@ class Engine:
             out = [_scale(_hsv(st[0] * 0.78 + 0.04 * math.sin(2 * math.pi * (_ring_u(i, n) + ph))), kk)
                    for i in range(n)]
         elif styl == "bici":                              # kopak rozsviti spodek kruhu, virbl a cinely vrsek
-            st = self.state.setdefault(("hudba_bici", key), [0.0, 0.0])
+            st = self.state.setdefault(("hudba_bici", key), [0.0, 0.0, 0.0])
             st[0] *= math.exp(-dt / 0.16)
-            st[1] *= math.exp(-dt / 0.09)
-            for _bid, strength in new:
+            st[1] *= math.exp(-dt / 0.12)
+            st[2] *= math.exp(-dt / 0.06)
+            split = "kicks" in snap                       # analyza rozlisuje kopak / virbl / hi-hat
+            for _bid, strength in (self._new_beats(key, snap, lag, field="kicks", tag="hudba_kopak")
+                                   if split else new):
                 st[0] = max(st[0], strength)
-            for _hid, strength in self._new_beats(key, snap, lag, field="beats_hi", tag="hudba_cinel"):
+            for _hid, strength in self._new_beats(key, snap, lag, field="snares" if split else "beats_hi",
+                                                  tag="hudba_cinel"):
                 st[1] = max(st[1], strength)
-            hat = _mix(acc, white, 0.35)
+            if split:                                     # hi-hat: kratsi a slabsi bily zablesk
+                for _hid, strength in self._new_beats(key, snap, lag, field="hats", tag="hudba_hihat"):
+                    st[2] = max(st[2], 0.55 * strength)
+            sn, hat = _mix(acc, white, 0.25), _mix(acc, white, 0.7)
             bg = _scale(main, 0.03)
+            top = tuple(max(sn[j] * st[1], hat[j] * st[2]) for j in range(3))
             if n == 1:
-                out = [tuple(max(bg[j], main[j] * st[0], hat[j] * st[1] * 0.7) for j in range(3))]
+                out = [tuple(max(bg[j], main[j] * st[0], top[j] * 0.7) for j in range(3))]
             else:
                 out = []
                 for i in range(n):
                     h = 1 - (_ring_y(i, n, eff) + 1) / 2          # 0 = dole, 1 = nahore
                     low = max(0.0, min(1.0, (0.5 - h) * 4 + 0.5))    # podil spodni pulky (mekka hranice)
-                    out.append(tuple(max(bg[j], main[j] * st[0] * low, hat[j] * st[1] * (1 - low))
+                    out.append(tuple(max(bg[j], main[j] * st[0] * low, top[j] * (1 - low))
                                      for j in range(3)))
         else:                                             # "pulz": basy = jas, uder = zablesk vlnou, vysky = jiskry
             kk = min(1.0, 0.10 - 0.04 * e + (0.55 + 0.2 * e) * bass + (0.6 + 0.4 * e) * fl)
@@ -1260,6 +1310,12 @@ MUSIC_WAVE_S = 0.25          # za jak dlouho uder probehne celou skrini (pri vln
 DROP_WAVE_S = 0.3            # duraz na drop: za jak dlouho bily zablesk probehne skrini
 FLOW_CASE_S, FLOW_RING_S = 0.55, 0.22       # prutok: za jak dlouho barva protece skrini / vystoupa po kruhu
 MUSIC_FPS = 50               # snimky za sekundu, kdyz hraje hudba (jinak FPS)
+DYNAMICS_DEPTH = 0.7         # dynamika skladby na maximu: nejtissi cast sviti o tolik min nez refren
+ANTICIPATE_S = 0.09          # nadech pred uderem: jak dlouho pred nim svetla tmavnou ...
+ANTICIPATE_DEPTH = 0.45      # ... a o kolik
+# styly, kde uder dela zablesk (u spektra, hladiny apod. by nadech jen rusil)
+ANTICIPATE = ("pulz", "zablesky", "stridani", "rotace", "michani", "skakani", "bici", "ton", "stereo",
+              "plazma_skrin")
 _style_seq = {}              # (vyber stylu) -> [styl pro skladbu 0, 1, 2...] - nahodne bez opakovani
 
 
@@ -1302,6 +1358,14 @@ def band_mix(colors, weights):
     return tuple(sum(c[j] * q for c, q in zip(colors, p)) / s * top for j in range(3))
 
 
+def _num01(v, default):
+    """Nastaveni 0-10 -> 0..1."""
+    try:
+        return max(0.0, min(1.0, float(v) / 10.0))
+    except (TypeError, ValueError):
+        return default
+
+
 def bass_emphasis(eff):
     """Duraz na basy 0..1 z nastaveni "basy" 0-10 (vychozi 7)."""
     try:
@@ -1338,34 +1402,71 @@ def beat_ratio(sens):
     return 1.7 - 0.05 * max(1.0, min(10.0, float(sens)))
 
 
+def beat_share(sens):
+    """Citlivost na hudbu 1-10 -> jak silny musi uder byt vuci nejsilnejsim nedavnym uderum tehoz
+    nastroje (0,62 .. 0,35): vlneni basu vedle silneho kopaku uder neni, vyssi citlivost bere i slabsi."""
+    return 0.65 - 0.03 * max(1.0, min(10.0, float(sens)))
+
+
 def music_demo(t, paleta=None, track_n=0):
-    """Simulovana hudba pro nahled v okne (120 uderu za minutu, hi-hat mezi udery, drop kazdych 16 s)."""
-    period = 0.5
-    cur = math.floor(t / period)
-    beats = []
-    for j in range(3, -1, -1):
-        bid = cur - j
-        if bid >= 0:
-            beats.append((t - bid * period, 1.0 if bid % 4 == 0 else 0.7, bid + 1))
-    hats = []                                             # virbl / cinely mezi udery
-    hcur = math.floor(t / period - 0.5)
-    for j in range(3, -1, -1):
-        hid = hcur - j
-        if hid >= 0:
-            hats.append((t - (hid + 0.5) * period, 0.8, hid + 1))
-    age = t - cur * period
-    bass = 0.1 + 0.85 * math.exp(-age / 0.15)
-    high = 0.85 * math.exp(-((t - period / 2) % period) / 0.05)
+    """Simulovana hudba pro nahled v okne: 120 uderu za minutu (kopak na liche, virbl na sude doby, hi-hat
+    mezi nimi), po 16 s se opakuje 8 s naplno, 3 s tissi cast, 5 s stavba napeti (bez basu, virbl
+    zrychluje) a drop."""
+    period, cyc = 0.5, 16.0
+    t = max(0.0, t)
+    c = t % cyc
+    build = max(0.0, (c - 11.0) / 5.0)
+    energy = 1.0 if c < 8 else (0.45 if c < 11 else 0.6 + 0.3 * build)
+    ev = {"beats": [], "kicks": [], "snares": [], "hats": [], "beats_hi": []}
+    nxt = None
+    k0 = int(t // cyc)
+    for k in (k0 - 1, k0, k0 + 1):                        # udalosti tohoto, minuleho a pristiho cyklu
+        if k < 0:
+            continue
+        base = k * cyc
+        one = {name: [] for name in ev}
+        for i in range(24):                               # doby 0 .. 11,5 s; od 11 s uz jen virbl
+            tt = i * period
+            s = (1.0 if i % 4 == 0 else 0.7) * (0.6 if 8 <= tt < 11 else 1.0)
+            one["beats"].append((tt, s))
+            if tt < 11:
+                one["kicks" if i % 2 == 0 else "snares"].append((tt, s))
+                one["hats"].append((tt + period / 2, 0.8 if tt < 8 else 0.5))
+            else:
+                one["snares"].append((tt, 0.6))
+        for i in range(16):                               # 12 .. 16 s: virbl po pul dobe, sili
+            tt = 12.0 + i * period / 2
+            if i:                                         # (12,0 s uz je v dobach)
+                one["beats"].append((tt, 0.5 + 0.5 * i / 16))
+                one["snares"].append((tt, 0.5 + 0.5 * i / 16))
+        one["beats"].sort()
+        one["snares"].sort()
+        one["beats_hi"] = sorted(one["snares"] + one["hats"])
+        for name, items in one.items():
+            for j, (tt, s) in enumerate(items):
+                if base + tt <= t:
+                    ev[name].append((t - base - tt, s, k * len(items) + j + 1))
+                elif name == "beats" and nxt is None:
+                    nxt = base + tt - t
+    for name, keep in (("beats", 4), ("kicks", 4), ("snares", 4), ("hats", 6), ("beats_hi", 6)):
+        ev[name] = ev[name][-keep:]
+    age = ev["kicks"][-1][0] if ev["kicks"] else 9.0
+    bass = (0.1 + 0.85 * math.exp(-age / 0.15)) * (0.0 if c >= 11 else 0.7 if c >= 8 else 1.0) + 0.04
+    high = min(1.0, 0.85 * math.exp(-(ev["beats_hi"][-1][0] if ev["beats_hi"] else 9.0) / 0.05) + 0.5 * build)
     mid = 0.45 + 0.25 * math.sin(t * 0.7)
     bands = []
     for b in range(16):
         x = b / 15
         v = bass * (1 - x) ** 2 + mid * math.exp(-((x - 0.5) / 0.25) ** 2) + high * x * x
         bands.append(max(0.0, min(1.0, v * 0.9 + 0.08 * math.sin(t * 3 + b))))
-    return {"bass": bass, "mid": mid, "high": high, "level": 0.6 + 0.2 * math.sin(t * 0.3), "bands": bands,
-            "beats": beats, "beats_hi": hats, "beat_n": cur + 1, "drop_n": int(t // 16), "phase": t * 0.3,
-            "bpm": 120.0, "stereo": 0.35 * math.sin(t * 0.9),
-            "quiet": False, "paleta": list(paleta or DEFAULT_PALETTE[:3]), "track_n": track_n, "mix": 1.0}
+    out = {"bass": bass, "mid": mid, "high": high, "level": (0.6 + 0.2 * math.sin(t * 0.3)) * (0.5 + 0.5 * energy),
+           "bands": bands, "beat_n": ev["beats"][-1][2] if ev["beats"] else 0, "drop_n": int(t // cyc),
+           "phase": t * 0.3, "bpm": 120.0, "stereo": 0.35 * math.sin(t * 0.9),
+           "energy": energy, "build": build, "grid": 1.0, "beat_ph": (t / period) % 1.0,
+           "bar": int(t // period) % 4, "next_in": nxt,
+           "quiet": False, "paleta": list(paleta or DEFAULT_PALETTE[:3]), "track_n": track_n, "mix": 1.0}
+    out.update(ev)
+    return out
 
 
 def bottom_led(n):

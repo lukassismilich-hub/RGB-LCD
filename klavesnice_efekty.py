@@ -1074,9 +1074,10 @@ class Engine:
 
     def _hit(self, eff, music, key):
         """Sila noveho uderu 0..1, jinak 0. Udery hleda analyza s citlivosti ventilatoru; nizsi vlastni
-        citlivost efektu ignoruje udery pod svym prahem - sila uderu k = (pomer - prah) / prah + 0,5
-        (hudba.Analyzer), takze prah c' odpovida k >= (c' - c) / c + 0,5. Vyssi vlastni citlivost
-        udery navic nepridava."""
+        citlivost efektu ignoruje slabsi udery (od 11. 11. 2026 je sila uderu 0,3 + 0,7 x narust vuci
+        nejsilnejsim nedavnym uderum - hudba.Analyzer._strength): projde uder se silou
+        k >= (c' - c) / c + 0,5, kde c' a c jsou prahy vlastni a spolecne citlivosti (fx.beat_ratio).
+        Vyssi vlastni citlivost udery navic nepridava."""
         if not music:
             return 0.0
         n = int(music.get("beat_n", 0))

@@ -74,6 +74,9 @@ PLAYLIST_DEFAULT = {"zapnuto": False, "polozky": [], "prolinani": 1.0}
 MUSIC_DEFAULT = {"zapnuto": True, "styl": "pulz", "stridat": False, "styly_stridat": list(fx.MUSIC_STYLES),
                  "citlivost": 5, "basy": 7, "jas": 100,
                  "drop_zablesk": True,                 # duraz na drop: bily zablesk vlnou skrini
+                 "dynamika": 5,                        # 0-10: o kolik sviti tiche casti skladby min nez refren
+                 "stavba": True,                       # stavba napeti pred dropem: zrychlujici zablesk
+                 "predjimani": True,                   # nadech: tesne pred uderem svetla ztmavnou
                  "barvy": "obal", "citlivost_barev": 7, "doplnit_barvy": True, "paleta": ["#ff2a6d", "#7b2cff", "#05d9e8"],
                  "zpozdeni_ms": 180, "navrat_s": 3, "otoceni": 0}
 MAX_REPEATS = 999

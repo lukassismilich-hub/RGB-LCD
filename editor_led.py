@@ -1003,8 +1003,24 @@ class LedEditor:
         ttk.Checkbutton(c, text="Důraz na drop – bílý záblesk, který proběhne skříní", variable=dz,
                         command=lambda: mc.__setitem__("drop_zablesk", dz.get())).grid(
             row=8, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 0))
-        note(c, 9, "Drop / refrén = hudba náhle výrazně zesílí. Platí pro všechny styly; v náhledu se "
-                   "simulovanou hudbou přichází každých 16 s.", pady=(0, 16))
+        note(c, 9, "Drop = basy se po odmlce vrátí, nebo hudba náhle výrazně zesílí. Platí pro všechny styly; "
+                   "v náhledu se simulovanou hudbou přichází každých 16 s.", pady=(0, 8))
+        sb = tk.BooleanVar(value=bool(mc.get("stavba", True)))
+        ttk.Checkbutton(c, text="Stavba napětí před dropem – pozadí tmavne, záblesk do rytmu zrychluje",
+                        variable=sb, command=lambda: mc.__setitem__("stavba", sb.get())).grid(
+            row=10, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 0))
+        note(c, 11, "Když basy vypadnou a středy a výšky stoupají (virbl houstne), záblesk jde 1×, 2×, 4× a 8× "
+                    "za dobu. V náhledu posledních 5 s před dropem.", pady=(0, 8))
+        slider(c, 12, "Dynamika skladby", "dynamika", 0, 10, 1, lambda x: f"{x}")
+        note(c, 13, "Tišší části skladby (sloka, mezihra) svítí méně než refrén a drop – na 10 až o 70 %. "
+                    "0 = všechny části stejně jasné (jako dřív).", pady=(0, 8))
+        pj = tk.BooleanVar(value=bool(mc.get("predjimani", True)))
+        ttk.Checkbutton(c, text="Nádech před úderem – těsně před ním světla krátce ztmavnou", variable=pj,
+                        command=lambda: mc.__setitem__("predjimani", pj.get())).grid(
+            row=14, column=0, columnspan=3, sticky="w", padx=20, pady=(2, 0))
+        note(c, 15, "Úder pak víc vynikne. Aplikace o něm ví předem díky zpoždění světel (od ~60 ms), jinak ho "
+                    "odhaduje z tempa. Jen u stylů se zábleskem na úder (pulz, záblesky, barvy do rytmu…).",
+             pady=(0, 16))
 
         # 4) barvy
         d = card(3, "Barvy")

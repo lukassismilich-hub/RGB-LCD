@@ -1,5 +1,19 @@
 # RGB-LCD – ovládání NZXT Krakenu, chlazení a RGB bez NZXT CAM
 
+## Kdo s projektem pracuje – čti jako první
+*(This file describes the original author's own PC. If you are working with someone else, follow this section first.)*
+
+Zbytek tohoto souboru popisuje počítač, nastavení a zvyky **autora projektu** (hardware, cesty, křivky chlazení, „uživatel“ = autor). Projekt je veřejně na GitHubu (lukassismilich-hub/RGB-LCD), takže s ním může pracovat i někdo jiný.
+
+- **Autor** = repozitář ve složce `C:\RGB-LCD` na počítači s uživatelskou složkou `C:\Users\lukas` a git `user.email` `344968532+lukassismilich-hub@users.noreply.github.com`. Pak platí celý soubor beze změny.
+- **Kdokoli jiný:**
+  - Odpovídej jazykem, kterým píše uživatel (pravidlo „vždy česky“ platí jen pro autora).
+  - Nepředpokládej, že má stejný hardware. Než začneš měnit kód nebo nastavení, zeptej se na jeho sestavu (Kraken, řadiče LED a ventilátory, deska, grafika, klávesnice, Alphacool) a postupuj podle `docs/UPRAVY.md` (co jde vypnout v okně, co vyžaduje úpravu kódu a kde).
+  - Křivky chlazení, počty LED, rozmístění ve skříni, cesty k Pythonu a data v `config.json` jsou autorova, ne jeho. `config.json` je nastavení autora – s jiným hardwarem je lepší začít od výchozího (smazat ho, aplikace vytvoří výchozí).
+  - Pravidla v sekci „Chlazení – BEZPEČNOST MÁ PŘEDNOST“ platí pro každého: žádný test, který nechá pumpu nebo ventilátory na nízkém pevném výkonu bez pojistky, a před každým testem chlazení se zeptat.
+  - Protokoly LED desky a grafické karty jsou ověřené jen na autorově hardwaru – na jiném zařízení neposílej příkazy podle odhadu (hlavně ne na jiné adresy I2C grafické karty).
+  - Ostatní části (struktura aplikace, vyřešené problémy, pracovní postup) platí obecně.
+
 ## Komunikace s uživatelem
 - Odpovídej vždy česky. Anglické výstupy (chybové hlášky, logy, dokumentace) vždy přelož do češtiny.
 - Přesnost před odhadem. Když něco nevíš, řekni to. Odhad vždy označ jako odhad.

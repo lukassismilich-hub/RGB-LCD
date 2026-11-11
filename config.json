@@ -1986,14 +1986,14 @@
     "stejne_pro_vse": true,
     "vlna": true,
     "efekt": {
-      "typ": "plamen",
+      "typ": "vodopad",
       "barvy": [
-        "#ffffff",
-        "#ff0000",
-        "#df7000",
-        "#f4f400",
-        "#00ff00",
-        "#00ffff",
+        "#ff0080",
+        "#7a00ff",
+        "#00e5ff",
+        "#ffe600",
+        "#0000ff",
+        "#ff00ff",
         "#0000d9",
         "#7400e8"
       ],
@@ -2002,10 +2002,11 @@
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
       "max": 90,
-      "pocet_barev": 8,
+      "pocet_barev": 4,
       "otoceni": 0,
       "pauza": 0.5,
-      "barvy_rezim": "barvy"
+      "barvy_rezim": "barvy",
+      "jiskreni": 0
     },
     "efekt_f140": {
       "typ": "stridani",
@@ -2085,7 +2086,8 @@
           "otoceni": 0,
           "pauza": 0.5,
           "barvy_rezim": "barvy",
-          "opakovani": 1
+          "opakovani": 1,
+          "jiskreni": 0
         },
         {
           "typ": "dychani",
@@ -2231,15 +2233,51 @@
           "min": 40,
           "max": 90,
           "opakovani": 7
+        },
+        {
+          "typ": "vodopad",
+          "barvy": [
+            "#ff0080",
+            "#7a00ff",
+            "#00e5ff",
+            "#ffe600",
+            "#00ff40",
+            "#ffb000",
+            "#b000ff",
+            "#00e5ff"
+          ],
+          "rychlost": 3,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 17,
+          "pocet_barev": 4
+        },
+        {
+          "typ": "obeznice",
+          "barvy": [
+            "#ff00c8",
+            "#00e5ff",
+            "#b4ff00",
+            "#7a00ff"
+          ],
+          "rychlost": 2,
+          "opacny_smer": false,
+          "senzor": "CPU (Tctl/Tdie)",
+          "min": 40,
+          "max": 90,
+          "opakovani": 10,
+          "pocet_barev": 3
         }
       ],
       "prolinani": 2.0
     },
     "hudba": {
       "zapnuto": true,
-      "styl": "klidny",
+      "styl": "bici",
       "stridat": true,
-      "citlivost": 6,
+      "citlivost": 8,
       "jas": 100,
       "barvy": "obal",
       "paleta": [
@@ -2249,10 +2287,10 @@
         "#0060ff",
         "#00ff40"
       ],
-      "zpozdeni_ms": 100,
+      "zpozdeni_ms": 120,
       "navrat_s": 2,
-      "citlivost_barev": 10,
-      "basy": 6,
+      "citlivost_barev": 8,
+      "basy": 8,
       "styly_stridat": [
         "pulz",
         "spektrum",
@@ -2261,11 +2299,31 @@
         "jiskry",
         "zablesky",
         "vlny",
+        "vu",
         "stridani",
-        "plameny"
+        "plameny",
+        "prutok",
+        "skakani",
+        "metronom",
+        "ton",
+        "michani",
+        "bici",
+        "hladina_skrin",
+        "fontana",
+        "razova_vlna",
+        "proudeni",
+        "spektrum_vyska",
+        "stereo",
+        "dest",
+        "ohnostroj_skrin",
+        "plazma_skrin"
       ],
       "otoceni": 0,
-      "doplnit_barvy": false
+      "doplnit_barvy": false,
+      "drop_zablesk": true,
+      "dynamika": 7,
+      "stavba": true,
+      "predjimani": true
     },
     "klavesnice_m": {
       "1": {
@@ -2887,6 +2945,123 @@
               }
             },
             {
+              "nazev": "kraje",
+              "zapnuto": true,
+              "klavesy": [
+                37,
+                39,
+                40,
+                41,
+                50,
+                54,
+                97,
+                98,
+                104,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111
+              ],
+              "efekt": {
+                "typ": "vlna_uder",
+                "rychlost": 5,
+                "barvy": [
+                  "#00a0ff",
+                  "#ff0080"
+                ],
+                "barvy_hudba": "obal",
+                "pozadi": "#000000",
+                "pocet_barev": 2
+              }
+            },
+            {
+              "nazev": "Část 4",
+              "zapnuto": true,
+              "klavesy": [
+                76,
+                77,
+                78,
+                79
+              ],
+              "efekt": {
+                "typ": "pulz",
+                "rychlost": 5,
+                "barvy": [
+                  "#ff0040",
+                  "#00a0ff"
+                ],
+                "barvy_hudba": "obal",
+                "pocet_barev": 2
+              }
+            },
+            {
+              "nazev": "numblok",
+              "zapnuto": true,
+              "klavesy": [
+                80,
+                81,
+                82,
+                83,
+                84,
+                85,
+                86,
+                87,
+                88,
+                89,
+                90,
+                91,
+                92,
+                93,
+                94,
+                95,
+                96
+              ],
+              "efekt": {
+                "typ": "pasma_rady",
+                "rychlost": 5,
+                "barvy": [
+                  "#ff0000",
+                  "#ffb000",
+                  "#00ff40",
+                  "#00a0ff",
+                  "#b000ff"
+                ],
+                "barvy_hudba": "obal",
+                "pozadi": "#000000",
+                "pocet_barev": 5,
+                "spicka": false
+              }
+            },
+            {
+              "nazev": "Část 5",
+              "zapnuto": true,
+              "klavesy": [
+                67,
+                68,
+                69,
+                70,
+                71,
+                72,
+                73,
+                74,
+                75
+              ],
+              "efekt": {
+                "typ": "hlasitost",
+                "rychlost": 5,
+                "barvy": [
+                  "#00ff40",
+                  "#ffd000",
+                  "#ff0000"
+                ],
+                "pozadi": "#000000",
+                "pocet_barev": 3
+              }
+            },
+            {
               "nazev": "písmena",
               "zapnuto": true,
               "klavesy": [
@@ -2926,11 +3101,6 @@
                 34,
                 35,
                 36,
-                37,
-                38,
-                39,
-                40,
-                41,
                 42,
                 43,
                 44,
@@ -2938,33 +3108,9 @@
                 47,
                 48,
                 49,
-                50,
                 51,
                 52,
-                53,
-                54,
-                55,
-                56,
-                57,
-                58,
-                59,
-                60,
-                61,
-                62,
-                63,
-                64,
-                65,
-                66,
-                97,
-                98,
-                104,
-                105,
-                106,
-                107,
-                108,
-                109,
-                110,
-                111
+                53
               ],
               "efekt": {
                 "typ": "kruh_basy",
@@ -2976,53 +3122,37 @@
                 ],
                 "barvy_hudba": "obal",
                 "pozadi": "#000000",
-                "pocet_barev": 2
+                "pocet_barev": 3
               }
             },
             {
-              "nazev": "Část 4",
+              "nazev": "F1–F12",
               "zapnuto": true,
               "klavesy": [
-                67,
-                68,
-                69,
-                70,
-                71,
-                72,
-                73,
-                74,
-                75,
-                76,
-                77,
-                78,
-                79,
-                80,
-                81,
-                82,
-                83,
-                84,
-                85,
-                86,
-                87,
-                88,
-                89,
-                90,
-                91,
-                92,
-                93,
-                94,
-                95,
-                96
+                55,
+                56,
+                57,
+                58,
+                59,
+                60,
+                61,
+                62,
+                63,
+                64,
+                65,
+                66
               ],
               "efekt": {
-                "typ": "pulz",
-                "rychlost": 5,
+                "typ": "dj",
+                "rychlost": 10,
                 "barvy": [
                   "#ff0040",
-                  "#00a0ff"
+                  "#00ff40",
+                  "#0060ff"
                 ],
                 "barvy_hudba": "obal",
-                "pocet_barev": 2
+                "pozadi": "#000000",
+                "pocet_barev": 3
               }
             }
           ],
@@ -3185,7 +3315,9 @@
       "rezim": "klavesa",
       "barva": "duha",
       "doba": 1.0
-    }
+    },
+    "protismerne": false,
+    "f140_predek_obracene": true
   },
   "ikona_programu": {
     "zapnuto": true,

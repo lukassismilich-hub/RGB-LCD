@@ -1,3 +1,3 @@
 @echo off
-cd /d C:\RGB-LCD
+cd /d "%~dp0"
 start "" pyw nastaveni.py

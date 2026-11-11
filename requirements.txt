@@ -4,3 +4,10 @@ hidapi>=0.14
 Pillow>=10
 pyusb>=1.2
 libusb-package>=1.0.26
+# hudba ze Spotify (analyza zvuku a prave hrajici skladba) - bez nich aplikace bezi, jen bez hudby
+numpy>=2.0
+winrt-runtime>=3.0
+winrt-Windows.Foundation>=3.0
+winrt-Windows.Foundation.Collections>=3.0
+winrt-Windows.Media.Control>=3.0
+winrt-Windows.Storage.Streams>=3.0

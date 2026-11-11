@@ -2,8 +2,9 @@
 
 **Jedna aplikace místo několika programů od výrobců.** RGB-LCD ovládá LCD displej vodního
 chlazení NZXT Kraken, řídí pumpu a ventilátory podle teploty procesoru a sjednocuje RGB
-podsvícení všech ventilátorů a grafické karty – bez NZXT CAM, Gigabyte Control Center /
-RGB Fusion a dalšího softwaru výrobců, který běží na pozadí, navzájem se přetahuje o LED
+podsvícení všech ventilátorů, grafické karty a klávesnice – i do rytmu hudby ze Spotify.
+Bez NZXT CAM, Gigabyte Control Center / RGB Fusion, podsvícení z Logitech G HUB a dalšího
+softwaru výrobců, který běží na pozadí, navzájem se přetahuje o LED
 a každý umí jen „svůj“ kus hardwaru.
 
 Napsané v Pythonu pro Windows, nastavení v jednom okně, vše na jednom místě.
@@ -13,7 +14,8 @@ Napsané v Pythonu pro Windows, nastavení v jednom okně, vše na jednom míst�
 ## Proč
 
 Každý výrobce má vlastní program: NZXT CAM pro Kraken a jeho ventilátory, Gigabyte Control
-Center pro LED na desce a grafice, Alphacool vlastní utilitu pro svůj displej. Programy se
+Center pro LED na desce a grafice, Logitech G HUB pro klávesnici, Alphacool vlastní utilitu
+pro svůj displej. Programy se
 spouštějí při startu, zabírají paměť, efekty LED nejdou sladit mezi
 značkami (každý řadič má jiné vestavěné efekty i jas) a Kraken sám umí řídit pumpu jen
 podle teploty kapaliny, ne procesoru.
@@ -76,8 +78,36 @@ Další:
 - **Vlna přes celou skříň** – efekt putuje podle skutečného rozmístění ventilátorů
   (předek → horní ventilátory → zadek → grafika), nebo všechny synchronně.
 - Vlastní barvy jednotlivých LED, natočení ventilátorů, vyrovnání jasu mezi značkami.
+- **Playlist efektů** – efekty se střídají dokola s prolínáním.
 - Při uspání a vypnutí PC LED zhasnou (deska jinak drží poslední snímek).
-- Živý náhled přímo v okně.
+- Živý náhled přímo v okně, i jako pohled na skříň z boku.
+
+### Hudba ze Spotify – LED do rytmu
+
+![Hudba ze Spotify](docs/okno_led_hudba.png)
+
+- Aplikace zachytává **jen zvuk Spotify** (ne hry, Discord ani upozornění) a rozebírá ho
+  ~47× za sekundu: basy, středy, výšky, 16 pásem, údery kopáku, virblu a hi-hatu, tempo
+  a doby v taktu, stavba napětí a drop.
+- 27 stylů vizualizéru – pulzy, spektrum po skříni, komety, plameny z basů, metronom…
+  a prostorové styly podle rozmístění ventilátorů (hladina stoupající skříní, fontána
+  z grafiky, rázová vlna, déšť z činelů, stereo do stran).
+- Barvy z obalu alba právě hrané skladby (nebo vlastní paleta), styl může být náhodný
+  s každou skladbou, zpoždění světel kvůli Bluetooth sluchátkům.
+- Na LCD Krakenu se na začátku skladby ukáže obal, název a interpret.
+
+### Klávesnice Logitech G815 – podsvícení po klávesách
+
+![Klávesnice](docs/okno_klavesnice.png)
+
+- Barvy každé klávesy přímo přes HID++ (bez G HUB a jeho SDK), 39 efektů: vlna,
+  déšť Matrix, plazma, radar, had, hra života, ohňostroj, spektrum hudby, tetris z úderů…
+- **Části klávesnice** s vlastním efektem (např. numerická = déšť, zbytek vlna).
+- Tři nastavení na klávesách **M1–M3**, klávesy **G1–G5** přepínají předvolby,
+  vizualizér, styl hudby nebo playlist; kontrolky kláves svítí podle stavu.
+- Reakce na stisk kláves a ukazatel hlasitosti po pohybu posuvníkem.
+- Integrovaná paměť klávesnice se přepíná sama (po ukončení aplikace svítí klávesnice
+  podle svého profilu), záloha paměti.
 
 ### Alphacool USB display 240 × 128 (volitelně)
 
@@ -96,10 +126,13 @@ Monochromatický displej s editorem rozvržení a hotovými obrazovkami ve stylu
 | NZXT RGB Controller 2023 + 2× F140 RGB Core | LED po jednotlivých diodách | NZXT CAM |
 | Gigabyte B650M Aorus Elite (RGB Fusion 2.0) | ARGB hlavičky D_LED1/D_LED2, další zóny | Gigabyte Control Center |
 | Gigabyte RTX 5070 EAGLE OC SFF | LED pásek karty | Gigabyte Control Center |
+| Logitech G815 | podsvícení po klávesách, G1–G5, M1–M3 | Logitech G HUB (podsvícení) |
 | Alphacool USB display 240×128 | displej | Alphacool software |
 
 > Projekt je psaný pro jednu konkrétní sestavu. Na jiném hardwaru nemusí fungovat a protokoly
-> LED desky a grafické karty jsou ověřené jen na uvedených modelech.
+> LED desky a grafické karty jsou ověřené jen na uvedených modelech. Jak aplikaci upravit
+> pro jiné ventilátory, jejich počet nebo bez částí, které nemáš, popisuje
+> **[návod na úpravy](docs/UPRAVY.md)**.
 
 ## Požadavky
 
@@ -116,10 +149,12 @@ Monochromatický displej s editorem rozvržení a hotovými obrazovkami ve stylu
   Gigabyte Control Center přepisuje LED desky – `autostart_zapnout.bat` vypne jeho
   automatické spouštění.
 - Alphacool displej: ovladač WinUSB (přes [Zadig](https://zadig.akeo.ie/)).
+- Hudba: Spotify pro Windows (z Microsoft Store nebo spotify.com). Bez Spotify aplikace
+  běží normálně, jen bez hudebních efektů.
 
 ## Spuštění
 
-Aplikace počítá s umístěním ve složce `C:\RGB-LCD`.
+Složka aplikace může být kdekoli (spouštěcí soubory si najdou svoji složku samy).
 
 | Soubor | Co dělá |
 |---|---|
@@ -146,8 +181,16 @@ procesu ve Správci úloh přeskočí nahrání záložních křivek chlazení.
 | `alphacool.py`, `prvky*.py`, `mono.py`, `editor_alphacool.py` | displej Alphacool |
 | `hwinfo.py`, `systemdata.py` | senzory z HWiNFO a z Windows |
 | `program_ikona.py` | ikona spuštěné hry na LCD |
+| `hudba.py`, `zvuk_procesu.py`, `hudba_lcd.py` | Spotify: skladba, zvuk jen ze Spotify, analýza, obrazovka „Právě hraje“ |
+| `klavesnice*.py`, `klavesy_g.py`, `klavesy_stisk.py`, `hlasitost.py`, `editor_klavesnice.py` | klávesnice G815: HID++, efekty, G/M klávesy, stisky, hlasitost, stránka v okně |
 | `nastaveni.py`, `vzhled.py`, `config.py` | okno nastavení, tmavý vzhled, konfigurace |
 | `ukonceni.py`, `camservice.py`, `autostart.ps1` | bezpečné ukončení, služba NZXT CAM, autostart |
+
+## Úprava pro vlastní sestavu
+
+Jiné nebo další ventilátory, jiný počet LED, jiné rozmístění ve skříni, vypnutí částí,
+které nemáš (Alphacool, klávesnice, grafika, Spotify), a co dělat s jiným hardwarem:
+**[docs/UPRAVY.md](docs/UPRAVY.md)**.
 
 ## Obrázky a loga
 

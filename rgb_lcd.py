@@ -9,6 +9,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import threading
 import time
 from collections import deque
 
@@ -90,16 +91,38 @@ def update_history(history, cfg, data):
     return {k: [v for _, v in dq] for k, dq in history.items()}
 
 
-def write_state(data, cooling_state, hist, alpha_state, led_state, code, problems, program, music):
+def _json_default(o):
+    """Hodnoty, ktere json.dump neumi (numpy float32 / int64 z analyzy hudby): na cislo, jinak text."""
     try:
+        return o.item()
+    except Exception:
+        return str(o)
+
+
+_state_error = [None]
+
+
+def write_state(data, cooling_state, hist, alpha_state, led_state, code, problems, program, music):
+    """stav.json pro okno nastaveni. Chyba zapisu se jen zapise do logu - nesmi shodit hlavni
+    smycku (ta by ji brala jako chybu Krakenu a prepnula chlazeni na zalozni krivky)."""
+    try:
+        state = json.dumps({"cas": time.time(), "kod": code, "data": data, "chlazeni": cooling_state,
+                            "historie": hist, "alphacool": alpha_state, "led": led_state,
+                            "obrazovky_chyby": problems, "program": program, "hudba": music,
+                            # jmeno vlakna -> cislo ve Windows (zatez po vlaknech z citacu vykonu)
+                            "vlakna": {t.name: t.native_id for t in threading.enumerate()}},
+                           ensure_ascii=False, default=_json_default)
         tmp = STATE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"cas": time.time(), "kod": code, "data": data, "chlazeni": cooling_state,
-                       "historie": hist, "alphacool": alpha_state, "led": led_state,
-                       "obrazovky_chyby": problems, "program": program, "hudba": music}, f, ensure_ascii=False)
+            f.write(state)
         os.replace(tmp, STATE)
+        _state_error[0] = None
     except OSError:
         pass
+    except Exception as e:
+        if str(e) != _state_error[0]:
+            _state_error[0] = str(e)
+            log.error("stav.json nejde zapsat (%s) - okno nastaveni neuvidi aktualni stav.", e)
 
 
 def render_program(watcher, cfg, bad):

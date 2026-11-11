@@ -33,6 +33,11 @@ import os
 import threading
 import time
 
+# numpy (OpenBLAS) si pri importu zabere buffery pro kazde vlakno CPU: pri 16 vlaknech ~490 MB
+# soukrome pameti a 15 vlaken navic. Analyza velke maticove vypocty nedela - staci jedno vlakno
+# (zmereno 11. 11. 2026: 535 MB -> 53 MB). Musi byt nastavene pred prvnim importem numpy.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 import led
 import led_efekty as fx
 
@@ -1173,11 +1178,12 @@ class Music:
         if an is not None and self._capturing:
             s = an.snapshot(time.monotonic())
             if s:
-                out["uroven"] = {k: round(s.get(k, 0.0), 2) for k in ("bass", "mid", "high")}
-                out["bpm"] = s.get("bpm", 0.0)
-                out["mrizka"] = s.get("grid", 0.0)             # jistota rytmicke mrizky 0..1
-                out["energie"] = s.get("energy", 1.0)          # ticha cast x refren
-                out["stavba"] = s.get("build", 0.0)            # stavba napeti pred dropem
+                # float(): analyza pocita v numpy (float32) a ten json.dump neumi
+                out["uroven"] = {k: round(float(s.get(k, 0.0)), 2) for k in ("bass", "mid", "high")}
+                out["bpm"] = round(float(s.get("bpm", 0.0)), 1)
+                out["mrizka"] = round(float(s.get("grid", 0.0)), 2)     # jistota rytmicke mrizky 0..1
+                out["energie"] = round(float(s.get("energy", 1.0)), 3)  # ticha cast x refren
+                out["stavba"] = round(float(s.get("build", 0.0)), 3)    # stavba napeti pred dropem
         return out
 
 

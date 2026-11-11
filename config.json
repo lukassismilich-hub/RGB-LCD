@@ -3020,18 +3020,16 @@
                 96
               ],
               "efekt": {
-                "typ": "pasma_rady",
+                "typ": "hlasitost",
                 "rychlost": 5,
                 "barvy": [
-                  "#ff0000",
-                  "#ffb000",
                   "#00ff40",
-                  "#00a0ff",
-                  "#b000ff"
+                  "#ffd000",
+                  "#ff0000"
                 ],
-                "barvy_hudba": "obal",
                 "pozadi": "#000000",
-                "pocet_barev": 5,
+                "pocet_barev": 3,
+                "opacne": false,
                 "spicka": false
               }
             },
@@ -3047,18 +3045,24 @@
                 72,
                 73,
                 74,
-                75
+                75,
+                76,
+                77,
+                78,
+                79
               ],
               "efekt": {
-                "typ": "hlasitost",
+                "typ": "prebarveni",
                 "rychlost": 5,
                 "barvy": [
-                  "#00ff40",
-                  "#ffd000",
-                  "#ff0000"
+                  "#ff0040",
+                  "#00a0ff",
+                  "#40ff00",
+                  "#ffb000"
                 ],
-                "pozadi": "#000000",
-                "pocet_barev": 3
+                "barvy_hudba": "obal",
+                "smer": 270,
+                "pocet_barev": 4
               }
             },
             {

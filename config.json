@@ -1997,7 +1997,7 @@
         "#0000d9",
         "#7400e8"
       ],
-      "rychlost": 5,
+      "rychlost": 1,
       "opacny_smer": false,
       "senzor": "CPU (Tctl/Tdie)",
       "min": 60.0,
@@ -2007,7 +2007,7 @@
       "pauza": 0.5,
       "barvy_rezim": "barvy",
       "jiskreni": 0,
-      "posun_barev": 0,
+      "posun_barev": 10,
       "druh": "snih"
     },
     "efekt_f140": {

@@ -288,19 +288,28 @@ def hue_drift(eff):
 
 
 def hue_rotate(cols, turns):
-    """Otoceni odstinu vsech barev o turns otacky barevneho kruhu (rotace kolem osy sedi - seda zustane
-    seda, jas skoro stejny; rychle, bez prevodu do HSV)."""
-    a = 2 * math.pi * (turns % 1.0)
-    if abs(a) < 1e-4:
+    """Otoceni odstinu vsech barev o turns otacky barevneho kruhu v HSV: sytost i jas (nejsilnejsi kanal)
+    zustanou presne stejne, seda / bila / cerna se nemeni. (Drive rotace matici v RGB - plne syte barvy
+    mezi zakladnimi odstiny ztmavly: cervena o 60 deg = (170, 170, 0) misto (255, 255, 0).)"""
+    d = turns % 1.0
+    if d < 1e-5 or d > 1 - 1e-5:
         return cols
-    c, s = math.cos(a), math.sin(a)
-    k1, k2 = (1 - c) / 3, math.sqrt(1 / 3) * s
-    m0, m1, m2 = c + k1, k1 - k2, k1 + k2
     out = []
-    for r, g, b in cols:
-        out.append((max(0.0, min(255.0, m0 * r + m1 * g + m2 * b)),
-                    max(0.0, min(255.0, m2 * r + m0 * g + m1 * b)),
-                    max(0.0, min(255.0, m1 * r + m2 * g + m0 * b))))
+    cache = {}
+    for rgb in cols:
+        res = cache.get(rgb)
+        if res is None:
+            r, g, b = rgb
+            mx, mn = max(r, g, b), min(r, g, b)
+            if mx - mn < 1e-6:
+                res = rgb
+            else:
+                h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
+                r2, g2, b2 = colorsys.hsv_to_rgb((h + d) % 1.0, s, v)
+                res = (max(0.0, min(255.0, 255.0 * r2)), max(0.0, min(255.0, 255.0 * g2)),
+                       max(0.0, min(255.0, 255.0 * b2)))
+            cache[rgb] = res
+        out.append(res)
     return out
 
 
